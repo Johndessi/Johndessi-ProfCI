@@ -8,12 +8,10 @@ app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static('public'));
 
-// ── MongoDB ───────────────────────────────────────────────
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost/profci')
   .then(() => console.log('✅ MongoDB connecté'))
   .catch(e => console.error('❌ MongoDB:', e.message));
 
-// ── Schémas ───────────────────────────────────────────────
 const ModeleSchema = new mongoose.Schema({
   enseignantId : String,
   niveau       : String,
@@ -37,7 +35,6 @@ const FicheSchema = new mongoose.Schema({
 const Modele = mongoose.model('Modele', ModeleSchema);
 const Fiche  = mongoose.model('Fiche',  FicheSchema);
 
-// ── Anthropic ────────────────────────────────────────────
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const PROMPT_SECONDAIRE = `Tu es un expert en pédagogie ivoirienne (APC - Approche Par Compétences, DPFC).
@@ -169,6 +166,7 @@ app.post('/api/upload-modele', async (req, res) => {
 });
 
 app.post('/api/generer-fiche', async (req, res) => {
+  console.log('📩 Requête reçue:', req.body.discipline, req.body.classe, req.body.lecon);
   try {
     const {
       enseignantId,
@@ -184,7 +182,9 @@ app.post('/api/generer-fiche', async (req, res) => {
 
     let modelePersonnel = null;
     if (enseignantId) {
+      console.log('🔍 Recherche modèle pour:', enseignantId, niveau);
       modelePersonnel = await Modele.findOne({ enseignantId, niveau });
+      console.log('🔍 Modèle trouvé:', !!modelePersonnel);
     }
 
     const systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : PROMPT_SECONDAIRE;
@@ -218,6 +218,9 @@ ${planCours ? `\nPLAN DE COURS FOURNI :\n${planCours}\n\nAdapte ce plan au forma
 Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     }
 
+    console.log('🤖 Appel Anthropic en cours...');
+    const startTime = Date.now();
+
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4000,
@@ -225,7 +228,10 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       messages: [{ role: 'user', content: userMessage }]
     });
 
+    console.log('✅ Réponse Anthropic reçue en', Date.now() - startTime, 'ms');
+
     const contenuHTML = response.content[0].text;
+    console.log('📄 Longueur HTML généré:', contenuHTML.length);
 
     const fiche = await Fiche.create({
       enseignantId: enseignantId || 'anonyme',
@@ -233,9 +239,14 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       contenu: contenuHTML
     });
 
+    console.log('💾 Fiche sauvegardée:', fiche._id);
+
     res.json({ success: true, ficheId: fiche._id, contenu: contenuHTML });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('❌ ERREUR COMPLETE:', e);
+    console.error('❌ Message:', e.message);
+    console.error('❌ Stack:', e.stack);
+    res.status(500).json({ error: e.message, details: e.toString() });
   }
 });
 
