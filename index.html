@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Prof CI — Fiches de cours</title>
+<style>
+:root {
+  --orange: #F77F00;
+  --vert:   #009A44;
+  --noir:   #0D0D0D;
+  --gris:   #F4F4F4;
+  --gris2:  #888;
+  --blanc:  #FFFFFF;
+  --shadow: 0 2px 16px rgba(0,0,0,0.10);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--gris); color: var(--noir); }
+header {
+  background: var(--noir);
+  padding: 14px 20px;
+  display: flex; align-items: center; gap: 12px;
+  border-bottom: 3px solid var(--orange);
+}
+.logo { background: var(--orange); color: #fff; font-weight: 900;
+  width:42px; height:42px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center; font-size:16px; }
+header h1 { color:#fff; font-size:20px; font-weight:800; }
+header span { color: var(--orange); font-size:12px; display:block; font-weight:400; }
+.container { max-width: 900px; margin: 0 auto; padding: 16px; }
+.tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+.tab {
+  padding: 8px 18px; border-radius: 20px; border: 2px solid var(--orange);
+  background: transparent; color: var(--orange); font-weight:700;
+  cursor: pointer; font-size:14px; transition:.2s;
+}
+.tab.active { background: var(--orange); color: #fff; }
+.card {
+  background: var(--blanc); border-radius: 14px;
+  padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow);
+}
+.card h2 { font-size:16px; color:var(--noir); margin-bottom:14px;
+  padding-bottom:8px; border-bottom:2px solid var(--gris); }
+.form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.form-group { flex: 1; min-width: 140px; }
+label { display:block; font-size:12px; font-weight:700; color:var(--gris2); margin-bottom:4px; }
+input, select, textarea {
+  width:100%; padding:10px 12px; border:1.5px solid #e0e0e0;
+  border-radius:8px; font-size:14px; outline:none; transition:.2s;
+  font-family: inherit;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--orange); }
+textarea { resize: vertical; min-height: 90px; }
+.niveau-toggle { display:flex; gap:8px; margin-bottom:14px; }
+.niveau-btn {
+  flex:1; padding:10px; border-radius:10px; border:2px solid #e0e0e0;
+  background:#fff; cursor:pointer; font-weight:700; font-size:14px;
+  text-align:center; transition:.2s;
+}
+.niveau-btn.active.primaire  { border-color:var(--vert);   background:var(--vert);   color:#fff; }
+.niveau-btn.active.secondaire{ border-color:var(--orange); background:var(--orange); color:#fff; }
+.btn {
+  display:block; width:100%; padding:13px;
+  background: linear-gradient(135deg, var(--orange), #FF9500);
+  color:#fff; border:none; border-radius:10px;
+  font-size:15px; font-weight:800; cursor:pointer; transition:.2s;
+}
+.btn:hover { opacity:.9; transform:translateY(-1px); }
+.btn.vert { background: linear-gradient(135deg, var(--vert), #00c853); }
+.btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+.loader { display:none; text-align:center; padding:30px; }
+.loader.show { display:block; }
+.spinner {
+  width:40px; height:40px; border:4px solid #eee;
+  border-top-color:var(--orange); border-radius:50%;
+  animation: spin .8s linear infinite; margin:0 auto 12px;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.fiche-viewer { display:none; }
+.fiche-viewer.show { display:block; }
+.view-controls {
+  display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;
+}
+.view-controls span { font-weight:700; font-size:13px; color:var(--gris2); margin-right:4px; }
+.view-btn {
+  padding:7px 14px; border-radius:8px; border:2px solid #e0e0e0;
+  background:#fff; cursor:pointer; font-size:13px; font-weight:700; transition:.2s;
+}
+.view-btn.active { border-color:var(--orange); background:var(--orange); color:#fff; }
+.fiche-wrapper {
+  background:#fff; border-radius:12px; overflow:hidden;
+  box-shadow: var(--shadow); transition: .3s;
+}
+.fiche-iframe { width:100%; border:none; border-radius:12px; }
+.upload-zone {
+  border: 2px dashed #e0e0e0; border-radius:10px; padding:20px;
+  text-align:center; cursor:pointer; transition:.2s;
+}
+.upload-zone:hover { border-color:var(--orange); background:#FFF8F0; }
+.upload-zone p { color:var(--gris2); font-size:13px; margin-top:6px; }
+.fiche-item {
+  padding:12px; border:1.5px solid #e0e0e0; border-radius:10px;
+  margin-bottom:8px; cursor:pointer; transition:.2s;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.fiche-item:hover { border-color:var(--orange); background:#FFF8F0; }
+.fiche-item .meta { font-size:11px; color:var(--gris2); }
+.badge {
+  padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700;
+}
+.badge.secondaire { background:#FFF0E0; color:var(--orange); }
+.badge.primaire   { background:#E8F7EE; color:var(--vert); }
+.toast {
+  position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(80px);
+  background:var(--noir); color:#fff; padding:12px 20px; border-radius:10px;
+  font-size:14px; font-weight:700; transition:.3s; z-index:999; opacity:0;
+}
+.toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+@media print {
+  header, .tabs, .card:not(.fiche-card), .view-controls, .btn { display:none !important; }
+  .fiche-wrapper { box-shadow:none; }
+  body { background:#fff; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">PC</div>
+  <div>
+    <h1>Prof CI <span>🇨🇮</span></h1>
+    <span>Fiches de cours — Primaire & Secondaire</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('generer')">✏️ Générer</button>
+    <button class="tab" onclick="showTab('modele')">📋 Mon modèle</button>
+    <button class="tab" onclick="showTab('historique')">📂 Historique</button>
+  </div>
+
+  <div id="tab-generer">
+
+    <div class="card">
+      <h2>Nouvelle fiche de cours</h2>
+
+      <div class="niveau-toggle">
+        <button class="niveau-btn secondaire active" onclick="setNiveau('secondaire',this)">
+          🏫 Secondaire (6e → Tle)
+        </button>
+        <button class="niveau-btn primaire" onclick="setNiveau('primaire',this)">
+          🌱 Primaire (CP1 → CM2)
+        </button>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Votre identifiant (nom ou code)</label>
+        <input id="enseignantId" type="text" placeholder="Ex: Prof_Koné ou M.Diabaté"/>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Discipline / Matière *</label>
+          <input id="discipline" type="text" placeholder="Ex: Français, Maths, SVT..."/>
+        </div>
+        <div class="form-group">
+          <label>Classe *</label>
+          <select id="classe">
+            <optgroup label="Secondaire">
+              <option>6ème</option><option>5ème</option>
+              <option>4ème</option><option>3ème</option>
+              <option>2nde</option><option>1ère A</option>
+              <option>1ère C</option><option>1ère D</option>
+              <option>Tle A</option><option>Tle C</option><option>Tle D</option>
+            </optgroup>
+            <optgroup label="Primaire">
+              <option>CP1</option><option>CP2</option>
+              <option>CE1</option><option>CE2</option>
+              <option>CM1</option><option>CM2</option>
+            </optgroup>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Leçon / Thème *</label>
+          <input id="lecon" type="text" placeholder="Ex: Les modalités verbales de l'indicatif"/>
+        </div>
+        <div class="form-group" style="max-width:100px">
+          <label>Séance n°</label>
+          <input id="seance" type="number" value="1" min="1"/>
+        </div>
+        <div class="form-group" style="max-width:120px">
+          <label>Durée</label>
+          <input id="duree" type="text" value="1 heure"/>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Plan de cours (optionnel) — adapté à votre plan</label>
+        <textarea id="planCours" placeholder="Collez votre plan ici si vous en avez un.&#10;Ex:&#10;I- Définition&#10;II- Les temps simples : présent, imparfait...&#10;III- Les temps composés&#10;IV- Exercices d'application"></textarea>
+      </div>
+
+      <button class="btn" id="btnGenerer" onclick="genererFiche()">
+        🪄 Générer la fiche de cours
+      </button>
+    </div>
+
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <p style="color:var(--gris2);font-weight:700">Génération en cours...</p>
+    </div>
+
+    <div class="fiche-viewer card fiche-card" id="ficheViewer">
+      <div class="view-controls">
+        <span>Affichage :</span>
+        <button class="view-btn active" id="btnPortrait" onclick="setView('portrait')">📄 Portrait</button>
+        <button class="view-btn" id="btnPaysage" onclick="setView('paysage')">🖼️ Paysage</button>
+        <button class="btn" style="width:auto;padding:7px 16px;font-size:13px;margin-left:auto"
+          onclick="imprimerFiche()">🖨️ Imprimer</button>
+      </div>
+      <div id="ficheContainer" style="overflow:auto"></div>
+    </div>
+
+  </div>
+<div id="tab-modele" style="display:none">
+    <div class="card">
+      <h2>📋 Enregistrer votre modèle de fiche</h2>
+      <p style="font-size:13px;color:var(--gris2);margin-bottom:16px">
+        Collez le contenu d'une de vos fiches existantes. Le système apprendra votre format et reproduira
+        exactement la même structure à l'infini.
+      </p>
+
+      <div class="niveau-toggle">
+        <button class="niveau-btn secondaire active" onclick="setNiveauModele('secondaire',this)">
+          🏫 Secondaire
+        </button>
+        <button class="niveau-btn primaire" onclick="setNiveauModele('primaire',this)">
+          🌱 Primaire
+        </button>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Votre identifiant</label>
+        <input id="modeleEnseignantId" type="text" placeholder="Même identifiant que pour générer"/>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Votre modèle de fiche *</label>
+        <textarea id="structureModele" style="min-height:200px"
+          placeholder="Collez ici le texte complet d'une de vos fiches de cours...&#10;&#10;Le système va apprendre votre format : rubriques, colonnes, organisation, style...&#10;Et reproduire exactement cette structure pour toutes vos futures fiches."></textarea>
+      </div>
+
+      <button class="btn vert" onclick="sauvegarderModele()">
+        💾 Enregistrer mon modèle
+      </button>
+
+      <div id="modeleResult" style="margin-top:14px;display:none">
+        <p style="color:var(--vert);font-weight:700">✅ Modèle enregistré !</p>
+        <p style="font-size:12px;color:var(--gris2)" id="modeleRubriques"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-historique" style="display:none">
+    <div class="card">
+      <h2>📂 Mes fiches générées</h2>
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="form-group">
+          <label>Votre identifiant</label>
+          <input id="histId" type="text" placeholder="Entrez votre identifiant"/>
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="btn" style="width:auto;padding:10px 20px" onclick="chargerHistorique()">
+            🔍 Charger
+          </button>
+        </div>
+      </div>
+      <div id="fichesList"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let niveauActuel = 'secondaire';
+let niveauModele = 'secondaire';
+let ficheEnCours = null;
+let viewActuelle = 'portrait';
+
+function showTab(name) {
+  ['generer','modele','historique'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach((btn, i) => {
+    btn.classList.toggle('active', ['generer','modele','historique'][i] === name);
+  });
+}
+
+function setNiveau(niveau, btn) {
+  niveauActuel = niveau;
+  document.querySelectorAll('#tab-generer .niveau-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function setNiveauModele(niveau, btn) {
+  niveauModele = niveau;
+  document.querySelectorAll('#tab-modele .niveau-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function genererFiche() {
+  const discipline = document.getElementById('discipline').value.trim();
+  const classe     = document.getElementById('classe').value;
+  const lecon      = document.getElementById('lecon').value.trim();
+  if (!discipline || !lecon) { toast('❗ Remplis la matière et la leçon'); return; }
+
+  document.getElementById('btnGenerer').disabled = true;
+  document.getElementById('loader').classList.add('show');
+  document.getElementById('ficheViewer').classList.remove('show');
+
+  try {
+    const res = await fetch('/api/generer-fiche', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enseignantId : document.getElementById('enseignantId').value.trim() || 'anonyme',
+        niveau       : niveauActuel,
+        discipline, classe,
+        lecon,
+        seance       : document.getElementById('seance').value,
+        duree        : document.getElementById('duree').value,
+        planCours    : document.getElementById('planCours').value.trim()
+      })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    ficheEnCours = data;
+    afficherFiche(data.contenu);
+    toast('✅ Fiche générée avec succès !');
+  } catch(e) {
+    toast('❌ Erreur : ' + e.message);
+  } finally {
+    document.getElementById('btnGenerer').disabled = false;
+    document.getElementById('loader').classList.remove('show');
+  }
+}
+
+function afficherFiche(html) {
+  const STYLE = `
+    <style>
+      * { box-sizing:border-box; }
+      body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px; padding:16px; color:#0D0D0D; }
+      h2 { text-align:center; font-size:17px; margin-bottom:14px; color:#F77F00; letter-spacing:1px; }
+      h3 { font-size:13px; background:#F77F00; color:#fff; padding:6px 10px; margin:12px 0 6px; border-radius:5px; }
+      table { width:100%; border-collapse:collapse; margin-bottom:12px; font-size:12px; }
+      th, td { border:1px solid #ddd; padding:6px 8px; vertical-align:top; }
+      th { background:#0D0D0D; color:#fff; font-size:11px; text-transform:uppercase; }
+      .entete-table td:first-child { font-weight:700; color:#F77F00; width:100px; }
+      .habiletes-table th { background:#009A44; }
+      .deroulement-table th { background:#0D0D0D; }
+      .deroulement-table tr:nth-child(even) td { background:#FAFAFA; }
+      ul { padding-left:18px; margin:4px 0; }
+      li { margin-bottom:3px; }
+    </style>
+  `;
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">${STYLE}</head><body>${html}</body></html>`;
+
+  const container = document.getElementById('ficheContainer');
+  container.innerHTML = '';
+  const iframe = document.createElement('iframe');
+  iframe.className = 'fiche-iframe';
+  iframe.style.minHeight = '600px';
+  container.appendChild(iframe);
+
+  iframe.onload = () => {
+    const h = iframe.contentDocument?.body?.scrollHeight;
+    if (h) iframe.style.height = (h + 30) + 'px';
+    setView(viewActuelle);
+  };
+  iframe.srcdoc = fullHtml;
+
+  document.getElementById('ficheViewer').classList.add('show');
+  document.getElementById('ficheViewer').scrollIntoView({ behavior:'smooth' });
+}
+
+function setView(mode) {
+  viewActuelle = mode;
+  const iframe = document.querySelector('.fiche-iframe');
+  if (!iframe) return;
+
+  document.getElementById('btnPortrait').classList.toggle('active', mode==='portrait');
+  document.getElementById('btnPaysage').classList.toggle('active', mode==='paysage');
+
+  if (mode === 'paysage') {
+    try {
+      const body = iframe.contentDocument?.body;
+      if (body) {
+        body.style.transform = 'none';
+        let s = iframe.contentDocument.getElementById('paysage-style');
+        if (!s) {
+          s = iframe.contentDocument.createElement('style');
+          s.id = 'paysage-style';
+          iframe.contentDocument.head.appendChild(s);
+        }
+        s.textContent = `
+          body { font-size:11px !important; padding:10px !important; }
+          table { font-size:10px !important; }
+          .deroulement-table th, .deroulement-table td { padding:4px 5px !important; }
+        `;
+      }
+    } catch(e) {}
+    iframe.style.width = '100%';
+  } else {
+    try {
+      const s = iframe.contentDocument?.getElementById('paysage-style');
+      if (s) s.textContent = '';
+    } catch(e) {}
+    iframe.style.width = '100%';
+  }
+}
+
+function imprimerFiche() {
+  const iframe = document.querySelector('.fiche-iframe');
+  if (iframe) iframe.contentWindow.print();
+}
+
+async function sauvegarderModele() {
+  const id  = document.getElementById('modeleEnseignantId').value.trim();
+  const txt = document.getElementById('structureModele').value.trim();
+  if (!txt) { toast('❗ Colle ton modèle de fiche'); return; }
+
+  try {
+    const res = await fetch('/api/upload-modele', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enseignantId: id || 'anonyme',
+        niveau: niveauModele,
+        structureModele: txt
+      })
+    });
+    const data = await res.json();
+    document.getElementById('modeleResult').style.display = 'block';
+    document.getElementById('modeleRubriques').textContent =
+      'Rubriques détectées : ' + (data.rubriques?.join(' · ') || '–');
+    toast('✅ Modèle enregistré !');
+  } catch(e) {
+    toast('❌ ' + e.message);
+  }
+}
+
+async function chargerHistorique() {
+  const id = document.getElementById('histId').value.trim();
+  if (!id) { toast('❗ Entre ton identifiant'); return; }
+
+  try {
+    const res = await fetch('/api/fiches/' + encodeURIComponent(id));
+    const fiches = await res.json();
+    const el = document.getElementById('fichesList');
+    if (!fiches.length) { el.innerHTML = '<p style="color:var(--gris2);text-align:center">Aucune fiche trouvée.</p>'; return; }
+    el.innerHTML = fiches.map(f => `
+      <div class="fiche-item" onclick="chargerFiche('${f._id}')">
+        <div>
+          <strong>${f.discipline}</strong> — ${f.classe}<br/>
+          <span class="meta">${f.lecon} · Séance ${f.seance} · ${f.duree}</span>
+        </div>
+        <span class="badge ${f.niveau}">${f.niveau}</span>
+      </div>
+    `).join('');
+  } catch(e) {
+    toast('❌ ' + e.message);
+  }
+}
+
+async function chargerFiche(id) {
+  try {
+    const res = await fetch('/api/fiche/' + id);
+    const fiche = await res.json();
+    showTab('generer');
+    afficherFiche(fiche.contenu);
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+</body>
+        </html>
