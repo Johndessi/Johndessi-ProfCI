@@ -165,26 +165,18 @@ app.post('/api/upload-modele', async (req, res) => {
   }
 });
 
-app.post('/api/generer-fiche', async (req, res) => {
+ app.post('/api/generer-fiche', async (req, res) => {
   console.log('📩 Requête reçue:', req.body.discipline, req.body.classe, req.body.lecon);
   try {
     const {
-      enseignantId,
-      niveau = 'secondaire',
-      discipline,
-      classe,
-      lecon,
-      seance = '1',
-      duree = '1 heure',
-      theme = '',
-      planCours = ''
+      enseignantId, niveau = 'secondaire', discipline,
+      classe, lecon, seance = '1', duree = '1 heure',
+      theme = '', planCours = ''
     } = req.body;
 
     let modelePersonnel = null;
     if (enseignantId) {
-      console.log('🔍 Recherche modèle pour:', enseignantId, niveau);
       modelePersonnel = await Modele.findOne({ enseignantId, niveau });
-      console.log('🔍 Modèle trouvé:', !!modelePersonnel);
     }
 
     const systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : PROMPT_SECONDAIRE;
@@ -218,36 +210,53 @@ ${planCours ? `\nPLAN DE COURS FOURNI :\n${planCours}\n\nAdapte ce plan au forma
 Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     }
 
-    console.log('🤖 Appel Anthropic en cours...');
-    const startTime = Date.now();
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
+    const heartbeat = setInterval(() => {
+      res.write(': keep-alive\n\n');
+    }, 10000);
+
+    let contenuHTML = '';
+
+    const stream = anthropic.messages.stream({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2500,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }]
     });
 
-    console.log('✅ Réponse Anthropic reçue en', Date.now() - startTime, 'ms');
-
-    const contenuHTML = response.content[0].text;
-    console.log('📄 Longueur HTML généré:', contenuHTML.length);
-
-    const fiche = await Fiche.create({
-      enseignantId: enseignantId || 'anonyme',
-      discipline, classe, lecon, seance, duree, niveau,
-      contenu: contenuHTML
+    stream.on('text', (text) => {
+      contenuHTML += text;
+      res.write(`data: ${JSON.stringify({ chunk: text })}\n\n`);
     });
 
-    console.log('💾 Fiche sauvegardée:', fiche._id);
+    stream.on('finalMessage', async () => {
+      clearInterval(heartbeat);
+      const fiche = await Fiche.create({
+        enseignantId: enseignantId || 'anonyme',
+        discipline, classe, lecon, seance, duree, niveau,
+        contenu: contenuHTML
+      });
+      res.write(`data: ${JSON.stringify({ done: true, ficheId: fiche._id })}\n\n`);
+      res.end();
+    });
 
-    res.json({ success: true, ficheId: fiche._id, contenu: contenuHTML });
+    stream.on('error', (e) => {
+      clearInterval(heartbeat);
+      console.error('❌ Stream error:', e.message);
+      res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+      res.end();
+    });
+
   } catch (e) {
-    console.error('❌ ERREUR COMPLETE:', e);
-    console.error('❌ Message:', e.message);
-    console.error('❌ Stack:', e.stack);
-    res.status(500).json({ error: e.message, details: e.toString() });
+    console.error('❌ ERREUR:', e.message);
+    res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+    res.end();
   }
+});
 });
 
 app.get('/api/fiches/:enseignantId', async (req, res) => {
