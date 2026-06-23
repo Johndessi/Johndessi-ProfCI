@@ -257,7 +257,6 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     res.end();
   }
 });
-});
 
 app.get('/api/fiches/:enseignantId', async (req, res) => {
   try {
