@@ -323,31 +323,50 @@ async function genererFiche() {
   document.getElementById('loader').classList.add('show');
   document.getElementById('ficheViewer').classList.remove('show');
 
-  try {
-    const res = await fetch('/api/generer-fiche', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        enseignantId : document.getElementById('enseignantId').value.trim() || 'anonyme',
-        niveau       : niveauActuel,
-        discipline, classe,
-        lecon,
-        seance       : document.getElementById('seance').value,
-        duree        : document.getElementById('duree').value,
-        planCours    : document.getElementById('planCours').value.trim()
-      })
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error);
+   try {
+      const response = await fetch('/api/generer-fiche', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enseignantId : document.getElementById('enseignantId').value.trim() || 'anonyme',
+          niveau       : niveauActuel,
+          discipline, classe, lecon,
+          seance   : document.getElementById('seance').value,
+          duree    : document.getElementById('duree').value,
+          planCours: document.getElementById('planCours').value.trim()
+        })
+      });
 
-    ficheEnCours = data;
-    afficherFiche(data.contenu);
-    toast('✅ Fiche générée avec succès !');
-  } catch(e) {
-    toast('❌ Erreur : ' + e.message);
-  } finally {
-    document.getElementById('btnGenerer').disabled = false;
-    document.getElementById('loader').classList.remove('show');
+      if (!response.ok) throw new Error('Erreur serveur');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let contenuHTML = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const lines = decoder.decode(value).split('\n');
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const json = JSON.parse(line.slice(6));
+            if (json.chunk) contenuHTML += json.chunk;
+            if (json.done) {
+              ficheEnCours = { contenu: contenuHTML };
+              afficherFiche(contenuHTML);
+              toast('✅ Fiche générée avec succès !');
+            }
+            if (json.error) throw new Error(json.error);
+          } catch(e) {}
+        }
+      }
+
+    } catch(e) {
+      toast('❌ Erreur : ' + e.message);
+    } finally {
+      document.getElementById('btnGenerer').disabled = false;
+      document.getElementById('loader').classList.remove('show');
   }
 }
 
