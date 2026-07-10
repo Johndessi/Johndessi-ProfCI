@@ -235,6 +235,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
 
     stream.on('finalMessage', async () => {
       clearInterval(heartbeat);
+      contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/```\s*$/g, '').trim();
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
         discipline, classe, lecon, seance, duree, niveau,
