@@ -2,11 +2,41 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const Anthropic = require('@anthropic-ai/sdk');
+const multer = require('multer');
+const mammoth = require('mammoth');
+const pdfParse = require('pdf-parse');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static('public'));
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = file.originalname.split('.').pop().toLowerCase();
+    if (['pdf', 'doc', 'docx'].includes(ext)) return cb(null, true);
+    cb(new Error('Format non supporté (PDF, DOC, DOCX uniquement)'));
+  }
+});
+
+function uploadModeleFichier(req, res, next) {
+  upload.single('fichier')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}
+
+async function extraireTexteFichier(file) {
+  const ext = file.originalname.split('.').pop().toLowerCase();
+  if (ext === 'pdf') {
+    const data = await pdfParse(file.buffer);
+    return data.text;
+  }
+  const result = await mammoth.extractRawText({ buffer: file.buffer });
+  return result.value;
+}
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost/profci')
   .then(() => console.log('✅ MongoDB connecté'))
@@ -133,10 +163,19 @@ RÈGLES :
 
 app.get('/ping', (_, res) => res.json({ status: 'ok', app: 'Prof CI' }));
 
-app.post('/api/upload-modele', async (req, res) => {
+app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
   try {
-    const { enseignantId, niveau, structureModele } = req.body;
-    if (!structureModele) return res.status(400).json({ error: 'Modèle vide' });
+    const { enseignantId, niveau } = req.body;
+    let structureModele = req.body.structureModele;
+
+    if (req.file) {
+      structureModele = await extraireTexteFichier(req.file);
+    }
+
+    if (!structureModele || !structureModele.trim()) {
+      return res.status(400).json({ error: 'Modèle vide' });
+    }
+    structureModele = structureModele.trim();
 
     const analyse = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',

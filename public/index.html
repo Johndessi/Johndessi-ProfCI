@@ -232,7 +232,7 @@ textarea { resize: vertical; min-height: 90px; }
     <div class="card">
       <h2>📋 Enregistrer votre modèle de fiche</h2>
       <p style="font-size:13px;color:var(--gris2);margin-bottom:16px">
-        Collez le contenu d'une de vos fiches existantes. Le système apprendra votre format et reproduira
+        Envoyez une de vos fiches existantes (PDF ou Word). Le système apprendra votre format et reproduira
         exactement la même structure à l'infini.
       </p>
 
@@ -251,9 +251,14 @@ textarea { resize: vertical; min-height: 90px; }
       </div>
 
       <div class="form-group" style="margin-bottom:14px">
-        <label>Votre modèle de fiche *</label>
-        <textarea id="structureModele" style="min-height:200px"
-          placeholder="Collez ici le texte complet d'une de vos fiches de cours...&#10;&#10;Le système va apprendre votre format : rubriques, colonnes, organisation, style...&#10;Et reproduire exactement cette structure pour toutes vos futures fiches."></textarea>
+        <label>Votre modèle de fiche (PDF, DOC ou DOCX) *</label>
+        <input id="modeleFichier" type="file" accept=".pdf,.doc,.docx"/>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Ou collez le texte de votre modèle (optionnel)</label>
+        <textarea id="structureModele" style="min-height:150px"
+          placeholder="Si vous préférez, collez ici le texte complet d'une de vos fiches de cours au lieu d'envoyer un fichier...&#10;&#10;Le système va apprendre votre format : rubriques, colonnes, organisation, style...&#10;Et reproduire exactement cette structure pour toutes vos futures fiches."></textarea>
       </div>
 
       <button class="btn vert" onclick="sauvegarderModele()">
@@ -471,21 +476,32 @@ function telechargerPDF() {
 }
 
 async function sauvegarderModele() {
-  const id  = document.getElementById('modeleEnseignantId').value.trim();
-  const txt = document.getElementById('structureModele').value.trim();
-  if (!txt) { toast('❗ Colle ton modèle de fiche'); return; }
+  const id      = document.getElementById('modeleEnseignantId').value.trim();
+  const fichier = document.getElementById('modeleFichier').files[0];
+  const txt     = document.getElementById('structureModele').value.trim();
+  if (!fichier && !txt) { toast('❗ Ajoute un fichier ou colle ton modèle'); return; }
 
   try {
-    const res = await fetch('/api/upload-modele', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        enseignantId: id || 'anonyme',
-        niveau: niveauModele,
-        structureModele: txt
-      })
-    });
+    let res;
+    if (fichier) {
+      const formData = new FormData();
+      formData.append('fichier', fichier);
+      formData.append('enseignantId', id || 'anonyme');
+      formData.append('niveau', niveauModele);
+      res = await fetch('/api/upload-modele', { method: 'POST', body: formData });
+    } else {
+      res = await fetch('/api/upload-modele', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enseignantId: id || 'anonyme',
+          niveau: niveauModele,
+          structureModele: txt
+        })
+      });
+    }
     const data = await res.json();
+    if (!res.ok) { toast('❌ ' + (data.error || 'Erreur')); return; }
     document.getElementById('modeleResult').style.display = 'block';
     document.getElementById('modeleRubriques').textContent =
       'Rubriques détectées : ' + (data.rubriques?.join(' · ') || '–');
