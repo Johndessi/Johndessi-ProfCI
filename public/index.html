@@ -459,20 +459,42 @@ function imprimerFiche() {
   if (iframe) iframe.contentWindow.print();
 }
 
-function telechargerWord() {
-  const html = ficheEnCours?.contenu || '';
-  const blob = new Blob(['﻿<html><body>' + html + '</body></html>'], {type: 'application/msword'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'fiche_cours.doc';
-  a.click();
+function telechargerPDF() {
+  const contenu = ficheEnCours?.contenu || '';
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>
+    * { color: black !important; background: white !important; box-shadow: none !important; }
+    body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { border: 1px solid black; padding: 5px; }
+    @media print { body { margin: 10mm; } }
+  </style>
+  </head><body>${contenu}</body></html>`);
+  w.document.close();
+  setTimeout(() => w.print(), 500);
 }
 
-function telechargerPDF() {
-  const w = window.open('');
-  w.document.write('<style>*{color:black!important;background:white!important;box-shadow:none!important;}</style>' + (ficheEnCours?.contenu || ''));
-  w.document.close();
-  w.print();
+function telechargerWord() {
+  const contenu = ficheEnCours?.contenu || '';
+  const html = `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:w="urn:schemas-microsoft-com:office:word">
+  <head><meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 11pt; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid black; padding: 5pt; }
+  </style>
+  </head><body>${contenu}</body></html>`;
+  const blob = new Blob(['﻿' + html], { type: 'application/msword' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'fiche_cours.doc';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function sauvegarderModele() {

@@ -67,61 +67,90 @@ const Fiche  = mongoose.model('Fiche',  FicheSchema);
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const PROMPT_SECONDAIRE = `Tu es un expert en pédagogie ivoirienne (APC - Approche Par Compétences, DPFC).
-Tu génères des fiches de cours COMPLÈTES au format officiel utilisé dans les lycées et collèges de Côte d'Ivoire.
+const PROMPT_SECONDAIRE = `Tu es un expert en pédagogie ivoirienne (APC/DPFC).
+Tu génères des fiches de cours COMPLÈTES au format officiel des lycées et collèges de Côte d'Ivoire.
 
-FORMAT OBLIGATOIRE D'UNE FICHE DE COURS SECONDAIRE (HTML) :
+STRUCTURE OBLIGATOIRE EN HTML :
 
 <div class="fiche-cours">
-  <div class="entete">
-    <h2>FICHE DE COURS</h2>
-    <table class="entete-table">
-      <tr><td>Discipline</td><td>{{discipline}}</td><td>Classe</td><td>{{classe}}</td></tr>
-      <tr><td>Compétence</td><td colspan="3">{{competence}}</td></tr>
-      <tr><td>Activité</td><td>{{activite}}</td><td>Durée</td><td>{{duree}}</td></tr>
-      <tr><td>Leçon n°</td><td>{{lecon}}</td><td>Séance n°</td><td>{{seance}}</td></tr>
-    </table>
-  </div>
 
-  <div class="habiletes">
-    <h3>Tableau des habiletés et contenus</h3>
-    <table class="habiletes-table">
-      <tr><th>Habiletés</th><th>Contenus</th></tr>
-    </table>
-  </div>
+<!-- ENTÊTE VERTICAL -->
+<table class="entete-table" style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+  <tr><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;width:35%;">Discipline</td><td style="padding:4px 8px;border:1px solid #000;">{{discipline}}</td><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;width:20%;">Date</td><td style="padding:4px 8px;border:1px solid #000;"></td></tr>
+  <tr><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Classe</td><td colspan="3" style="padding:4px 8px;border:1px solid #000;">{{classe}}</td></tr>
+  <tr><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Compétence</td><td colspan="3" style="padding:4px 8px;border:1px solid #000;">{{competence}}</td></tr>
+  <tr><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Activité</td><td style="padding:4px 8px;border:1px solid #000;">{{activite}}</td><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Durée</td><td style="padding:4px 8px;border:1px solid #000;">{{duree}}</td></tr>
+  <tr><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Leçon</td><td style="padding:4px 8px;border:1px solid #000;">{{lecon}}</td><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Séance n°</td><td style="padding:4px 8px;border:1px solid #000;">{{seance}}</td></tr>
+</table>
 
-  <div class="situation">
-    <h3>Situation d'apprentissage</h3>
-    <p></p>
-  </div>
+<!-- SI GRAMMAIRE : corpus de phrases avant le tableau habiletés -->
+<!-- SITUATION D'APPRENTISSAGE -->
+<p><strong>Situation d'apprentissage :</strong> [Situation ancrée dans le quotidien ivoirien]</p>
 
-  <div class="supports">
-    <h3>Supports didactiques</h3>
-    <ul></ul>
-    <h3>Bibliographie</h3>
-    <ul></ul>
-  </div>
+<!-- TABLEAU HABILETÉS ET CONTENUS -->
+<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+  <tr><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Habiletés</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Contenus</th></tr>
+  <!-- lignes avec verbes taxonomiques : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire -->
+</table>
 
-  <div class="deroulement">
-    <h3>Déroulement de la séance</h3>
-    <table class="deroulement-table">
-      <tr>
-        <th>Moments didactiques / Durée</th>
-        <th>Stratégies pédagogiques</th>
-        <th>Activités de l'enseignant</th>
-        <th>Activités des élèves</th>
-        <th>Traces écrites</th>
-      </tr>
-    </table>
-  </div>
+<!-- SUPPORTS DIDACTIQUES ET BIBLIOGRAPHIE CÔTE À CÔTE -->
+<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+  <tr>
+    <td style="border:1px solid #000;padding:8px;width:50%;vertical-align:top;"><strong>Supports didactiques</strong><br>- [support 1]<br>- [support 2]</td>
+    <td style="border:1px solid #000;padding:8px;width:50%;vertical-align:top;"><strong>Bibliographie</strong><br>- [ref 1]<br>- [ref 2]</td>
+  </tr>
+</table>
+
+<!-- DÉROULEMENT - 5 COLONNES OBLIGATOIRES -->
+<table style="width:100%;border-collapse:collapse;">
+  <tr>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Moments didactiques / Durée</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:20%;">Stratégies pédagogiques / Plan du cours</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités de l'enseignant</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités des élèves</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Traces écrites</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">PRÉSENTATION<br>(5 mn)</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[stratégie : questions-réponses, procédé interrogatif...]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[questions précises de l'enseignant, rappel des prérequis]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[réponses attendues des élèves]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[activité/leçon/séance]</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">DÉVELOPPEMENT<br>(35-40 mn)</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[plan détaillé : I- ... II- ... III- ...]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[activités détaillées par point du plan]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[réponses attendues]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[traces écrites complètes : définitions, règles, exemples]</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">ÉVALUATION<br>(10-15 mn)</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[travail individuel]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[exercices d'application]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[élèves s'exécutent]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[correction]</td>
+  </tr>
+</table>
+
 </div>
 
-RÈGLES :
-- Utilise les verbes taxonomiques de Bloom adaptés CI : Identifier, Reconnaître, Connaître, Appliquer, Analyser, Produire, Évaluer
-- La situation d'apprentissage doit être ancrée dans le quotidien ivoirien
-- Le déroulement doit être DÉTAILLÉ : questions précises de l'enseignant + réponses attendues des élèves + traces écrites complètes
-- Les traces écrites = le contenu réel du cours (définitions, règles, exemples)
-- Réponds UNIQUEMENT en HTML, sans markdown, sans explication`;
+ADAPTATIONS PAR DISCIPLINE :
+- GRAMMAIRE : ajoute un corpus de phrases numérotées P1 P2 P3... avant le tableau habiletés
+- LECTURE MÉTHODIQUE : inclus présentation du texte, hypothèse générale, axes de lecture avec tableaux de vérification (Entrée | Relevés | Analyse | Interprétation)
+- EXPRESSION ÉCRITE : inclus le texte support, questions de compréhension, vocabulaire, résumé
+- MATHÉMATIQUES : inclus exercices d'application avec solutions détaillées
+- SVT / PHYSIQUE-CHIMIE : inclus expériences, schémas descriptifs, observations, conclusions
+- HISTOIRE-GÉO : inclus documents sources, cartes, questions d'exploitation
+- ANGLAIS : inclus dialogue, compréhension, production orale et écrite
+- EDHC : inclus situations civiques, valeurs, débat
+
+RÈGLES ABSOLUES :
+- Réponds UNIQUEMENT en HTML pur, JAMAIS de backticks, JAMAIS de markdown
+- Situation d'apprentissage toujours ancrée dans le quotidien ivoirien (lycées, marchés, quartiers CI)
+- Traces écrites = contenu réel complet du cours (définitions, règles, exemples concrets)
+- Verbes taxonomiques de Bloom : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire
+- Toujours 3 phases : Présentation / Développement / Évaluation`;
 
 const PROMPT_PRIMAIRE = `Tu es un expert en pédagogie ivoirienne pour l'enseignement primaire.
 Tu génères des fiches de leçon COMPLÈTES au format utilisé dans les écoles primaires de Côte d'Ivoire.
@@ -274,7 +303,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
 
     stream.on('finalMessage', async () => {
       clearInterval(heartbeat);
-      contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/```\s*$/g, '').trim();
+      contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
         discipline, classe, lecon, seance, duree, niveau,
