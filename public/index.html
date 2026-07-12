@@ -368,7 +368,7 @@ buffer = lines.pop();
                 .replace(/^\s*```\s*/i, '')
                 .replace(/```\s*$/g, '')
                 .trim();
-              ficheEnCours = { contenu: contenuHTML };
+              ficheEnCours = { id: json.ficheId, contenu: contenuHTML };
               afficherFiche(contenuHTML);
               toast('✅ Fiche générée avec succès !');
             }
@@ -464,42 +464,44 @@ function imprimerFiche() {
   if (iframe) iframe.contentWindow.print();
 }
 
+function nomFichierDepuisReponse(res, fallback) {
+  const entete = res.headers.get('Content-Disposition') || '';
+  const m = /filename="?([^"]+)"?/.exec(entete);
+  return m ? m[1] : fallback;
+}
+
+async function telechargerFicheBinaire(type, fallback) {
+  if (!ficheEnCours?.id) { toast('❗ Génère ou charge une fiche d\'abord'); return; }
+  try {
+    const res = await fetch(`/api/fiche/${ficheEnCours.id}/${type}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ view: viewActuelle })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur de génération');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomFichierDepuisReponse(res, fallback);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch(e) {
+    toast('❌ ' + e.message);
+  }
+}
+
 function telechargerPDF() {
-  const contenu = ficheEnCours?.contenu || '';
-  const w = window.open('', '_blank');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <style>
-    * { color: black !important; background: white !important; box-shadow: none !important; }
-    body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; }
-    table { width: 100%; border-collapse: collapse; }
-    td, th { border: 1px solid black; padding: 5px; }
-    @media print { body { margin: 10mm; } }
-  </style>
-  </head><body>${contenu}</body></html>`);
-  w.document.close();
-  setTimeout(() => w.print(), 500);
+  telechargerFicheBinaire('pdf', 'fiche_cours.pdf');
 }
 
 function telechargerWord() {
-  const contenu = ficheEnCours?.contenu || '';
-  const html = `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office"
-  xmlns:w="urn:schemas-microsoft-com:office:word">
-  <head><meta charset="UTF-8">
-  <style>
-    body { font-family: Arial, sans-serif; font-size: 11pt; }
-    table { border-collapse: collapse; width: 100%; }
-    td, th { border: 1px solid black; padding: 5pt; }
-  </style>
-  </head><body>${contenu}</body></html>`;
-  const blob = new Blob(['﻿' + html], { type: 'application/msword' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'fiche_cours.doc';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  telechargerFicheBinaire('docx', 'fiche_cours.docx');
 }
 
 async function sauvegarderModele() {
@@ -565,6 +567,7 @@ async function chargerFiche(id) {
   try {
     const res = await fetch('/api/fiche/' + id);
     const fiche = await res.json();
+    ficheEnCours = { id: fiche._id, contenu: fiche.contenu };
     showTab('generer');
     afficherFiche(fiche.contenu);
   } catch(e) { toast('❌ ' + e.message); }

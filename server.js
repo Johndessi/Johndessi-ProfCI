@@ -5,6 +5,12 @@ const Anthropic = require('@anthropic-ai/sdk');
 const multer = require('multer');
 const mammoth = require('mammoth');
 const pdfParse = require('pdf-parse');
+const puppeteer = require('puppeteer');
+const cheerio = require('cheerio');
+const {
+  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+  WidthType, ShadingType, PageOrientation, BorderStyle, VerticalAlign
+} = require('docx');
 
 const app = express();
 app.use(cors());
@@ -36,6 +42,266 @@ async function extraireTexteFichier(file) {
   }
   const result = await mammoth.extractRawText({ buffer: file.buffer });
   return result.value;
+}
+
+function slugFichier(fiche) {
+  const brut = `fiche_${fiche.discipline || ''}_${fiche.classe || ''}`;
+  const slug = brut.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return slug || 'fiche_cours';
+}
+
+let browserPromise = null;
+function getBrowser() {
+  if (!browserPromise) {
+    browserPromise = puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+  }
+  return browserPromise;
+}
+
+async function genererPdfDepuisHtml(contenuHTML, landscape) {
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  @page { size: A4 ${landscape ? 'landscape' : 'portrait'}; margin: 15mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #000; margin: 0; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { border: 1px solid #000; padding: 5px; }
+  tr { page-break-inside: avoid; }
+</style>
+</head><body>${contenuHTML}</body></html>`;
+
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const pdfBytes = await page.pdf({ format: 'A4', landscape, printBackground: true });
+    return Buffer.from(pdfBytes);
+  } finally {
+    await page.close();
+  }
+}
+
+// --- Conversion HTML (fiche générée) -> éléments docx natifs ---
+
+const DOCX_BORDERS = {
+  top: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+  bottom: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+  left: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+  right: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+  insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+  insideVertical: { style: BorderStyle.SINGLE, size: 4, color: '000000' }
+};
+
+const DOCX_NO_BORDERS = {
+  top: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  left: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  right: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  insideHorizontal: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  insideVertical: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
+};
+
+function widthPctFromStyle(style) {
+  const m = /width\s*:\s*([\d.]+)\s*%/i.exec(style || '');
+  return m ? parseFloat(m[1]) : null;
+}
+
+function collectRuns($, el, fmt = {}) {
+  let runs = [];
+  $(el).contents().each((_, child) => {
+    if (child.type === 'text') {
+      const text = (child.data || '').replace(/\s+/g, ' ');
+      if (text.trim() !== '' || text === ' ') {
+        runs.push(new TextRun({ text, bold: fmt.bold, italics: fmt.italics, color: fmt.color }));
+      }
+    } else if (child.type === 'tag') {
+      const tag = child.name.toLowerCase();
+      if (tag === 'br') {
+        runs.push(new TextRun({ text: '', break: 1 }));
+      } else if (tag === 'strong' || tag === 'b') {
+        runs = runs.concat(collectRuns($, child, { ...fmt, bold: true }));
+      } else if (tag === 'em' || tag === 'i') {
+        runs = runs.concat(collectRuns($, child, { ...fmt, italics: true }));
+      } else {
+        runs = runs.concat(collectRuns($, child, fmt));
+      }
+    }
+  });
+  return runs;
+}
+
+function blockChildrenToParagraphs($, el, fmt = {}) {
+  const paragraphs = [];
+  const directBlocks = $(el).children('p, ul, ol, div').toArray();
+
+  if (directBlocks.length === 0) {
+    const runs = collectRuns($, el, fmt);
+    if (runs.length) paragraphs.push(new Paragraph({ children: runs }));
+    return paragraphs;
+  }
+
+  directBlocks.forEach((node) => {
+    const tag = node.name.toLowerCase();
+    if (tag === 'ul' || tag === 'ol') {
+      $(node).children('li').each((_, li) => {
+        const runs = collectRuns($, li, fmt);
+        paragraphs.push(new Paragraph({ children: [new TextRun({ text: '- ', bold: fmt.bold, color: fmt.color }), ...runs] }));
+      });
+    } else {
+      const runs = collectRuns($, node, fmt);
+      if (runs.length) paragraphs.push(new Paragraph({ children: runs }));
+    }
+  });
+  return paragraphs;
+}
+
+function tableCellFromNode($, node, opts = {}) {
+  const fmt = { bold: opts.forceBold, color: opts.forceColor };
+  const paragraphs = blockChildrenToParagraphs($, node, fmt);
+  const cellProps = {
+    children: paragraphs.length ? paragraphs : [new Paragraph({ children: [] })],
+    verticalAlign: VerticalAlign.TOP,
+    margins: { top: 80, bottom: 80, left: 100, right: 100 }
+  };
+  if (opts.widthPct) cellProps.width = { size: opts.widthPct, type: WidthType.PERCENTAGE };
+  if (opts.shadingFill) cellProps.shading = { fill: opts.shadingFill, type: ShadingType.CLEAR, color: 'auto' };
+  if (opts.columnSpan) cellProps.columnSpan = opts.columnSpan;
+  return new TableCell(cellProps);
+}
+
+function buildDocxTable($, $table) {
+  const rows = [];
+  $table.children('tr').each((_, tr) => {
+    buildRow(tr);
+  });
+  $table.find('tbody, thead').each((_, group) => {
+    $(group).children('tr').each((_, tr) => buildRow(tr));
+  });
+
+  function buildRow(tr) {
+    const cells = [];
+    $(tr).children('td, th').each((_, cellEl) => {
+      const tag = cellEl.name.toLowerCase();
+      const isHeader = tag === 'th';
+      const style = $(cellEl).attr('style') || '';
+      const widthPct = widthPctFromStyle(style);
+      const colspanAttr = $(cellEl).attr('colspan');
+      const columnSpan = colspanAttr ? parseInt(colspanAttr, 10) : undefined;
+      cells.push(tableCellFromNode($, cellEl, {
+        forceBold: isHeader || /font-weight\s*:\s*bold/i.test(style),
+        forceColor: isHeader ? 'FFFFFF' : undefined,
+        widthPct,
+        shadingFill: isHeader ? '333333' : undefined,
+        columnSpan
+      }));
+    });
+    if (cells.length) rows.push(new TableRow({ children: cells, tableHeader: $(tr).children('th').length > 0 }));
+  }
+
+  if (!rows.length) return null;
+  return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, borders: DOCX_BORDERS });
+}
+
+function buildEnteteTable($, $entete) {
+  const champs = $entete.children('div').toArray();
+  const rows = [];
+  for (let i = 0; i < champs.length; i += 2) {
+    const labelEl = champs[i];
+    const valueEl = champs[i + 1];
+    if (!labelEl) break;
+    const labelCell = tableCellFromNode($, labelEl, { forceBold: true, widthPct: 30 });
+    const valueCell = valueEl
+      ? tableCellFromNode($, valueEl, { widthPct: 70 })
+      : new TableCell({ children: [new Paragraph({})], width: { size: 70, type: WidthType.PERCENTAGE } });
+    rows.push(new TableRow({ children: [labelCell, valueCell] }));
+  }
+  if (!rows.length) return null;
+  return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, borders: DOCX_NO_BORDERS });
+}
+
+function titrePar(text, taille) {
+  return new Paragraph({ children: [new TextRun({ text, bold: true, size: taille })], spacing: { before: 200, after: 120 } });
+}
+
+function contenuToDocxChildren(html) {
+  const $ = cheerio.load(html || '');
+  const root = $('.fiche-cours').first().length ? $('.fiche-cours').first() : $('body');
+  const elements = [];
+
+  root.children().each((_, node) => {
+    const tag = node.name.toLowerCase();
+    const $node = $(node);
+    const cls = $node.attr('class') || '';
+
+    if (tag === 'div' && /entete-libre/.test(cls)) {
+      const table = buildEnteteTable($, $node);
+      if (table) { elements.push(table); elements.push(new Paragraph({ text: '' })); }
+    } else if (tag === 'div' && /\bentete\b/.test(cls)) {
+      $node.children().each((_, inner) => {
+        const $inner = $(inner);
+        const innerCls = $inner.attr('class') || '';
+        if (inner.name === 'h2') {
+          elements.push(titrePar($inner.text().trim(), 28));
+        } else if (inner.name === 'div' && /entete-libre/.test(innerCls)) {
+          const table = buildEnteteTable($, $inner);
+          if (table) { elements.push(table); elements.push(new Paragraph({ text: '' })); }
+        } else if (inner.name === 'table') {
+          const table = buildDocxTable($, $inner);
+          if (table) { elements.push(table); elements.push(new Paragraph({ text: '' })); }
+        }
+      });
+    } else if (tag === 'div' && /deroulement/.test(cls)) {
+      $node.children().each((_, inner) => {
+        const $inner = $(inner);
+        if (inner.name === 'h3') {
+          elements.push(titrePar($inner.text().trim(), 24));
+        } else if (inner.name === 'table') {
+          const table = buildDocxTable($, $inner);
+          if (table) { elements.push(table); elements.push(new Paragraph({ text: '' })); }
+        }
+      });
+    } else if (tag === 'p') {
+      const runs = collectRuns($, $node);
+      if (runs.length) elements.push(new Paragraph({ children: runs, spacing: { after: 120 } }));
+    } else if (tag === 'table') {
+      const table = buildDocxTable($, $node);
+      if (table) { elements.push(table); elements.push(new Paragraph({ text: '' })); }
+    } else if (tag === 'h2' || tag === 'h3') {
+      elements.push(titrePar($node.text().trim(), tag === 'h2' ? 28 : 24));
+    } else {
+      const text = $node.text().trim();
+      if (text) elements.push(new Paragraph({ text }));
+    }
+  });
+
+  if (!elements.length) {
+    const texteBrut = $('body').text().trim();
+    elements.push(new Paragraph({ text: texteBrut }));
+  }
+  return elements;
+}
+
+async function genererDocxDepuisHtml(contenuHTML, landscape) {
+  const doc = new Document({
+    sections: [{
+      properties: {
+        page: {
+          size: {
+            orientation: landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT
+          },
+          margin: { top: 850, bottom: 850, left: 850, right: 850 }
+        }
+      },
+      children: contenuToDocxChildren(contenuHTML)
+    }]
+  });
+  return Packer.toBuffer(doc);
 }
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost/profci')
@@ -120,13 +386,22 @@ STRUCTURE OBLIGATOIRE EN HTML :
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">[réponses attendues des élèves]</td>
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">[activité/leçon/séance]</td>
   </tr>
+  <!-- DÉVELOPPEMENT : JAMAIS une seule ligne fourre-tout. CHAQUE point du plan (I-, II-, III-, IV-...) = UNE LIGNE SÉPARÉE du tableau, remplie uniquement pour ce point précis. Objectif : une ligne = une question de l'enseignant avec sa réponse juste en face, sans avoir à chercher ailleurs. Répète ce modèle de ligne pour autant de points que compte le plan annoncé. -->
   <tr>
-    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">DÉVELOPPEMENT<br>(35-40 mn)</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[plan détaillé : I- ... II- ... III- ...]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[activités détaillées par point du plan]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[réponses attendues]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[traces écrites complètes : définitions, règles, exemples]</td>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">DÉVELOPPEMENT<br>Point I<br>(X mn)</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[stratégie propre à ce point]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[question(s) précise(s) de l'enseignant pour CE point uniquement]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[réponse(s) attendue(s) pour CE point, en face de la question]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[trace écrite de CE point : définition, règle, exemple]</td>
   </tr>
+  <tr>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">DÉVELOPPEMENT<br>Point II<br>(X mn)</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[stratégie propre à ce point]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[question(s) précise(s) de l'enseignant pour CE point uniquement]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[réponse(s) attendue(s) pour CE point, en face de la question]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[trace écrite de CE point : définition, règle, exemple]</td>
+  </tr>
+  <!-- ... continue avec Point III, Point IV, etc. : une ligne DÉVELOPPEMENT par point du plan, autant que nécessaire -->
   <tr>
     <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">ÉVALUATION<br>(10-15 mn)</td>
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">[travail individuel]</td>
@@ -153,7 +428,8 @@ RÈGLES ABSOLUES :
 - Situation d'apprentissage toujours ancrée dans le quotidien ivoirien (lycées, marchés, quartiers CI)
 - Traces écrites = contenu réel complet du cours (définitions, règles, exemples concrets)
 - Verbes taxonomiques de Bloom : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire
-- Toujours 3 phases : Présentation / Développement / Évaluation`;
+- Pour chaque question posée par l'enseignant dans la colonne Activités de l'enseignant, formule-la EN PRIORITÉ avec un verbe taxonomique de Bloom (Identifie, Nomme, Cite, Définis, Explique, Compare, Analyse, Applique, Résous, Produis...). N'utilise des questions ouvertes ou situationnelles qu'en complément, après la question taxonomique principale.
+- Toujours 3 phases : Présentation / Développement / Évaluation, le Développement étant réparti sur PLUSIEURS lignes du tableau (une ligne par point du plan I-, II-, III-...), jamais une seule ligne fourre-tout`;
 
 const PROMPT_PRIMAIRE = `Tu es un expert en pédagogie ivoirienne pour l'enseignement primaire.
 Tu génères des fiches de leçon COMPLÈTES au format utilisé dans les écoles primaires de Côte d'Ivoire.
@@ -185,6 +461,14 @@ FORMAT PRIMAIRE :
         <th>Activités des élèves</th>
         <th>Observations</th>
       </tr>
+      <!-- JAMAIS une seule ligne fourre-tout pour toute la leçon. CHAQUE étape (Mise en train, Présentation, puis CHAQUE point du développement, Évaluation) = UNE LIGNE SÉPARÉE, remplie uniquement pour cette étape précise. Objectif : une ligne = une question du maître avec la réponse de l'élève juste en face. Autant de lignes que d'étapes/points nécessaires. -->
+      <tr>
+        <td>[nom de l'étape ou du point]<br>(X mn)</td>
+        <td>[question(s) précise(s) du maître pour CETTE étape uniquement]</td>
+        <td>[réponse(s) attendue(s) pour CETTE étape, en face de la question]</td>
+        <td>[observation ou trace écrite de CETTE étape]</td>
+      </tr>
+      <!-- ... répète ce modèle de ligne pour chaque étape/point suivant -->
     </table>
   </div>
 </div>
@@ -351,6 +635,40 @@ app.get('/api/fiche/:id', async (req, res) => {
     if (!fiche) return res.status(404).json({ error: 'Fiche introuvable' });
     res.json(fiche);
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/fiche/:id/pdf', async (req, res) => {
+  try {
+    const fiche = await Fiche.findById(req.params.id);
+    if (!fiche) return res.status(404).json({ error: 'Fiche introuvable' });
+
+    const landscape = req.body.view === 'paysage';
+    const pdfBuffer = await genererPdfDepuisHtml(fiche.contenu, landscape);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${slugFichier(fiche)}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (e) {
+    console.error('❌ Erreur génération PDF:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/fiche/:id/docx', async (req, res) => {
+  try {
+    const fiche = await Fiche.findById(req.params.id);
+    if (!fiche) return res.status(404).json({ error: 'Fiche introuvable' });
+
+    const landscape = req.body.view === 'paysage';
+    const docxBuffer = await genererDocxDepuisHtml(fiche.contenu, landscape);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${slugFichier(fiche)}.docx"`);
+    res.send(docxBuffer);
+  } catch (e) {
+    console.error('❌ Erreur génération DOCX:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
