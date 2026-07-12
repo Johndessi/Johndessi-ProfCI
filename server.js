@@ -477,22 +477,14 @@ STRUCTURE OBLIGATOIRE EN HTML :
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">Réponse d'accueil des élèves, PUIS réponses attendues aux questions de rappel</td>
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">[activité/leçon/séance]</td>
   </tr>
-  <!-- DÉVELOPPEMENT : JAMAIS une seule ligne fourre-tout. CHAQUE point du plan (I-, II-, III-, IV-...) = UNE LIGNE SÉPARÉE du tableau, remplie uniquement pour ce point précis. Objectif : une ligne = une question de l'enseignant avec sa réponse juste en face, sans avoir à chercher ailleurs. Répète ce modèle de ligne pour autant de points que compte le plan annoncé. -->
+  <!-- DÉVELOPPEMENT : UNE SEULE LIGNE pour toute la phase (jamais une ligne par point). À l'intérieur de cette ligne, numérote chaque question de la colonne "Activités de l'enseignant" par sous-point du plan : I-1, I-2, II-1, II-2, III-1... Dans "Activités des élèves", fais suivre les réponses EXACTEMENT dans le même ordre et avec la même numérotation, une réponse par paragraphe, à la même position que sa question. Dans "Traces écrites", même numérotation, même ordre : chaque sous-point y a sa trace écrite. Le numéro (I-1, I-2...) permet de relier question / réponse / trace écrite à la même position dans les trois colonnes, sans lignes séparées. -->
   <tr>
-    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">DÉVELOPPEMENT<br>Point I<br>(X mn)</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[stratégie propre à ce point]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[question(s) précise(s) de l'enseignant pour CE point uniquement]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[réponse(s) attendue(s) pour CE point, en face de la question]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[trace écrite de CE point : définition, règle, exemple]</td>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">DÉVELOPPEMENT<br>(35-40 mn)</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[plan détaillé : I- ... II- ... III- ...]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">I-1) [question]<br>I-2) [question]<br>II-1) [question]<br>II-2) [question]<br>...</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">I-1) [réponse]<br>I-2) [réponse]<br>II-1) [réponse]<br>II-2) [réponse]<br>...</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">I-1) [trace écrite]<br>I-2) [trace écrite]<br>II-1) [trace écrite]<br>II-2) [trace écrite]<br>...</td>
   </tr>
-  <tr>
-    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">DÉVELOPPEMENT<br>Point II<br>(X mn)</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[stratégie propre à ce point]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[question(s) précise(s) de l'enseignant pour CE point uniquement]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[réponse(s) attendue(s) pour CE point, en face de la question]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[trace écrite de CE point : définition, règle, exemple]</td>
-  </tr>
-  <!-- ... continue avec Point III, Point IV, etc. : une ligne DÉVELOPPEMENT par point du plan, autant que nécessaire -->
   <tr>
     <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">ÉVALUATION<br>(10-15 mn)</td>
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">[travail individuel]</td>
@@ -521,7 +513,7 @@ RÈGLES ABSOLUES :
 - Verbes taxonomiques de Bloom : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire
 - Pour chaque question posée par l'enseignant dans la colonne Activités de l'enseignant, formule-la EN PRIORITÉ avec un verbe taxonomique de Bloom (Identifie, Nomme, Cite, Définis, Explique, Compare, Analyse, Applique, Résous, Produis...). N'utilise des questions ouvertes ou situationnelles qu'en complément, après la question taxonomique principale.
 - Si le champ Séance n° est supérieur à 1 pour la même leçon, la PRÉSENTATION doit obligatoirement inclure un rappel explicite (question de l'enseignant + réponse attendue + trace écrite) du contenu vu à la ou les séance(s) précédente(s) de cette leçon, avant d'entamer le contenu nouveau.
-- Toujours 3 phases : Présentation / Développement / Évaluation, le Développement étant réparti sur PLUSIEURS lignes du tableau (une ligne par point du plan I-, II-, III-...), jamais une seule ligne fourre-tout`;
+- Toujours 3 phases = 3 lignes du tableau : Présentation / Développement / Évaluation. La ligne Développement est UNIQUE (jamais une ligne par point) : les sous-points I-1, I-2, II-1... sont des paragraphes à l'intérieur de la même ligne, alignés à la même position dans les colonnes Activités de l'enseignant / Activités des élèves / Traces écrites`;
 
 const PROMPT_PRIMAIRE = `Tu es un expert en pédagogie ivoirienne pour l'enseignement primaire.
 Tu génères des fiches de leçon COMPLÈTES au format utilisé dans les écoles primaires de Côte d'Ivoire.
@@ -560,14 +552,19 @@ FORMAT PRIMAIRE :
         <td>Réponse d'accueil des élèves, PUIS réponses attendues aux questions de rappel</td>
         <td>[observation ou trace écrite de cette étape]</td>
       </tr>
-      <!-- JAMAIS une seule ligne fourre-tout pour toute la leçon. CHAQUE étape suivante (puis CHAQUE point du développement, Évaluation) = UNE LIGNE SÉPARÉE, remplie uniquement pour cette étape précise. Objectif : une ligne = une question du maître avec la réponse de l'élève juste en face. Autant de lignes que d'étapes/points nécessaires. -->
+      <!-- DÉVELOPPEMENT : UNE SEULE LIGNE pour toute la phase (jamais une ligne par point). À l'intérieur de cette ligne, numérote chaque question de "Activités du maître" par sous-point : I-1, I-2, II-1, II-2... Dans "Activités des élèves", fais suivre les réponses EXACTEMENT dans le même ordre et la même numérotation, une réponse par paragraphe, à la même position que sa question. Dans "Observations", même numérotation pour la trace écrite de chaque sous-point. -->
       <tr>
-        <td>[nom de l'étape ou du point]<br>(X mn)</td>
-        <td>[question(s) précise(s) du maître pour CETTE étape uniquement]</td>
-        <td>[réponse(s) attendue(s) pour CETTE étape, en face de la question]</td>
-        <td>[observation ou trace écrite de CETTE étape]</td>
+        <td>DÉVELOPPEMENT<br>(X mn)</td>
+        <td>I-1) [question]<br>I-2) [question]<br>II-1) [question]<br>...</td>
+        <td>I-1) [réponse]<br>I-2) [réponse]<br>II-1) [réponse]<br>...</td>
+        <td>I-1) [trace écrite]<br>I-2) [trace écrite]<br>II-1) [trace écrite]<br>...</td>
       </tr>
-      <!-- ... répète ce modèle de ligne pour chaque étape/point suivant -->
+      <tr>
+        <td>ÉVALUATION<br>(X mn)</td>
+        <td>[travail individuel / exercice d'application]</td>
+        <td>[élèves s'exécutent]</td>
+        <td>[correction]</td>
+      </tr>
     </table>
   </div>
 </div>
