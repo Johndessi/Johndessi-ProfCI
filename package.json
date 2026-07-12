@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
+    "@sparticuz/chromium": "^149.0.0",
     "cheerio": "^1.2.0",
     "cors": "^2.8.5",
     "docx": "^9.7.1",
@@ -16,7 +17,7 @@
     "mongoose": "^8.0.0",
     "multer": "^2.2.0",
     "pdf-parse": "^1.1.4",
-    "puppeteer": "^25.3.0"
+    "puppeteer-core": "^25.3.0"
   },
   "engines": {
     "node": ">=18.0.0"

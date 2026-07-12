@@ -5,7 +5,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const multer = require('multer');
 const mammoth = require('mammoth');
 const pdfParse = require('pdf-parse');
-const puppeteer = require('puppeteer');
+const chromium = require('@sparticuz/chromium').default;
+const puppeteer = require('puppeteer-core');
 const cheerio = require('cheerio');
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
@@ -56,10 +57,13 @@ function slugFichier(fiche) {
 let browserPromise = null;
 function getBrowser() {
   if (!browserPromise) {
-    browserPromise = puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+    browserPromise = (async () => {
+      return puppeteer.launch({
+        args: chromium.args,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless
+      });
+    })();
   }
   return browserPromise;
 }
