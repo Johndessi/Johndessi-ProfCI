@@ -42,7 +42,18 @@ header span { color: var(--orange); font-size:12px; display:block; font-weight:4
 .card h2 { font-size:16px; color:var(--noir); margin-bottom:14px;
   padding-bottom:8px; border-bottom:2px solid var(--gris); }
 .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.form-group { flex: 1; min-width: 140px; }
+.form-group { flex: 1; min-width: 140px; position: relative; }
+.lecon-suggestions {
+  position:absolute; top:100%; left:0; right:0; z-index:30;
+  background:#fff; border:1.5px solid #e0e0e0; border-radius:10px;
+  margin-top:4px; max-height:200px; overflow-y:auto;
+  box-shadow:0 6px 20px rgba(0,0,0,.14); display:none;
+}
+.lecon-suggestions div {
+  padding:9px 12px; font-size:13px; cursor:pointer; border-bottom:1px solid #f0f0f0;
+}
+.lecon-suggestions div:last-child { border-bottom:none; }
+.lecon-suggestions div:hover { background:#FFF3E0; }
 label { display:block; font-size:12px; font-weight:700; color:var(--gris2); margin-bottom:4px; }
 input, select, textarea {
   width:100%; padding:10px 12px; border:1.5px solid #e0e0e0;
@@ -188,8 +199,9 @@ textarea { resize: vertical; min-height: 90px; }
       <div class="form-row">
         <div class="form-group">
           <label>Leçon / Thème *</label>
-          <input id="lecon" type="text" list="leconsSuggestions" placeholder="Ex: Les modalités verbales de l'indicatif"/>
-          <datalist id="leconsSuggestions"></datalist>
+          <input id="lecon" type="text" autocomplete="off" placeholder="Ex: Les modalités verbales de l'indicatif"
+            oninput="filtrerSuggestionsLecons()" onfocus="filtrerSuggestionsLecons()"/>
+          <div id="leconSuggestionsBox" class="lecon-suggestions"></div>
         </div>
         <div class="form-group" style="max-width:100px">
           <label>Séance n°</label>
@@ -341,23 +353,70 @@ function setNiveau(niveau, btn) {
   btn.classList.add('active');
 }
 
+// Le natif <datalist> n'affiche aucune suggestion sur Safari (iOS/iPadOS/macOS),
+// qui ignore silencieusement l'attribut list= : on utilise donc une liste déroulante
+// maison, indépendante du navigateur, pour que l'autocomplétion fonctionne partout.
+let leconsDisponibles = [];
+
 async function chargerSuggestionsLecons() {
   const discipline = document.getElementById('discipline').value.trim();
   const classe = document.getElementById('classe').value;
-  const datalist = document.getElementById('leconsSuggestions');
-  if (!discipline || !classe) { datalist.innerHTML = ''; return; }
+  leconsDisponibles = [];
+  if (!discipline || !classe) { masquerSuggestionsLecons(); return; }
 
   try {
     const res = await fetch(`/api/progressions?discipline=${encodeURIComponent(discipline)}&classe=${encodeURIComponent(classe)}`);
-    if (!res.ok) { datalist.innerHTML = ''; return; }
-    const progressions = await res.json();
-    datalist.innerHTML = progressions.map(p =>
-      `<option value="${(p.lecon || '').replace(/"/g, '&quot;')}"></option>`
-    ).join('');
+    if (res.ok) leconsDisponibles = await res.json();
   } catch (e) {
-    datalist.innerHTML = '';
+    leconsDisponibles = [];
   }
+  filtrerSuggestionsLecons();
 }
+
+function filtrerSuggestionsLecons() {
+  const leconInput = document.getElementById('lecon');
+  const box = document.getElementById('leconSuggestionsBox');
+
+  // Ne montre jamais la liste si le champ Leçon n'est plus actif : évite qu'un fetch
+  // déclenché par le blur de Discipline (réseau lent) ne rouvre la liste après coup,
+  // alors que l'utilisateur a déjà quitté le champ ou cliqué ailleurs.
+  if (document.activeElement !== leconInput) { masquerSuggestionsLecons(); return; }
+
+  const saisie = leconInput.value.trim().toLowerCase();
+  const correspondances = leconsDisponibles.filter(p => !saisie || (p.lecon || '').toLowerCase().includes(saisie));
+  if (!correspondances.length) { masquerSuggestionsLecons(); return; }
+
+  box.innerHTML = '';
+  correspondances.forEach(p => {
+    const item = document.createElement('div');
+    item.textContent = p.lecon || '';
+    // mousedown (pas click) + preventDefault : évite que le blur de l'input ne masque
+    // la liste avant que la sélection ait pu se déclencher
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      choisirLecon(p.lecon || '');
+    });
+    box.appendChild(item);
+  });
+  box.style.display = 'block';
+}
+
+function choisirLecon(lecon) {
+  document.getElementById('lecon').value = lecon;
+  masquerSuggestionsLecons();
+}
+
+function masquerSuggestionsLecons() {
+  const box = document.getElementById('leconSuggestionsBox');
+  box.style.display = 'none';
+  box.innerHTML = '';
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#lecon') && !e.target.closest('#leconSuggestionsBox')) {
+    masquerSuggestionsLecons();
+  }
+});
 
 function setNiveauModele(niveau, btn) {
   niveauModele = niveau;
