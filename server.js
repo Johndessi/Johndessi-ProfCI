@@ -75,13 +75,16 @@ STRUCTURE OBLIGATOIRE EN HTML :
 <div class="fiche-cours">
 
 <!-- ENTÊTE VERTICAL -->
-<table class="entete-table" style="width:100%;border-collapse:collapse;margin-bottom:12px;">
-  <tr><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;width:35%;">Discipline</td><td style="padding:4px 8px;border:1px solid #000;">{{discipline}}</td><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;width:20%;">Date</td><td style="padding:4px 8px;border:1px solid #000;"></td></tr>
-  <tr><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Classe</td><td colspan="3" style="padding:4px 8px;border:1px solid #000;">{{classe}}</td></tr>
-  <tr><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Compétence</td><td colspan="3" style="padding:4px 8px;border:1px solid #000;">{{competence}}</td></tr>
-  <tr><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Activité</td><td style="padding:4px 8px;border:1px solid #000;">{{activite}}</td><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Durée</td><td style="padding:4px 8px;border:1px solid #000;">{{duree}}</td></tr>
-  <tr><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Leçon</td><td style="padding:4px 8px;border:1px solid #000;">{{lecon}}</td><td style="font-weight:bold;padding:4px 8px;border:1px solid #000;">Séance n°</td><td style="padding:4px 8px;border:1px solid #000;">{{seance}}</td></tr>
-</table>
+<div class="entete-libre" style="display:grid;grid-template-columns:180px 1fr;column-gap:16px;margin-bottom:14px;">
+  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Discipline</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{discipline}}</div>
+  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Date</div><div style="padding:6px 0;border-bottom:1px solid #ddd;"></div>
+  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Classe</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{classe}}</div>
+  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Compétence</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{competence}}</div>
+  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Activité</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{activite}}</div>
+  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Durée</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{duree}}</div>
+  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Leçon</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{lecon}}</div>
+  <div style="font-weight:bold;padding:6px 0;">Séance n°</div><div style="padding:6px 0;">{{seance}}</div>
+</div>
 
 <!-- SI GRAMMAIRE : corpus de phrases avant le tableau habiletés -->
 <!-- SITUATION D'APPRENTISSAGE -->
@@ -160,14 +163,17 @@ FORMAT PRIMAIRE :
 <div class="fiche-cours primaire">
   <div class="entete">
     <h2>FICHE DE LEÇON</h2>
-    <table class="entete-table">
-      <tr><td>École</td><td>{{ecole}}</td><td>Classe</td><td>{{classe}}</td></tr>
-      <tr><td>Matière</td><td>{{discipline}}</td><td>Effectif</td><td>{{effectif}}</td></tr>
-      <tr><td>Thème</td><td>{{theme}}</td><td>Durée</td><td>{{duree}}</td></tr>
-      <tr><td>Leçon</td><td colspan="3">{{lecon}}</td></tr>
-      <tr><td>Objectifs pédagogiques</td><td colspan="3"></td></tr>
-      <tr><td>Matériel</td><td colspan="3"></td></tr>
-    </table>
+    <div class="entete-libre" style="display:grid;grid-template-columns:180px 1fr;column-gap:16px;">
+      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">École</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{ecole}}</div>
+      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Classe</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{classe}}</div>
+      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Matière</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{discipline}}</div>
+      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Effectif</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{effectif}}</div>
+      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Thème</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{theme}}</div>
+      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Durée</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{duree}}</div>
+      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Leçon</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{lecon}}</div>
+      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Objectifs pédagogiques</div><div style="padding:6px 0;border-bottom:1px solid #ddd;"></div>
+      <div style="font-weight:bold;padding:6px 0;">Matériel</div><div style="padding:6px 0;"></div>
+    </div>
   </div>
 
   <div class="deroulement">
