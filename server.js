@@ -205,7 +205,7 @@ function buildDocxTable($, $table) {
         columnSpan
       }));
     });
-    if (cells.length) rows.push(new TableRow({ children: cells, tableHeader: $(tr).children('th').length > 0 }));
+    if (cells.length) rows.push(new TableRow({ children: cells, tableHeader: false }));
   }
 
   if (!rows.length) return null;
