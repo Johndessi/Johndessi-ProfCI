@@ -332,8 +332,18 @@ const FicheSchema = new mongoose.Schema({
   createdAt    : { type: Date, default: Date.now }
 });
 
+const ProgressionLeconSchema = new mongoose.Schema({
+  discipline    : String,
+  classe        : String,
+  lecon         : String,
+  nombreSeances : Number,
+  ordre         : Number,
+  createdAt     : { type: Date, default: Date.now }
+});
+
 const Modele = mongoose.model('Modele', ModeleSchema);
 const Fiche  = mongoose.model('Fiche',  FicheSchema);
+const ProgressionLecon = mongoose.model('ProgressionLecon', ProgressionLeconSchema);
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -378,6 +388,21 @@ async function trouverFichesPrecedentes({ enseignantId, discipline, classe, leco
     .filter((x) => Number.isFinite(x.seanceNum) && x.seanceNum >= 1 && x.seanceNum < seanceNum)
     .sort((a, b) => a.seanceNum - b.seanceNum)
     .map((x) => x.fiche);
+}
+
+async function trouverProgressionLecon({ discipline, classe, lecon }) {
+  const candidates = await ProgressionLecon.find({
+    discipline: regexExactInsensible(discipline),
+    classe: regexExactInsensible(classe)
+  });
+
+  const leconCible = normaliserTexte(lecon);
+  return candidates.find((p) => {
+    const leconStockee = normaliserTexte(p.lecon);
+    if (!leconStockee || !leconCible) return false;
+    if (leconStockee === leconCible) return true;
+    return leconCible.length > 3 && (leconStockee.includes(leconCible) || leconCible.includes(leconStockee));
+  }) || null;
 }
 
 function texteCelluleAvecEspaces($, cell) {
@@ -579,6 +604,59 @@ RÈGLES :
 
 app.get('/ping', (_, res) => res.json({ status: 'ok', app: 'Prof CI' }));
 
+app.post('/api/admin/progressions/seed', async (req, res) => {
+  try {
+    const items = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: 'Le corps de la requête doit être un tableau JSON' });
+    }
+
+    let upserted = 0;
+    let ignores = 0;
+
+    for (const item of items) {
+      const discipline = (item && item.discipline || '').toString().trim();
+      const classe = (item && item.classe || '').toString().trim();
+      const lecon = (item && item.lecon || '').toString().trim();
+      if (!discipline || !classe || !lecon) { ignores++; continue; }
+
+      const nombreSeances = item && item.nombreSeances != null ? parseInt(item.nombreSeances, 10) : undefined;
+      const ordre = item && item.ordre != null ? parseInt(item.ordre, 10) : undefined;
+
+      const donnees = { discipline, classe, lecon };
+      if (Number.isFinite(nombreSeances)) donnees.nombreSeances = nombreSeances;
+      if (Number.isFinite(ordre)) donnees.ordre = ordre;
+
+      await ProgressionLecon.findOneAndUpdate(
+        { discipline, classe, lecon },
+        donnees,
+        { upsert: true, new: true }
+      );
+      upserted++;
+    }
+
+    res.json({ success: true, upserted, ignores, total: items.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/progressions', async (req, res) => {
+  try {
+    const { discipline, classe } = req.query;
+    if (!discipline || !classe) {
+      return res.status(400).json({ error: 'discipline et classe requis' });
+    }
+    const progressions = await ProgressionLecon.find({
+      discipline: regexExactInsensible(discipline),
+      classe: regexExactInsensible(classe)
+    }).sort({ ordre: 1, lecon: 1 });
+    res.json(progressions);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
   try {
     const { enseignantId, niveau } = req.body;
@@ -645,6 +723,14 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
         systemPrompt += `\n\nCONTENU RÉEL DES SÉANCES PRÉCÉDENTES DE CETTE LEÇON :\n${resume}\n\nBase le rappel de la PRÉSENTATION EXCLUSIVEMENT sur ce contenu réel ci-dessus (questions, réponses, traces écrites déjà vues), PAS sur une supposition.`;
       } else {
         avertissementRappel = "Aucune fiche de séance précédente trouvée pour cette leçon — le rappel généré est une estimation, vérifie-le.";
+      }
+    }
+
+    if (Number.isFinite(seanceNum)) {
+      const progression = await trouverProgressionLecon({ discipline, classe, lecon });
+      if (progression && Number.isFinite(progression.nombreSeances) && seanceNum > progression.nombreSeances) {
+        const avertissementDepassement = `Cette leçon officielle compte normalement ${progression.nombreSeances} séances — vérifie ton numéro de séance.`;
+        avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementDepassement}` : avertissementDepassement;
       }
     }
 

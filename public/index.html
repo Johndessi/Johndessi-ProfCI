@@ -163,11 +163,11 @@ textarea { resize: vertical; min-height: 90px; }
       <div class="form-row">
         <div class="form-group">
           <label>Discipline / Matière *</label>
-          <input id="discipline" type="text" placeholder="Ex: Français, Maths, SVT..."/>
+          <input id="discipline" type="text" placeholder="Ex: Français, Maths, SVT..." onblur="chargerSuggestionsLecons()"/>
         </div>
         <div class="form-group">
           <label>Classe *</label>
-          <select id="classe">
+          <select id="classe" onchange="chargerSuggestionsLecons()">
             <optgroup label="Secondaire">
               <option>6ème</option><option>5ème</option>
               <option>4ème</option><option>3ème</option>
@@ -187,7 +187,8 @@ textarea { resize: vertical; min-height: 90px; }
       <div class="form-row">
         <div class="form-group">
           <label>Leçon / Thème *</label>
-          <input id="lecon" type="text" placeholder="Ex: Les modalités verbales de l'indicatif"/>
+          <input id="lecon" type="text" list="leconsSuggestions" placeholder="Ex: Les modalités verbales de l'indicatif"/>
+          <datalist id="leconsSuggestions"></datalist>
         </div>
         <div class="form-group" style="max-width:100px">
           <label>Séance n°</label>
@@ -314,6 +315,25 @@ function setNiveau(niveau, btn) {
   document.querySelectorAll('#tab-generer .niveau-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
+
+async function chargerSuggestionsLecons() {
+  const discipline = document.getElementById('discipline').value.trim();
+  const classe = document.getElementById('classe').value;
+  const datalist = document.getElementById('leconsSuggestions');
+  if (!discipline || !classe) { datalist.innerHTML = ''; return; }
+
+  try {
+    const res = await fetch(`/api/progressions?discipline=${encodeURIComponent(discipline)}&classe=${encodeURIComponent(classe)}`);
+    if (!res.ok) { datalist.innerHTML = ''; return; }
+    const progressions = await res.json();
+    datalist.innerHTML = progressions.map(p =>
+      `<option value="${(p.lecon || '').replace(/"/g, '&quot;')}"></option>`
+    ).join('');
+  } catch (e) {
+    datalist.innerHTML = '';
+  }
+}
+
 function setNiveauModele(niveau, btn) {
   niveauModele = niveau;
   document.querySelectorAll('#tab-modele .niveau-btn').forEach(b => b.classList.remove('active'));
