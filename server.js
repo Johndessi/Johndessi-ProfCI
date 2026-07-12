@@ -337,6 +337,93 @@ const Fiche  = mongoose.model('Fiche',  FicheSchema);
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// --- Rappel de séance basé sur l'historique réel des fiches précédentes ---
+
+function normaliserTexte(str) {
+  return (str || '')
+    .toString()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function regexExactInsensible(str) {
+  const echappe = String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('^' + echappe + '$', 'i');
+}
+
+async function trouverFichesPrecedentes({ enseignantId, discipline, classe, lecon, niveau, seance }) {
+  const seanceNum = parseInt(seance, 10);
+  if (!enseignantId || !Number.isFinite(seanceNum) || seanceNum <= 1) return [];
+
+  const candidates = await Fiche.find({
+    enseignantId,
+    niveau,
+    discipline: regexExactInsensible(discipline),
+    classe: regexExactInsensible(classe)
+  }).sort({ createdAt: -1 }).limit(50);
+
+  const leconCible = normaliserTexte(lecon);
+  const correspondantes = candidates.filter((f) => {
+    const leconStockee = normaliserTexte(f.lecon);
+    if (!leconStockee || !leconCible) return false;
+    if (leconStockee === leconCible) return true;
+    // leçon "très proche" : l'une contient l'autre (variante courte/longue du même titre)
+    return leconCible.length > 3 && (leconStockee.includes(leconCible) || leconCible.includes(leconStockee));
+  });
+
+  return correspondantes
+    .map((f) => ({ fiche: f, seanceNum: parseInt(f.seance, 10) }))
+    .filter((x) => Number.isFinite(x.seanceNum) && x.seanceNum >= 1 && x.seanceNum < seanceNum)
+    .sort((a, b) => a.seanceNum - b.seanceNum)
+    .map((x) => x.fiche);
+}
+
+function texteCelluleAvecEspaces($, cell) {
+  $(cell).find('br').replaceWith(' ');
+  return $(cell).text().replace(/\s+/g, ' ').trim();
+}
+
+function extraireTracesEcritesDeroulement(contenuHTML) {
+  const $ = cheerio.load(contenuHTML || '');
+  const traces = [];
+
+  $('table').each((_, table) => {
+    const $table = $(table);
+    const entetes = $table.find('tr').first().find('th').map((_, th) => $(th).text().trim().toLowerCase()).get();
+    if (!entetes.length) return;
+
+    // colonne "Traces écrites" (secondaire) ou, à défaut, dernière colonne d'un tableau de déroulement (primaire : "Observations")
+    let indexTraces = entetes.findIndex((t) => t.includes('trace'));
+    const estDeroulement = entetes.some((t) => t.includes('moment') || t.includes('étape') || t.includes('etape') || t.includes('activité') || t.includes('activite'));
+    if (indexTraces === -1 && estDeroulement) indexTraces = entetes.length - 1;
+    if (indexTraces === -1) return;
+
+    $table.find('tr').slice(1).each((_, tr) => {
+      const cells = $(tr).find('td');
+      if (!cells.length) return;
+      const moment = texteCelluleAvecEspaces($, cells.get(0));
+      const traceCell = cells.get(indexTraces);
+      if (!traceCell) return;
+      const trace = texteCelluleAvecEspaces($, traceCell);
+      if (trace) traces.push(`${moment} : ${trace}`);
+    });
+  });
+
+  return traces;
+}
+
+function resumerSeancesPrecedentes(fichesPrecedentes) {
+  return fichesPrecedentes.map((f) => {
+    const traces = extraireTracesEcritesDeroulement(f.contenu);
+    const contenu = traces.length
+      ? traces.join('\n')
+      : '(traces écrites non détectées automatiquement — se référer au thème général de la séance)';
+    return `Séance ${f.seance} (${f.lecon}) :\n${contenu}`;
+  }).join('\n\n');
+}
+
 const PROMPT_SECONDAIRE = `Tu es un expert en pédagogie ivoirienne (APC/DPFC).
 Tu génères des fiches de cours COMPLÈTES au format officiel des lycées et collèges de Côte d'Ivoire.
 
@@ -550,7 +637,19 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       modelePersonnel = await Modele.findOne({ enseignantId, niveau });
     }
 
-    const systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : PROMPT_SECONDAIRE;
+    let systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : PROMPT_SECONDAIRE;
+
+    let avertissementRappel = null;
+    const seanceNum = parseInt(seance, 10);
+    if (Number.isFinite(seanceNum) && seanceNum > 1) {
+      const fichesPrecedentes = await trouverFichesPrecedentes({ enseignantId, discipline, classe, lecon, niveau, seance });
+      if (fichesPrecedentes.length) {
+        const resume = resumerSeancesPrecedentes(fichesPrecedentes);
+        systemPrompt += `\n\nCONTENU RÉEL DES SÉANCES PRÉCÉDENTES DE CETTE LEÇON :\n${resume}\n\nBase le rappel de la PRÉSENTATION EXCLUSIVEMENT sur ce contenu réel ci-dessus (questions, réponses, traces écrites déjà vues), PAS sur une supposition.`;
+      } else {
+        avertissementRappel = "Aucune fiche de séance précédente trouvée pour cette leçon — le rappel généré est une estimation, vérifie-le.";
+      }
+    }
 
     let userMessage = '';
     if (modelePersonnel) {
@@ -585,6 +684,10 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
+
+    if (avertissementRappel) {
+      res.write(`data: ${JSON.stringify({ avertissement: avertissementRappel })}\n\n`);
+    }
 
     const heartbeat = setInterval(() => {
       res.write(': keep-alive\n\n');
