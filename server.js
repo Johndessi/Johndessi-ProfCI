@@ -502,12 +502,12 @@ STRUCTURE OBLIGATOIRE EN HTML :
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">Réponse d'accueil des élèves, PUIS réponses attendues aux questions de rappel</td>
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">[activité/leçon/séance]</td>
   </tr>
-  <!-- DÉVELOPPEMENT : UNE SEULE LIGNE pour toute la phase (jamais une ligne par point). À l'intérieur de cette ligne, numérote chaque question de la colonne "Activités de l'enseignant" par sous-point du plan : I-1, I-2, II-1, II-2, III-1... Dans "Activités des élèves", fais suivre les réponses EXACTEMENT dans le même ordre et avec la même numérotation, une réponse par paragraphe, à la même position que sa question. Dans "Traces écrites", même numérotation, même ordre : chaque sous-point y a sa trace écrite. Le numéro (I-1, I-2...) permet de relier question / réponse / trace écrite à la même position dans les trois colonnes, sans lignes séparées. -->
+  <!-- DÉVELOPPEMENT : UNE SEULE LIGNE pour toute la phase (jamais une ligne par point). La numérotation I-1, I-2, II-1... n'apparaît QUE dans "Plan du cours" et "Traces écrites". Dans "Activités de l'enseignant" et "Activités des élèves", rédige chaque question/réponse avec un simple tiret "- ", SANS préfixe numéroté, mais en respectant STRICTEMENT le même ordre entre les deux colonnes : la 1ère question correspond à la 1ère réponse, la 2ème à la 2ème, etc., pour garder l'alignement question/réponse. -->
   <tr>
     <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">DÉVELOPPEMENT<br>(35-40 mn)</td>
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">[plan détaillé : I- ... II- ... III- ...]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">I-1) [question]<br>I-2) [question]<br>II-1) [question]<br>II-2) [question]<br>...</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">I-1) [réponse]<br>I-2) [réponse]<br>II-1) [réponse]<br>II-2) [réponse]<br>...</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">- [question]<br>- [question]<br>- [question]<br>- [question]<br>...</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">- [réponse]<br>- [réponse]<br>- [réponse]<br>- [réponse]<br>...</td>
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">I-1) [trace écrite]<br>I-2) [trace écrite]<br>II-1) [trace écrite]<br>II-2) [trace écrite]<br>...</td>
   </tr>
   <tr>
@@ -538,7 +538,7 @@ RÈGLES ABSOLUES :
 - Verbes taxonomiques de Bloom : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire
 - Pour chaque question posée par l'enseignant dans la colonne Activités de l'enseignant, formule-la EN PRIORITÉ avec un verbe taxonomique de Bloom (Identifie, Nomme, Cite, Définis, Explique, Compare, Analyse, Applique, Résous, Produis...). N'utilise des questions ouvertes ou situationnelles qu'en complément, après la question taxonomique principale.
 - Si le champ Séance n° est supérieur à 1 pour la même leçon, la PRÉSENTATION doit obligatoirement inclure un rappel explicite (question de l'enseignant + réponse attendue + trace écrite) du contenu vu à la ou les séance(s) précédente(s) de cette leçon, avant d'entamer le contenu nouveau.
-- Toujours 3 phases = 3 lignes du tableau : Présentation / Développement / Évaluation. La ligne Développement est UNIQUE (jamais une ligne par point) : les sous-points I-1, I-2, II-1... sont des paragraphes à l'intérieur de la même ligne, alignés à la même position dans les colonnes Activités de l'enseignant / Activités des élèves / Traces écrites`;
+- Toujours 3 phases = 3 lignes du tableau : Présentation / Développement / Évaluation. La ligne Développement est UNIQUE (jamais une ligne par point) : les paragraphes de questions/réponses sont alignés à la même position dans les colonnes Activités de l'enseignant / Activités des élèves (tirets simples "- ", SANS numérotation), la numérotation I-1, I-2, II-1... restant réservée aux colonnes Plan du cours et Traces écrites`;
 
 const PROMPT_PRIMAIRE = `Tu es un expert en pédagogie ivoirienne pour l'enseignement primaire.
 Tu génères des fiches de leçon COMPLÈTES au format utilisé dans les écoles primaires de Côte d'Ivoire.
@@ -577,11 +577,11 @@ FORMAT PRIMAIRE :
         <td>Réponse d'accueil des élèves, PUIS réponses attendues aux questions de rappel</td>
         <td>[observation ou trace écrite de cette étape]</td>
       </tr>
-      <!-- DÉVELOPPEMENT : UNE SEULE LIGNE pour toute la phase (jamais une ligne par point). À l'intérieur de cette ligne, numérote chaque question de "Activités du maître" par sous-point : I-1, I-2, II-1, II-2... Dans "Activités des élèves", fais suivre les réponses EXACTEMENT dans le même ordre et la même numérotation, une réponse par paragraphe, à la même position que sa question. Dans "Observations", même numérotation pour la trace écrite de chaque sous-point. -->
+      <!-- DÉVELOPPEMENT : UNE SEULE LIGNE pour toute la phase (jamais une ligne par point). La numérotation I-1, I-2, II-1... n'apparaît QUE dans "Observations" (trace écrite). Dans "Activités du maître" et "Activités des élèves", rédige chaque question/réponse avec un simple tiret "- ", SANS préfixe numéroté, mais en respectant STRICTEMENT le même ordre entre les deux colonnes : la 1ère question correspond à la 1ère réponse, la 2ème à la 2ème, etc., pour garder l'alignement question/réponse. -->
       <tr>
         <td>DÉVELOPPEMENT<br>(X mn)</td>
-        <td>I-1) [question]<br>I-2) [question]<br>II-1) [question]<br>...</td>
-        <td>I-1) [réponse]<br>I-2) [réponse]<br>II-1) [réponse]<br>...</td>
+        <td>- [question]<br>- [question]<br>- [question]<br>...</td>
+        <td>- [réponse]<br>- [réponse]<br>- [réponse]<br>...</td>
         <td>I-1) [trace écrite]<br>I-2) [trace écrite]<br>II-1) [trace écrite]<br>...</td>
       </tr>
       <tr>
