@@ -345,15 +345,15 @@ STRUCTURE OBLIGATOIRE EN HTML :
 <div class="fiche-cours">
 
 <!-- ENTÊTE VERTICAL -->
-<div class="entete-libre" style="display:grid;grid-template-columns:180px 1fr;column-gap:16px;margin-bottom:14px;">
-  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Discipline</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{discipline}}</div>
-  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Date</div><div style="padding:6px 0;border-bottom:1px solid #ddd;"></div>
-  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Classe</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{classe}}</div>
-  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Compétence</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{competence}}</div>
-  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Activité</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{activite}}</div>
-  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Durée</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{duree}}</div>
-  <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Leçon</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{lecon}}</div>
-  <div style="font-weight:bold;padding:6px 0;">Séance n°</div><div style="padding:6px 0;">{{seance}}</div>
+<div class="entete-libre" style="display:grid;grid-template-columns:180px 1fr;column-gap:16px;row-gap:2px;margin-bottom:14px;">
+  <div style="font-weight:bold;padding:2px 0;">Discipline :</div><div style="padding:2px 0;">{{discipline}}</div>
+  <div style="font-weight:bold;padding:2px 0;">Date :</div><div style="padding:2px 0;"></div>
+  <div style="font-weight:bold;padding:2px 0;">Classe :</div><div style="padding:2px 0;">{{classe}}</div>
+  <div style="font-weight:bold;padding:2px 0;">Compétence :</div><div style="padding:2px 0;">{{competence}}</div>
+  <div style="font-weight:bold;padding:2px 0;">Activité :</div><div style="padding:2px 0;">{{activite}}</div>
+  <div style="font-weight:bold;padding:2px 0;">Durée :</div><div style="padding:2px 0;">{{duree}}</div>
+  <div style="font-weight:bold;padding:2px 0;">Leçon :</div><div style="padding:2px 0;">{{lecon}}</div>
+  <div style="font-weight:bold;padding:2px 0;">Séance n° :</div><div style="padding:2px 0;">{{seance}}</div>
 </div>
 
 <!-- SI GRAMMAIRE : corpus de phrases avant le tableau habiletés -->
@@ -386,8 +386,8 @@ STRUCTURE OBLIGATOIRE EN HTML :
   <tr>
     <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">PRÉSENTATION<br>(5 mn)</td>
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">[stratégie : questions-réponses, procédé interrogatif...]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[questions précises de l'enseignant, rappel des prérequis]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[réponses attendues des élèves]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">« Bonjour la classe » / « Bonjour les élèves », PUIS questions précises de rappel des prérequis</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">Réponse d'accueil des élèves, PUIS réponses attendues aux questions de rappel</td>
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">[activité/leçon/séance]</td>
   </tr>
   <!-- DÉVELOPPEMENT : JAMAIS une seule ligne fourre-tout. CHAQUE point du plan (I-, II-, III-, IV-...) = UNE LIGNE SÉPARÉE du tableau, remplie uniquement pour ce point précis. Objectif : une ligne = une question de l'enseignant avec sa réponse juste en face, sans avoir à chercher ailleurs. Répète ce modèle de ligne pour autant de points que compte le plan annoncé. -->
@@ -433,6 +433,7 @@ RÈGLES ABSOLUES :
 - Traces écrites = contenu réel complet du cours (définitions, règles, exemples concrets)
 - Verbes taxonomiques de Bloom : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire
 - Pour chaque question posée par l'enseignant dans la colonne Activités de l'enseignant, formule-la EN PRIORITÉ avec un verbe taxonomique de Bloom (Identifie, Nomme, Cite, Définis, Explique, Compare, Analyse, Applique, Résous, Produis...). N'utilise des questions ouvertes ou situationnelles qu'en complément, après la question taxonomique principale.
+- Si le champ Séance n° est supérieur à 1 pour la même leçon, la PRÉSENTATION doit obligatoirement inclure un rappel explicite (question de l'enseignant + réponse attendue + trace écrite) du contenu vu à la ou les séance(s) précédente(s) de cette leçon, avant d'entamer le contenu nouveau.
 - Toujours 3 phases : Présentation / Développement / Évaluation, le Développement étant réparti sur PLUSIEURS lignes du tableau (une ligne par point du plan I-, II-, III-...), jamais une seule ligne fourre-tout`;
 
 const PROMPT_PRIMAIRE = `Tu es un expert en pédagogie ivoirienne pour l'enseignement primaire.
@@ -443,16 +444,16 @@ FORMAT PRIMAIRE :
 <div class="fiche-cours primaire">
   <div class="entete">
     <h2>FICHE DE LEÇON</h2>
-    <div class="entete-libre" style="display:grid;grid-template-columns:180px 1fr;column-gap:16px;">
-      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">École</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{ecole}}</div>
-      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Classe</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{classe}}</div>
-      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Matière</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{discipline}}</div>
-      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Effectif</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{effectif}}</div>
-      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Thème</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{theme}}</div>
-      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Durée</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{duree}}</div>
-      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Leçon</div><div style="padding:6px 0;border-bottom:1px solid #ddd;">{{lecon}}</div>
-      <div style="font-weight:bold;padding:6px 0;border-bottom:1px solid #ddd;">Objectifs pédagogiques</div><div style="padding:6px 0;border-bottom:1px solid #ddd;"></div>
-      <div style="font-weight:bold;padding:6px 0;">Matériel</div><div style="padding:6px 0;"></div>
+    <div class="entete-libre" style="display:grid;grid-template-columns:180px 1fr;column-gap:16px;row-gap:2px;">
+      <div style="font-weight:bold;padding:2px 0;">École :</div><div style="padding:2px 0;">{{ecole}}</div>
+      <div style="font-weight:bold;padding:2px 0;">Classe :</div><div style="padding:2px 0;">{{classe}}</div>
+      <div style="font-weight:bold;padding:2px 0;">Matière :</div><div style="padding:2px 0;">{{discipline}}</div>
+      <div style="font-weight:bold;padding:2px 0;">Effectif :</div><div style="padding:2px 0;">{{effectif}}</div>
+      <div style="font-weight:bold;padding:2px 0;">Thème :</div><div style="padding:2px 0;">{{theme}}</div>
+      <div style="font-weight:bold;padding:2px 0;">Durée :</div><div style="padding:2px 0;">{{duree}}</div>
+      <div style="font-weight:bold;padding:2px 0;">Leçon :</div><div style="padding:2px 0;">{{lecon}}</div>
+      <div style="font-weight:bold;padding:2px 0;">Objectifs pédagogiques :</div><div style="padding:2px 0;"></div>
+      <div style="font-weight:bold;padding:2px 0;">Matériel :</div><div style="padding:2px 0;"></div>
     </div>
   </div>
 
@@ -465,7 +466,14 @@ FORMAT PRIMAIRE :
         <th>Activités des élèves</th>
         <th>Observations</th>
       </tr>
-      <!-- JAMAIS une seule ligne fourre-tout pour toute la leçon. CHAQUE étape (Mise en train, Présentation, puis CHAQUE point du développement, Évaluation) = UNE LIGNE SÉPARÉE, remplie uniquement pour cette étape précise. Objectif : une ligne = une question du maître avec la réponse de l'élève juste en face. Autant de lignes que d'étapes/points nécessaires. -->
+      <!-- PREMIÈRE LIGNE OBLIGATOIRE (Présentation / Mise en train) : le maître commence par « Bonjour les enfants », les élèves répondent, PUIS viennent les questions de rappel des prérequis -->
+      <tr>
+        <td>PRÉSENTATION<br>(5 mn)</td>
+        <td>« Bonjour les enfants », PUIS questions précises de rappel des prérequis</td>
+        <td>Réponse d'accueil des élèves, PUIS réponses attendues aux questions de rappel</td>
+        <td>[observation ou trace écrite de cette étape]</td>
+      </tr>
+      <!-- JAMAIS une seule ligne fourre-tout pour toute la leçon. CHAQUE étape suivante (puis CHAQUE point du développement, Évaluation) = UNE LIGNE SÉPARÉE, remplie uniquement pour cette étape précise. Objectif : une ligne = une question du maître avec la réponse de l'élève juste en face. Autant de lignes que d'étapes/points nécessaires. -->
       <tr>
         <td>[nom de l'étape ou du point]<br>(X mn)</td>
         <td>[question(s) précise(s) du maître pour CETTE étape uniquement]</td>
@@ -482,6 +490,7 @@ RÈGLES :
 - Objectifs avec verbes d'action : nommer, lire, écrire, calculer, tracer, colorier, distinguer...
 - Activités concrètes, manipulatoires, ludiques
 - Ancrage dans le quotidien ivoirien (marchés, villages, saisons, fruits locaux...)
+- Si le champ Séance n° est supérieur à 1 pour la même leçon, l'étape de Présentation / Mise en train doit obligatoirement inclure un rappel explicite (question du maître + réponse attendue + observation/trace écrite) du contenu vu à la ou les séance(s) précédente(s) de cette leçon, avant d'entamer le contenu nouveau.
 - Réponds UNIQUEMENT en HTML, sans markdown, sans explication`;
 
 app.get('/ping', (_, res) => res.json({ status: 'ok', app: 'Prof CI' }));
