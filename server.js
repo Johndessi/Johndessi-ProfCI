@@ -312,6 +312,10 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost/profci')
   .then(() => console.log('✅ MongoDB connecté'))
   .catch(e => console.error('❌ MongoDB:', e.message));
 
+if (!process.env.ADMIN_SEED_KEY) {
+  console.warn('⚠️  ADMIN_SEED_KEY non définie : /api/admin/progressions/seed refusera toutes les requêtes (fail closed).');
+}
+
 const ModeleSchema = new mongoose.Schema({
   enseignantId : String,
   niveau       : String,
@@ -604,7 +608,18 @@ RÈGLES :
 
 app.get('/ping', (_, res) => res.json({ status: 'ok', app: 'Prof CI' }));
 
-app.post('/api/admin/progressions/seed', async (req, res) => {
+function verifierCleAdmin(req, res, next) {
+  if (!process.env.ADMIN_SEED_KEY) {
+    return res.status(401).json({ error: 'Non autorisé' });
+  }
+  const cle = req.get('x-admin-key');
+  if (!cle || cle !== process.env.ADMIN_SEED_KEY) {
+    return res.status(401).json({ error: 'Non autorisé' });
+  }
+  next();
+}
+
+app.post('/api/admin/progressions/seed', verifierCleAdmin, async (req, res) => {
   try {
     const items = req.body;
     if (!Array.isArray(items)) {
