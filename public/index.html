@@ -218,6 +218,17 @@ textarea { resize: vertical; min-height: 90px; }
         <textarea id="planCours" placeholder="Collez votre plan ici si vous en avez un.&#10;Ex:&#10;I- Définition&#10;II- Les temps simples : présent, imparfait...&#10;III- Les temps composés&#10;IV- Exercices d'application"></textarea>
       </div>
 
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Texte support (optionnel selon la leçon)</label>
+        <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
+          Pour une lecture méthodique, une expression écrite, un commentaire de texte... Le texte est
+          repris à l'identique dans la fiche générée, jamais reformulé par l'IA.
+        </p>
+        <textarea id="texteSupport" style="min-height:120px"
+          placeholder="Collez ici le texte support (jusqu'à environ 600 mots)..."></textarea>
+        <input id="texteSupportFichier" type="file" accept=".pdf,.doc,.docx" style="margin-top:8px"/>
+      </div>
+
       <button class="btn" id="btnGenerer" onclick="genererFiche()">
         🪄 Générer la fiche de cours
       </button>
@@ -435,18 +446,30 @@ async function genererFiche() {
   document.getElementById('ficheViewer').classList.remove('show');
 
    try {
-      const response = await fetch('/api/generer-fiche', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          enseignantId : document.getElementById('enseignantId').value.trim() || 'anonyme',
-          niveau       : niveauActuel,
-          discipline, classe, lecon,
-          seance   : document.getElementById('seance').value,
-          duree    : document.getElementById('duree').value,
-          planCours: document.getElementById('planCours').value.trim()
-        })
-      });
+      const champs = {
+        enseignantId : document.getElementById('enseignantId').value.trim() || 'anonyme',
+        niveau       : niveauActuel,
+        discipline, classe, lecon,
+        seance      : document.getElementById('seance').value,
+        duree       : document.getElementById('duree').value,
+        planCours   : document.getElementById('planCours').value.trim(),
+        texteSupport: document.getElementById('texteSupport').value.trim()
+      };
+      const fichierSupport = document.getElementById('texteSupportFichier').files[0];
+
+      let response;
+      if (fichierSupport) {
+        const formData = new FormData();
+        Object.entries(champs).forEach(([cle, valeur]) => formData.append(cle, valeur));
+        formData.append('texteSupportFichier', fichierSupport);
+        response = await fetch('/api/generer-fiche', { method: 'POST', body: formData });
+      } else {
+        response = await fetch('/api/generer-fiche', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(champs)
+        });
+      }
 
       if (!response.ok) throw new Error('Erreur serveur');
 
@@ -468,7 +491,10 @@ buffer = lines.pop();
             if (json.avertissement) toast('⚠️ ' + json.avertissement);
             if (json.chunk) contenuHTML += json.chunk;
             if (json.done) {
-              contenuHTML = contenuHTML
+              // contenuFinal = version authoritative du serveur (backticks retirés,
+              // texte support injecté fidèlement) ; on l'utilise en priorité pour que
+              // l'affichage corresponde exactement à ce qui est stocké en base.
+              contenuHTML = json.contenuFinal || contenuHTML
                 .replace(/^\s*```html\s*/i, '')
                 .replace(/^\s*```\s*/i, '')
                 .replace(/```\s*$/g, '')

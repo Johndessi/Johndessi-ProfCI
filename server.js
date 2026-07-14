@@ -35,6 +35,13 @@ function uploadModeleFichier(req, res, next) {
   });
 }
 
+function uploadTexteSupportFichier(req, res, next) {
+  upload.single('texteSupportFichier')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}
+
 async function extraireTexteFichier(file) {
   const ext = file.originalname.split('.').pop().toLowerCase();
   if (ext === 'pdf') {
@@ -409,6 +416,61 @@ async function trouverProgressionLecon({ discipline, classe, lecon }) {
   }) || null;
 }
 
+// --- Texte support fourni par l'enseignant : injecté par simple substitution
+// de chaîne côté serveur, jamais régénéré par l'IA, pour garantir sa fidélité exacte ---
+
+function echapperHtml(str) {
+  return (str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function texteSupportVersHtml(texte) {
+  const paragraphes = (texte || '')
+    .split(/\r?\n\s*\r?\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (!paragraphes.length) return '';
+
+  return paragraphes
+    .map((p) => `<p>${echapperHtml(p).replace(/\r?\n/g, '<br>')}</p>`)
+    .join('\n');
+}
+
+function injecterTexteSupport(contenuHTML, texteSupport) {
+  if (!texteSupport) return contenuHTML;
+  const texteHtml = texteSupportVersHtml(texteSupport);
+  if (!texteHtml) return contenuHTML;
+
+  if (contenuHTML.includes('{{TEXTE_SUPPORT}}')) {
+    return contenuHTML.split('{{TEXTE_SUPPORT}}').join(texteHtml);
+  }
+
+  // Le modèle a oublié le marqueur : insère une section dédiée juste avant le
+  // tableau de déroulement (qui contient les questions), donc en fin de fiche
+  // mais avant la partie questions.
+  const section = `<div class="texte-support"><h3>Texte support</h3>${texteHtml}</div>\n`;
+  const derniereTable = contenuHTML.lastIndexOf('<table');
+  if (derniereTable !== -1) {
+    return contenuHTML.slice(0, derniereTable) + section + contenuHTML.slice(derniereTable);
+  }
+  return contenuHTML + section;
+}
+
+function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
+  const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
+  const motsClefs = [
+    'lecture methodique', 'lecture', 'expression ecrite',
+    'comprehension de texte', 'comprehension ecrite',
+    'etude de texte', 'commentaire de texte', 'resume de texte'
+  ];
+  return motsClefs.some((m) => cible.includes(m));
+}
+
 function texteCelluleAvecEspaces($, cell) {
   $(cell).find('br').replaceWith(' ');
   return $(cell).text().replace(/\s+/g, ' ').trim();
@@ -713,7 +775,7 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
   }
 });
 
- app.post('/api/generer-fiche', async (req, res) => {
+ app.post('/api/generer-fiche', uploadTexteSupportFichier, async (req, res) => {
   console.log('📩 Requête reçue:', req.body.discipline, req.body.classe, req.body.lecon);
   try {
     const {
@@ -721,6 +783,11 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       classe, lecon, seance = '1', duree = '1 heure',
       theme = '', planCours = ''
     } = req.body;
+
+    let texteSupport = (req.body.texteSupport || '').toString().trim();
+    if (req.file) {
+      texteSupport = (await extraireTexteFichier(req.file)).trim();
+    }
 
     let modelePersonnel = null;
     if (enseignantId) {
@@ -747,6 +814,11 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
         const avertissementDepassement = `Cette leçon officielle compte normalement ${progression.nombreSeances} séances — vérifie ton numéro de séance.`;
         avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementDepassement}` : avertissementDepassement;
       }
+    }
+
+    if (!texteSupport && leconNecessiteTexteSupport({ discipline, lecon, theme })) {
+      const avertissementTexte = 'Cette leçon semble nécessiter un texte support (lecture, expression écrite...) — fournis un texte collé ou un fichier Word/PDF pour une fiche fidèle au contenu étudié.';
+      avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementTexte}` : avertissementTexte;
     }
 
     let userMessage = '';
@@ -776,6 +848,10 @@ Génère la fiche COMPLÈTE en HTML en respectant EXACTEMENT la structure du mod
 ${planCours ? `\nPLAN DE COURS FOURNI :\n${planCours}\n\nAdapte ce plan au format officiel de fiche de cours.` : ''}
 
 Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
+    }
+
+    if (texteSupport) {
+      userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} à l'endroit où le texte doit apparaître dans le HTML.\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -808,12 +884,13 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     stream.on('finalMessage', async () => {
       clearInterval(heartbeat);
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
+      contenuHTML = injecterTexteSupport(contenuHTML, texteSupport);
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
         discipline, classe, lecon, seance, duree, niveau,
         contenu: contenuHTML
       });
-      res.write(`data: ${JSON.stringify({ done: true, ficheId: fiche._id })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, ficheId: fiche._id, contenuFinal: contenuHTML })}\n\n`);
       res.end();
     });
 
