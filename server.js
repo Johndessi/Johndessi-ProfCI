@@ -42,11 +42,21 @@ function uploadTexteSupportFichier(req, res, next) {
   });
 }
 
+function normaliserTextePdf(texte) {
+  return (texte || '')
+    // fusionne un tiret de césure suivi d'un retour à la ligne (ex. "quatre-vingt-\ntrois")
+    // en un seul mot, SANS espace parasite : "-\n" (ou "- \n") -> "-"
+    .replace(/-\s*\n/g, '-')
+    // normalise ensuite tous les runs d'espaces/retours à la ligne restants en un seul espace
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function extraireTexteFichier(file) {
   const ext = file.originalname.split('.').pop().toLowerCase();
   if (ext === 'pdf') {
     const data = await pdfParse(file.buffer);
-    return data.text;
+    return normaliserTextePdf(data.text);
   }
   const result = await mammoth.extractRawText({ buffer: file.buffer });
   return result.value;
