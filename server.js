@@ -363,7 +363,9 @@ const ProgressionLeconSchema = new mongoose.Schema({
   createdAt     : { type: Date, default: Date.now }
 });
 
-// Catalogue des compétences officielles DPFC : une entrée par (discipline, classe).
+// Catalogue des compétences officielles DPFC : PLUSIEURS entrées possibles par
+// (discipline, classe) (ex. Français 4ème a 5 compétences : oral, lecture,
+// écrit, grammaire, orthographe), une entrée par (discipline, classe, numero).
 // Histoire et Géographie sont deux disciplines distinctes avec leur propre numérotation.
 const CompetenceDPFCSchema = new mongoose.Schema({
   discipline : String,
@@ -438,11 +440,11 @@ async function trouverProgressionLecon({ discipline, classe, lecon }) {
   }) || null;
 }
 
-async function trouverCompetenceDPFC({ discipline, classe }) {
-  return CompetenceDPFC.findOne({
+async function trouverCompetencesDPFC({ discipline, classe }) {
+  return CompetenceDPFC.find({
     discipline: regexExactInsensible(discipline),
     classe: regexExactInsensible(classe)
-  });
+  }).sort({ numero: 1 });
 }
 
 // --- Texte support fourni par l'enseignant : injecté par simple substitution
@@ -812,7 +814,7 @@ app.post('/api/admin/competences/seed', verifierCleAdmin, async (req, res) => {
       if (!discipline || !classe || !Number.isFinite(numero) || !libelle) { ignores++; continue; }
 
       await CompetenceDPFC.findOneAndUpdate(
-        { discipline, classe },
+        { discipline, classe, numero },
         { discipline, classe, numero, libelle },
         { upsert: true, new: true }
       );
@@ -831,8 +833,8 @@ app.get('/api/competences', async (req, res) => {
     if (!discipline || !classe) {
       return res.status(400).json({ error: 'discipline et classe requis' });
     }
-    const competence = await trouverCompetenceDPFC({ discipline, classe });
-    res.json(competence || null);
+    const competences = await trouverCompetencesDPFC({ discipline, classe });
+    res.json(competences);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -940,9 +942,13 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
     }
 
     if (niveau !== 'primaire' && avecVerbesTaxonomiques) {
-      const competenceOfficielle = await trouverCompetenceDPFC({ discipline, classe });
-      if (competenceOfficielle) {
-        systemPrompt += `\n\nCOMPÉTENCE OFFICIELLE DPFC : Compétence ${competenceOfficielle.numero} : ${competenceOfficielle.libelle}\n\nUtilise EXACTEMENT ce numéro et ce libellé dans le champ Compétence de l'entête, sans reformulation.`;
+      const competencesOfficielles = await trouverCompetencesDPFC({ discipline, classe });
+      if (competencesOfficielles.length === 1) {
+        const c = competencesOfficielles[0];
+        systemPrompt += `\n\nCOMPÉTENCE OFFICIELLE DPFC : Compétence ${c.numero} : ${c.libelle}\n\nUtilise EXACTEMENT ce numéro et ce libellé dans le champ Compétence de l'entête, sans reformulation.`;
+      } else if (competencesOfficielles.length > 1) {
+        const liste = competencesOfficielles.map((c) => `Compétence ${c.numero} : ${c.libelle}`).join('\n');
+        systemPrompt += `\n\nCOMPÉTENCES OFFICIELLES DPFC POUR CETTE DISCIPLINE/CLASSE (${competencesOfficielles.length} compétences officielles) :\n${liste}\n\nChoisis, PARMI CETTE LISTE UNIQUEMENT, la compétence qui correspond le mieux à la leçon à traiter, et reproduis EXACTEMENT son numéro et son libellé dans le champ Compétence de l'entête (au format "Compétence N : libellé"), sans le modifier ni le mélanger avec un autre, et sans en inventer un nouveau.`;
       } else {
         const avertissementCompetence = 'Aucune compétence officielle DPFC trouvée dans le catalogue pour cette discipline/classe — le champ Compétence généré est une estimation, vérifie-le.';
         avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementCompetence}` : avertissementCompetence;
