@@ -796,6 +796,23 @@ app.post('/api/admin/progressions/seed', verifierCleAdmin, async (req, res) => {
   }
 });
 
+app.get('/api/admin/progressions/resume', verifierCleAdmin, async (req, res) => {
+  try {
+    const toutes = await ProgressionLecon.find({});
+    const resume = {};
+    for (const p of toutes) {
+      const discipline = (p.discipline || '').toString().trim();
+      const classe = (p.classe || '').toString().trim();
+      if (!discipline || !classe) continue;
+      if (!resume[discipline]) resume[discipline] = {};
+      resume[discipline][classe] = (resume[discipline][classe] || 0) + 1;
+    }
+    res.json(resume);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/admin/competences/seed', verifierCleAdmin, async (req, res) => {
   try {
     const items = req.body;
