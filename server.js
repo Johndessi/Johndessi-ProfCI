@@ -350,6 +350,7 @@ const FicheSchema = new mongoose.Schema({
   duree        : String,
   niveau       : String,
   contenu      : String,
+  approche     : String,
   createdAt    : { type: Date, default: Date.now }
 });
 
@@ -525,7 +526,18 @@ function resumerSeancesPrecedentes(fichesPrecedentes) {
   }).join('\n\n');
 }
 
-const PROMPT_SECONDAIRE = `Tu es un expert en pédagogie ivoirienne (APC/DPFC).
+function construirePromptSecondaire(avecVerbesTaxonomiques) {
+  const commentaireHabiletes = avecVerbesTaxonomiques
+    ? '<!-- lignes avec verbes taxonomiques : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire -->'
+    : '<!-- lignes avec les habiletés/objectifs pertinents pour cette leçon -->';
+
+  const reglesVerbesTaxonomiques = avecVerbesTaxonomiques
+    ? `- Verbes taxonomiques de Bloom : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire
+- Pour chaque question posée par l'enseignant dans la colonne Activités de l'enseignant, formule-la EN PRIORITÉ avec un verbe taxonomique de Bloom (Identifie, Nomme, Cite, Définis, Explique, Compare, Analyse, Applique, Résous, Produis...). N'utilise des questions ouvertes ou situationnelles qu'en complément, après la question taxonomique principale.
+`
+    : '';
+
+  return `Tu es un expert en pédagogie ivoirienne (APC/DPFC).
 Tu génères des fiches de cours COMPLÈTES au format officiel des lycées et collèges de Côte d'Ivoire.
 
 STRUCTURE OBLIGATOIRE EN HTML :
@@ -551,7 +563,7 @@ STRUCTURE OBLIGATOIRE EN HTML :
 <!-- TABLEAU HABILETÉS ET CONTENUS -->
 <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
   <tr><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Habiletés</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Contenus</th></tr>
-  <!-- lignes avec verbes taxonomiques : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire -->
+  ${commentaireHabiletes}
 </table>
 
 <!-- SUPPORTS DIDACTIQUES ET BIBLIOGRAPHIE CÔTE À CÔTE -->
@@ -611,10 +623,9 @@ RÈGLES ABSOLUES :
 - Réponds UNIQUEMENT en HTML pur, JAMAIS de backticks, JAMAIS de markdown
 - Situation d'apprentissage toujours ancrée dans le quotidien ivoirien (lycées, marchés, quartiers CI)
 - Traces écrites = contenu réel complet du cours (définitions, règles, exemples concrets)
-- Verbes taxonomiques de Bloom : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire
-- Pour chaque question posée par l'enseignant dans la colonne Activités de l'enseignant, formule-la EN PRIORITÉ avec un verbe taxonomique de Bloom (Identifie, Nomme, Cite, Définis, Explique, Compare, Analyse, Applique, Résous, Produis...). N'utilise des questions ouvertes ou situationnelles qu'en complément, après la question taxonomique principale.
-- Si le champ Séance n° est supérieur à 1 pour la même leçon, la PRÉSENTATION doit obligatoirement inclure un rappel explicite (question de l'enseignant + réponse attendue + trace écrite) du contenu vu à la ou les séance(s) précédente(s) de cette leçon, avant d'entamer le contenu nouveau.
+${reglesVerbesTaxonomiques}- Si le champ Séance n° est supérieur à 1 pour la même leçon, la PRÉSENTATION doit obligatoirement inclure un rappel explicite (question de l'enseignant + réponse attendue + trace écrite) du contenu vu à la ou les séance(s) précédente(s) de cette leçon, avant d'entamer le contenu nouveau.
 - Toujours 3 phases = 3 lignes du tableau : Présentation / Développement / Évaluation. La ligne Développement est UNIQUE (jamais une ligne par point) : les paragraphes de questions/réponses sont alignés à la même position dans les colonnes Activités de l'enseignant / Activités des élèves (tirets simples "- ", SANS numérotation), la numérotation I-1, I-2, II-1... restant réservée aux colonnes Plan du cours et Traces écrites`;
+}
 
 const PROMPT_PRIMAIRE = `Tu es un expert en pédagogie ivoirienne pour l'enseignement primaire.
 Tu génères des fiches de leçon COMPLÈTES au format utilisé dans les écoles primaires de Côte d'Ivoire.
@@ -791,8 +802,11 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
     const {
       enseignantId, niveau = 'secondaire', discipline,
       classe, lecon, seance = '1', duree = '1 heure',
-      theme = '', planCours = ''
+      theme = '', planCours = '', approche = 'APC'
     } = req.body;
+
+    const approcheNormalisee = (approche || 'APC').toString().trim().toUpperCase() || 'APC';
+    const avecVerbesTaxonomiques = !['PPO', 'FLEXIBLE'].includes(approcheNormalisee);
 
     let texteSupport = (req.body.texteSupport || '').toString().trim();
     if (req.file) {
@@ -804,7 +818,7 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       modelePersonnel = await Modele.findOne({ enseignantId, niveau });
     }
 
-    let systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : PROMPT_SECONDAIRE;
+    let systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : construirePromptSecondaire(avecVerbesTaxonomiques);
 
     let avertissementRappel = null;
     const seanceNum = parseInt(seance, 10);
@@ -898,6 +912,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
         discipline, classe, lecon, seance, duree, niveau,
+        approche: approcheNormalisee,
         contenu: contenuHTML
       });
       res.write(`data: ${JSON.stringify({ done: true, ficheId: fiche._id, contenuFinal: contenuHTML })}\n\n`);

@@ -211,6 +211,15 @@ textarea { resize: vertical; min-height: 90px; }
           <label>Durée</label>
           <input id="duree" type="text" value="1 heure"/>
         </div>
+        <div class="form-group" style="max-width:140px">
+          <label>Approche</label>
+          <select id="approche">
+            <option value="APC" selected>APC</option>
+            <option value="FPC">FPC</option>
+            <option value="PPO">PPO</option>
+            <option value="flexible">Flexible</option>
+          </select>
+        </div>
       </div>
 
       <div class="form-group" style="margin-bottom:14px">
@@ -452,6 +461,7 @@ async function genererFiche() {
         discipline, classe, lecon,
         seance      : document.getElementById('seance').value,
         duree       : document.getElementById('duree').value,
+        approche    : document.getElementById('approche').value,
         planCours   : document.getElementById('planCours').value.trim(),
         texteSupport: document.getElementById('texteSupport').value.trim()
       };
