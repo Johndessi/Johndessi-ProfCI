@@ -363,9 +363,20 @@ const ProgressionLeconSchema = new mongoose.Schema({
   createdAt     : { type: Date, default: Date.now }
 });
 
+// Catalogue des compétences officielles DPFC : une entrée par (discipline, classe).
+// Histoire et Géographie sont deux disciplines distinctes avec leur propre numérotation.
+const CompetenceDPFCSchema = new mongoose.Schema({
+  discipline : String,
+  classe     : String,
+  numero     : Number,
+  libelle    : String,
+  createdAt  : { type: Date, default: Date.now }
+});
+
 const Modele = mongoose.model('Modele', ModeleSchema);
 const Fiche  = mongoose.model('Fiche',  FicheSchema);
 const ProgressionLecon = mongoose.model('ProgressionLecon', ProgressionLeconSchema);
+const CompetenceDPFC = mongoose.model('CompetenceDPFC', CompetenceDPFCSchema);
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -425,6 +436,13 @@ async function trouverProgressionLecon({ discipline, classe, lecon }) {
     if (leconStockee === leconCible) return true;
     return leconCible.length > 3 && (leconStockee.includes(leconCible) || leconCible.includes(leconStockee));
   }) || null;
+}
+
+async function trouverCompetenceDPFC({ discipline, classe }) {
+  return CompetenceDPFC.findOne({
+    discipline: regexExactInsensible(discipline),
+    classe: regexExactInsensible(classe)
+  });
 }
 
 // --- Texte support fourni par l'enseignant : injecté par simple substitution
@@ -535,7 +553,42 @@ function construirePromptSecondaire(avecVerbesTaxonomiques) {
     ? `- Verbes taxonomiques de Bloom : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire
 - Pour chaque question posée par l'enseignant dans la colonne Activités de l'enseignant, formule-la EN PRIORITÉ avec un verbe taxonomique de Bloom (Identifie, Nomme, Cite, Définis, Explique, Compare, Analyse, Applique, Résous, Produis...). N'utilise des questions ouvertes ou situationnelles qu'en complément, après la question taxonomique principale.
 - Les questions de la colonne Activités de l'enseignant doivent rester STRICTEMENT ouvertes : l'énoncé de la question ne doit JAMAIS contenir la réponse ni une reformulation de la réponse (ex. interdit : « Comment remplacer le deuxième « Aminata » par « Elle » ? La phrase deviendrait plus élégante. » — la fin de la phrase donne la réponse). La réponse attendue n'apparaît QUE dans la colonne Activités des élèves, jamais anticipée côté enseignant, pour respecter la logique de situation-problème où l'élève découvre la règle par lui-même.
+- Le champ Compétence de l'entête doit reprendre EXACTEMENT le numéro et le libellé officiels DPFC fournis (s'ils sont indiqués plus bas dans ce message, sous "COMPÉTENCE OFFICIELLE DPFC"), au format "Compétence N : libellé officiel" — ne reformule JAMAIS ce libellé et n'en invente pas un autre. Si aucune compétence officielle n'est fournie, indique ta meilleure estimation au même format en le signalant implicitement par un libellé prudent, sans présenter cette estimation comme officielle.
 `
+    : '';
+
+  const presentationActiviteEnseignant = avecVerbesTaxonomiques
+    ? `- [Salutation : ex. « Bonjour les élèves, comment allez-vous ? »]
+- [Appel : fait l'appel des élèves un à un]
+- [Date du jour : « Quelle est la date d'aujourd'hui ? »]
+- [Identification de l'activité du jour selon la répartition : « Quelle est notre activité aujourd'hui ? »]
+- [Rappel de la séance précédente : « Que retenons-nous de la séance précédente ? » — UNIQUEMENT si Séance n° > 1 ; si Séance n° = 1, SUPPRIME entièrement cette ligne ainsi que la ligne correspondante côté élèves]
+- [Annonce d'une nouvelle leçon/séance]
+- [Lecture de la situation d'apprentissage et mise au tableau du corpus/support]
+- [Identification de la notion à partir de la situation : « D'après cette situation, quelle notion allons-nous étudier aujourd'hui ? »]
+- [Annonce du titre officiel de la leçon]
+- [Transition vers la première notion de la séance du jour]`
+    : '« Bonjour la classe » / « Bonjour les élèves », PUIS questions précises de rappel des prérequis';
+
+  const presentationActiviteEleves = avecVerbesTaxonomiques
+    ? `- [Réponse de salutation]
+- [Réponse à l'appel : « Présent(e) »]
+- [Élèves donnent la date du jour]
+- [Élèves identifient la discipline/activité du jour]
+- [Élèves rappellent le titre et l'essentiel de la leçon précédente — UNIQUEMENT si Séance n° > 1]
+- [Élèves écoutent l'annonce de la nouvelle leçon/séance]
+- [Élèves observent le corpus/support mis au tableau]
+- [Élèves proposent/identifient la notion à étudier]
+- [Élèves notent le titre officiel de la leçon]
+- [Élèves suivent la transition vers la première notion]`
+    : 'Réponse d\'accueil des élèves, PUIS réponses attendues aux questions de rappel';
+
+  const presentationTraces = avecVerbesTaxonomiques
+    ? '[Titre officiel de la leçon]'
+    : '[activité/leçon/séance]';
+
+  const commentairePresentation = avecVerbesTaxonomiques
+    ? `<!-- PRÉSENTATION : ordre FIXE des étapes rituelles ci-dessous, chaque étape = un ÉCHANGE professeur/élèves aligné 1 pour 1 entre les colonnes Activités de l'enseignant et Activités des élèves (JAMAIS un monologue du professeur seul) : (a) Salutation (b) Appel (c) Date du jour (d) Identification de l'activité du jour selon la répartition (e) Rappel de la séance précédente [UNIQUEMENT si Séance n° > 1, sinon omets entièrement cette étape des deux colonnes] (f) Annonce d'une nouvelle leçon/séance (g) Lecture de la situation d'apprentissage et mise au tableau du corpus/support (h) Identification de la notion à partir de la situation (i) Annonce du titre officiel de la leçon (j) Transition vers la première notion de la séance du jour. -->`
     : '';
 
   return `Tu es un expert en pédagogie ivoirienne (APC/DPFC).
@@ -584,12 +637,13 @@ STRUCTURE OBLIGATOIRE EN HTML :
     <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités des élèves</th>
     <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Traces écrites</th>
   </tr>
+  ${commentairePresentation}
   <tr>
     <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">PRÉSENTATION<br>(5 mn)</td>
     <td style="border:1px solid #000;padding:6px;vertical-align:top;">[stratégie : questions-réponses, procédé interrogatif...]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">« Bonjour la classe » / « Bonjour les élèves », PUIS questions précises de rappel des prérequis</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">Réponse d'accueil des élèves, PUIS réponses attendues aux questions de rappel</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[activité/leçon/séance]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationActiviteEnseignant}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationActiviteEleves}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationTraces}</td>
   </tr>
   <!-- DÉVELOPPEMENT : UNE SEULE LIGNE pour toute la phase (jamais une ligne par point). La numérotation I-1, I-2, II-1... n'apparaît QUE dans "Plan du cours" et "Traces écrites". Dans "Activités de l'enseignant" et "Activités des élèves", rédige chaque question/réponse avec un simple tiret "- ", SANS préfixe numéroté, mais en respectant STRICTEMENT le même ordre entre les deux colonnes : la 1ère question correspond à la 1ère réponse, la 2ème à la 2ème, etc., pour garder l'alignement question/réponse. -->
   <tr>
@@ -740,6 +794,50 @@ app.post('/api/admin/progressions/seed', verifierCleAdmin, async (req, res) => {
   }
 });
 
+app.post('/api/admin/competences/seed', verifierCleAdmin, async (req, res) => {
+  try {
+    const items = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: 'Le corps de la requête doit être un tableau JSON' });
+    }
+
+    let upserted = 0;
+    let ignores = 0;
+
+    for (const item of items) {
+      const discipline = (item && item.discipline || '').toString().trim();
+      const classe = (item && item.classe || '').toString().trim();
+      const numero = item && item.numero != null ? parseInt(item.numero, 10) : NaN;
+      const libelle = (item && item.libelle || '').toString().trim();
+      if (!discipline || !classe || !Number.isFinite(numero) || !libelle) { ignores++; continue; }
+
+      await CompetenceDPFC.findOneAndUpdate(
+        { discipline, classe },
+        { discipline, classe, numero, libelle },
+        { upsert: true, new: true }
+      );
+      upserted++;
+    }
+
+    res.json({ success: true, upserted, ignores, total: items.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/competences', async (req, res) => {
+  try {
+    const { discipline, classe } = req.query;
+    if (!discipline || !classe) {
+      return res.status(400).json({ error: 'discipline et classe requis' });
+    }
+    const competence = await trouverCompetenceDPFC({ discipline, classe });
+    res.json(competence || null);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/progressions', async (req, res) => {
   try {
     const { discipline, classe } = req.query;
@@ -838,6 +936,16 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       if (progression && Number.isFinite(progression.nombreSeances) && seanceNum > progression.nombreSeances) {
         const avertissementDepassement = `Cette leçon officielle compte normalement ${progression.nombreSeances} séances — vérifie ton numéro de séance.`;
         avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementDepassement}` : avertissementDepassement;
+      }
+    }
+
+    if (niveau !== 'primaire' && avecVerbesTaxonomiques) {
+      const competenceOfficielle = await trouverCompetenceDPFC({ discipline, classe });
+      if (competenceOfficielle) {
+        systemPrompt += `\n\nCOMPÉTENCE OFFICIELLE DPFC : Compétence ${competenceOfficielle.numero} : ${competenceOfficielle.libelle}\n\nUtilise EXACTEMENT ce numéro et ce libellé dans le champ Compétence de l'entête, sans reformulation.`;
+      } else {
+        const avertissementCompetence = 'Aucune compétence officielle DPFC trouvée dans le catalogue pour cette discipline/classe — le champ Compétence généré est une estimation, vérifie-le.';
+        avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementCompetence}` : avertissementCompetence;
       }
     }
 
