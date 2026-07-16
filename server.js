@@ -796,7 +796,7 @@ app.post('/api/admin/progressions/seed', verifierCleAdmin, async (req, res) => {
   }
 });
 
-app.get('/api/admin/progressions/resume', verifierCleAdmin, async (req, res) => {
+app.get('/api/admin/progressions/resume', async (req, res) => {
   try {
     const toutes = await ProgressionLecon.find({});
     const resume = {};
