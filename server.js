@@ -447,6 +447,23 @@ async function trouverCompetencesDPFC({ discipline, classe }) {
   }).sort({ numero: 1 });
 }
 
+// Discipline/classe pour lesquelles la numérotation officielle DPFC n'a, à ce
+// jour, jamais été publiée (aucun document source disponible sur dpfc-ci.net).
+// Pour ces cas, on ne doit ni inventer une compétence, ni la laisser silencieusement
+// absente : le champ Compétence doit afficher un message d'indisponibilité explicite.
+const COMPETENCES_NON_DISPONIBLES = [
+  { discipline: 'Histoire', classe: '2nde' },
+  { discipline: 'Histoire', classe: '1ère' },
+  { discipline: 'Géographie', classe: '2nde' },
+  { discipline: 'Géographie', classe: '1ère' }
+];
+
+function competenceNonDisponible({ discipline, classe }) {
+  const d = normaliserTexte(discipline);
+  const c = normaliserTexte(classe);
+  return COMPETENCES_NON_DISPONIBLES.some((x) => normaliserTexte(x.discipline) === d && normaliserTexte(x.classe) === c);
+}
+
 // --- Texte support fourni par l'enseignant : injecté par simple substitution
 // de chaîne côté serveur, jamais régénéré par l'IA, pour garantir sa fidélité exacte ---
 
@@ -555,7 +572,7 @@ function construirePromptSecondaire(avecVerbesTaxonomiques) {
     ? `- Verbes taxonomiques de Bloom : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire
 - Pour chaque question posée par l'enseignant dans la colonne Activités de l'enseignant, formule-la EN PRIORITÉ avec un verbe taxonomique de Bloom (Identifie, Nomme, Cite, Définis, Explique, Compare, Analyse, Applique, Résous, Produis...). N'utilise des questions ouvertes ou situationnelles qu'en complément, après la question taxonomique principale.
 - Les questions de la colonne Activités de l'enseignant doivent rester STRICTEMENT ouvertes : l'énoncé de la question ne doit JAMAIS contenir la réponse ni une reformulation de la réponse (ex. interdit : « Comment remplacer le deuxième « Aminata » par « Elle » ? La phrase deviendrait plus élégante. » — la fin de la phrase donne la réponse). La réponse attendue n'apparaît QUE dans la colonne Activités des élèves, jamais anticipée côté enseignant, pour respecter la logique de situation-problème où l'élève découvre la règle par lui-même.
-- Le champ Compétence de l'entête doit reprendre EXACTEMENT le numéro et le libellé officiels DPFC fournis (s'ils sont indiqués plus bas dans ce message, sous "COMPÉTENCE OFFICIELLE DPFC"), au format "Compétence N : libellé officiel" — ne reformule JAMAIS ce libellé et n'en invente pas un autre. Si aucune compétence officielle n'est fournie, indique ta meilleure estimation au même format en le signalant implicitement par un libellé prudent, sans présenter cette estimation comme officielle.
+- Le champ Compétence de l'entête doit reprendre EXACTEMENT le numéro et le libellé officiels DPFC fournis (s'ils sont indiqués plus bas dans ce message, sous "COMPÉTENCE OFFICIELLE DPFC"), au format "Compétence N : libellé officiel" — ne reformule JAMAIS ce libellé et n'en invente pas un autre. Si aucune compétence officielle n'est fournie, indique ta meilleure estimation au même format en le signalant implicitement par un libellé prudent, sans présenter cette estimation comme officielle. EXCEPTION : si ce message précise que la compétence officielle est NON DISPONIBLE pour cette discipline/classe, ignore le format "Compétence N" et écris EXACTEMENT le message d'indisponibilité fourni, sans numéro ni estimation.
 `
     : '';
 
@@ -959,16 +976,22 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
     }
 
     if (niveau !== 'primaire' && avecVerbesTaxonomiques) {
-      const competencesOfficielles = await trouverCompetencesDPFC({ discipline, classe });
-      if (competencesOfficielles.length === 1) {
-        const c = competencesOfficielles[0];
-        systemPrompt += `\n\nCOMPÉTENCE OFFICIELLE DPFC : Compétence ${c.numero} : ${c.libelle}\n\nUtilise EXACTEMENT ce numéro et ce libellé dans le champ Compétence de l'entête, sans reformulation.`;
-      } else if (competencesOfficielles.length > 1) {
-        const liste = competencesOfficielles.map((c) => `Compétence ${c.numero} : ${c.libelle}`).join('\n');
-        systemPrompt += `\n\nCOMPÉTENCES OFFICIELLES DPFC POUR CETTE DISCIPLINE/CLASSE (${competencesOfficielles.length} compétences officielles) :\n${liste}\n\nChoisis, PARMI CETTE LISTE UNIQUEMENT, la compétence qui correspond le mieux à la leçon à traiter, et reproduis EXACTEMENT son numéro et son libellé dans le champ Compétence de l'entête (au format "Compétence N : libellé"), sans le modifier ni le mélanger avec un autre, et sans en inventer un nouveau.`;
-      } else {
-        const avertissementCompetence = 'Aucune compétence officielle DPFC trouvée dans le catalogue pour cette discipline/classe — le champ Compétence généré est une estimation, vérifie-le.';
+      if (competenceNonDisponible({ discipline, classe })) {
+        systemPrompt += `\n\nCOMPÉTENCE OFFICIELLE DPFC : NON DISPONIBLE pour cette discipline/classe (aucun document DPFC officiel publié à ce jour). Dans le champ Compétence de l'entête, écris EXACTEMENT le texte suivant, sans numéro ni format "Compétence N", et sans inventer de numéro ou de libellé : "Numérotation officielle non disponible — vérifier avec le programme papier".`;
+        const avertissementCompetence = 'Aucune source officielle DPFC publiée pour cette discipline/classe — le champ Compétence affiche un message d\'indisponibilité à compléter manuellement avec le programme papier.';
         avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementCompetence}` : avertissementCompetence;
+      } else {
+        const competencesOfficielles = await trouverCompetencesDPFC({ discipline, classe });
+        if (competencesOfficielles.length === 1) {
+          const c = competencesOfficielles[0];
+          systemPrompt += `\n\nCOMPÉTENCE OFFICIELLE DPFC : Compétence ${c.numero} : ${c.libelle}\n\nUtilise EXACTEMENT ce numéro et ce libellé dans le champ Compétence de l'entête, sans reformulation.`;
+        } else if (competencesOfficielles.length > 1) {
+          const liste = competencesOfficielles.map((c) => `Compétence ${c.numero} : ${c.libelle}`).join('\n');
+          systemPrompt += `\n\nCOMPÉTENCES OFFICIELLES DPFC POUR CETTE DISCIPLINE/CLASSE (${competencesOfficielles.length} compétences officielles) :\n${liste}\n\nChoisis, PARMI CETTE LISTE UNIQUEMENT, la compétence qui correspond le mieux à la leçon à traiter, et reproduis EXACTEMENT son numéro et son libellé dans le champ Compétence de l'entête (au format "Compétence N : libellé"), sans le modifier ni le mélanger avec un autre, et sans en inventer un nouveau.`;
+        } else {
+          const avertissementCompetence = 'Aucune compétence officielle DPFC trouvée dans le catalogue pour cette discipline/classe — le champ Compétence généré est une estimation, vérifie-le.';
+          avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementCompetence}` : avertissementCompetence;
+        }
       }
     }
 
