@@ -584,6 +584,49 @@ function injecterTexteSupport(contenuHTML, texteSupport) {
   return resultat;
 }
 
+// Détection stricte : uniquement "lecture méthodique" (ni "lecture" seule, ni
+// "résumé de texte", ni "commentaire de texte", qui gardent la structure générique).
+function estLectureMethodique({ discipline, lecon, theme, activite }) {
+  const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
+  return cible.includes('lecture methodique');
+}
+
+const HABILETES_LECTURE_METHODIQUE = `  <tr><td style="border:1px solid #000;padding:6px;">Connaître</td><td style="border:1px solid #000;padding:6px;">le thème étudié</td></tr>
+  <tr><td style="border:1px solid #000;padding:6px;">Identifier</td><td style="border:1px solid #000;padding:6px;">les outils de la langue pertinents / les champs lexicaux liés au thème</td></tr>
+  <tr><td style="border:1px solid #000;padding:6px;">Analyser</td><td style="border:1px solid #000;padding:6px;">les indices textuels relevés</td></tr>
+  <tr><td style="border:1px solid #000;padding:6px;">Interpréter</td><td style="border:1px solid #000;padding:6px;">les indices textuels relevés</td></tr>
+  <tr><td style="border:1px solid #000;padding:6px;">Appliquer</td><td style="border:1px solid #000;padding:6px;">la démarche de la lecture méthodique</td></tr>`;
+
+const INSTRUCTIONS_LECTURE_METHODIQUE = `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE (cette fiche est une lecture méthodique : les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête, la Situation d'apprentissage, les Supports didactiques/Bibliographie et la ligne PRÉSENTATION restent inchangés.) :
+
+TABLEAU HABILETÉS ET CONTENUS — formule FIXE ci-dessous, obligatoire pour toute lecture méthodique, NE JAMAIS la réinventer ni l'adapter au texte :
+${HABILETES_LECTURE_METHODIQUE}
+
+DÉVELOPPEMENT — remplace la règle "ligne Développement unique" : utilise OBLIGATOIREMENT 4 lignes numérotées I à IV dans le tableau DÉROULEMENT (jamais moins, jamais plus), chacune avec les 5 colonnes standard (Moments didactiques/Durée | Stratégies pédagogiques/Plan du cours | Activités de l'enseignant | Activités des élèves | Traces écrites) :
+
+I. PRÉSENTATION (du texte, distincte de la ligne PRÉSENTATION rituelle du début de séance) — uniquement sous forme de QUESTIONS-RÉPONSES, jamais de texte narratif :
+   - Quel est le titre du texte ? Quelle est la source/l'édition ? Qui est l'auteur (si applicable) ? → à partir de ces réponses, rédige la présentation en Traces écrites (1 à 2 phrases seulement).
+   - Lecture silencieuse : question ouverte « De quoi peut-il s'agir ? »
+   - Lecture magistrale, puis questions : Quelle est la nature du texte ? Quelle est sa tonalité ? Quel est son thème ?
+
+II. HYPOTHÈSE GÉNÉRALE — UNE SEULE phrase, dérivée EXPLICITEMENT de la nature + la tonalité + le thème identifiés en I. Ne la donne JAMAIS d'emblée : présente-la comme la synthèse/déduction des réponses précédentes (question du type « À partir de ce que nous venons d'identifier, quelle hypothèse pouvons-nous formuler sur ce texte ? »).
+
+III. VÉRIFICATION DE L'HYPOTHÈSE GÉNÉRALE :
+   1. Détermination des axes de lecture : EXACTEMENT 2 axes (jamais 3, jamais 4), obtenus en décomposant l'hypothèse générale en ses deux composantes.
+   2. Pour CHAQUE axe (donc 2 tableaux distincts, insérés dans la ligne III, par exemple dans la colonne Traces écrites ou juste après le tableau DÉROULEMENT), un tableau à 4 colonnes : Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations. Chaque tableau est rempli PAR QUESTIONNEMENT GUIDÉ dans les Activités de l'enseignant (jamais donné tout fait sans les questions qui y mènent) : chaque ligne correspond à une « entrée » (ex. temps verbaux, lexique, types de phrases, données chiffrées...) avec des relevés précis tirés du texte, l'analyse du procédé, et l'interprétation de son effet.
+
+IV. BILAN GÉNÉRAL :
+   - Question de synthèse : « Quels éléments de la langue/du texte ont permis d'étudier ce texte ? »
+   - Confrontation EXPLICITE hypothèse/bilan, avec la formule EXACTE : « Notre hypothèse générale est donc vérifiée. »
+   - Optionnel : une question d'ouverture ou d'avis personnel.
+
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT, différente et SÉPARÉE du Bilan général — ne jamais fusionner les deux) :
+   - Fournis un relevé NEUF, non exploité dans le corps de la fiche (nouvelles citations du MÊME texte, non analysées plus haut dans les axes).
+   - Demande à l'élève, SEUL : 1) d'identifier l'entrée correspondante, 2) d'analyser, 3) d'interpréter.
+   - INTERDICTION ABSOLUE de remplacer ceci par des questions de compréhension du texte (ex. « qui est le narrateur ? », « que ressent-il ? ») : l'évaluation teste la maîtrise de la MÉTHODE de lecture méthodique, pas la compréhension du contenu.`;
+
 function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
   const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
   const motsClefs = [
@@ -1031,6 +1074,10 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
     }
 
     let systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : construirePromptSecondaire(avecVerbesTaxonomiques);
+
+    if (niveau !== 'primaire' && estLectureMethodique({ discipline, lecon, theme })) {
+      systemPrompt += INSTRUCTIONS_LECTURE_METHODIQUE;
+    }
 
     let avertissementRappel = null;
     const seanceNum = parseInt(seance, 10);
