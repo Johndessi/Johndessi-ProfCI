@@ -23,8 +23,8 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const ext = file.originalname.split('.').pop().toLowerCase();
-    if (['pdf', 'doc', 'docx'].includes(ext)) return cb(null, true);
-    cb(new Error('Format non supporté (PDF, DOC, DOCX uniquement)'));
+    if (['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'].includes(ext)) return cb(null, true);
+    cb(new Error('Format non supporté (PDF, DOC, DOCX, JPG, JPEG, PNG uniquement)'));
   }
 });
 
@@ -52,11 +52,39 @@ function normaliserTextePdf(texte) {
     .trim();
 }
 
+const MEDIA_TYPE_PAR_EXTENSION_IMAGE = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png'
+};
+
+// Pas d'OCR classique (Tesseract...) : l'image est envoyée telle quelle à Claude
+// en multimodal, qui la lit nativement et retranscrit fidèlement le texte visible.
+async function extraireTexteDepuisImage(file, ext) {
+  const mediaType = MEDIA_TYPE_PAR_EXTENSION_IMAGE[ext] || file.mimetype || 'image/jpeg';
+  const base64 = file.buffer.toString('base64');
+  const reponse = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 4096,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+        { type: 'text', text: 'Extrait fidèlement tout le texte visible dans cette image, sans reformuler ni résumer.' }
+      ]
+    }]
+  });
+  return reponse.content[0].text;
+}
+
 async function extraireTexteFichier(file) {
   const ext = file.originalname.split('.').pop().toLowerCase();
   if (ext === 'pdf') {
     const data = await pdfParse(file.buffer);
     return normaliserTextePdf(data.text);
+  }
+  if (['jpg', 'jpeg', 'png'].includes(ext)) {
+    return extraireTexteDepuisImage(file, ext);
   }
   const result = await mammoth.extractRawText({ buffer: file.buffer });
   return result.value;
