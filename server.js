@@ -529,24 +529,59 @@ function texteSupportVersHtml(texte) {
     .join('\n');
 }
 
+function compterMots(texte) {
+  return (texte || '').trim().split(/\s+/).filter(Boolean).length;
+}
+
+// Seuil de duplication du texte support (2ᵉ exemplaire en police réduite sur
+// la même page, pour permettre à l'enseignant de photocopier une seule feuille
+// et distribuer deux exemplaires — économie de papier avec des effectifs
+// pléthoriques). Le corps de la fiche est rendu en 11px (voir genererPdfDepuisHtml),
+// format A4 portrait avec marges de 15mm. Un texte support est déjà "garanti
+// fidèle" jusqu'à 600 mots dans cette app (limite pratique d'un texte qui
+// remplit une page entière en taille normale une fois entête + tableaux
+// comptés) : la moitié de cette limite laisse une marge confortable pour que
+// le texte, ET une seconde copie en police réduite, tiennent tous les deux
+// sur la même page sans déborder.
+const SEUIL_DUPLICATION_TEXTE_SUPPORT_MOTS = 250;
+
+function texteSupportDoitEtreDuplique(texteSupport) {
+  return compterMots(texteSupport) <= SEUIL_DUPLICATION_TEXTE_SUPPORT_MOTS;
+}
+
 function injecterTexteSupport(contenuHTML, texteSupport) {
   if (!texteSupport) return contenuHTML;
   const texteHtml = texteSupportVersHtml(texteSupport);
   if (!texteHtml) return contenuHTML;
 
+  let resultat;
   if (contenuHTML.includes('{{TEXTE_SUPPORT}}')) {
-    return contenuHTML.split('{{TEXTE_SUPPORT}}').join(texteHtml);
+    resultat = contenuHTML.split('{{TEXTE_SUPPORT}}').join(texteHtml);
+  } else {
+    // Le modèle a oublié le marqueur : insère une section dédiée juste avant le
+    // tableau de déroulement (qui contient les questions), donc en fin de fiche
+    // mais avant la partie questions.
+    const section = `<div class="texte-support"><h3>Texte support</h3>${texteHtml}</div>\n`;
+    const derniereTable = contenuHTML.lastIndexOf('<table');
+    resultat = derniereTable !== -1
+      ? contenuHTML.slice(0, derniereTable) + section + contenuHTML.slice(derniereTable)
+      : contenuHTML + section;
   }
 
-  // Le modèle a oublié le marqueur : insère une section dédiée juste avant le
-  // tableau de déroulement (qui contient les questions), donc en fin de fiche
-  // mais avant la partie questions.
-  const section = `<div class="texte-support"><h3>Texte support</h3>${texteHtml}</div>\n`;
-  const derniereTable = contenuHTML.lastIndexOf('<table');
-  if (derniereTable !== -1) {
-    return contenuHTML.slice(0, derniereTable) + section + contenuHTML.slice(derniereTable);
+  // Duplication conditionnelle : décidée UNIQUEMENT côté serveur (nombre de mots
+  // réel), jamais laissée au jugement du modèle — même si le modèle a inclus le
+  // marqueur {{TEXTE_SUPPORT_COPIE}} par erreur pour un texte long, il est retiré ici.
+  if (resultat.includes('{{TEXTE_SUPPORT_COPIE}}')) {
+    const copieHtml = texteSupportDoitEtreDuplique(texteSupport)
+      ? `<div class="texte-support-copie" style="font-size:8px;line-height:1.3;border-top:1px dashed #999;margin-top:10px;padding-top:6px;">
+  <strong>Copie pour photocopie (2<sup>e</sup> exemplaire) :</strong>
+  ${texteHtml}
+</div>`
+      : '';
+    resultat = resultat.split('{{TEXTE_SUPPORT_COPIE}}').join(copieHtml);
   }
-  return contenuHTML + section;
+
+  return resultat;
 }
 
 function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
@@ -1092,7 +1127,11 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     }
 
     if (texteSupport) {
-      userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} à l'endroit où le texte doit apparaître dans le HTML.\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
+      const motsTexteSupport = compterMots(texteSupport);
+      const instructionDuplication = texteSupportDoitEtreDuplique(texteSupport)
+        ? `Ce texte support fait environ ${motsTexteSupport} mots : assez court pour tenir deux fois sur la même page. Immédiatement APRÈS le marqueur {{TEXTE_SUPPORT}}, ajoute le marqueur exact {{TEXTE_SUPPORT_COPIE}} pour insérer un second exemplaire en police réduite (permet à l'enseignant de photocopier une seule feuille et distribuer deux exemplaires, économie de papier).`
+        : `Ce texte support fait environ ${motsTexteSupport} mots : trop long pour être dupliqué sur la même page. N'ajoute PAS de second exemplaire — utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois, sans {{TEXTE_SUPPORT_COPIE}}.`;
+      userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} à l'endroit où le texte doit apparaître dans le HTML. ${instructionDuplication}\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
