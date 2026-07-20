@@ -415,10 +415,26 @@ const CompetenceDPFCSchema = new mongoose.Schema({
   createdAt  : { type: Date, default: Date.now }
 });
 
+// Catalogue des leçons officielles DPFC (numéro + titre + séance officiels),
+// keyé par (discipline, classe, sousTheme) — ex. Français/6ème/"objet familier"
+// -> Leçon 2 "La description", séance 1. Alimente le champ Leçon de l'entête
+// pour Lecture méthodique et Expression écrite, qui affichaient jusqu'ici un
+// titre générique inventé au lieu du vrai intitulé du programme.
+const LeconOfficielleDPFCSchema = new mongoose.Schema({
+  discipline   : String,
+  classe       : String,
+  sousTheme    : String,
+  numeroLecon  : Number,
+  titreLecon   : String,
+  numeroSeance : Number,
+  createdAt    : { type: Date, default: Date.now }
+});
+
 const Modele = mongoose.model('Modele', ModeleSchema);
 const Fiche  = mongoose.model('Fiche',  FicheSchema);
 const ProgressionLecon = mongoose.model('ProgressionLecon', ProgressionLeconSchema);
 const CompetenceDPFC = mongoose.model('CompetenceDPFC', CompetenceDPFCSchema);
+const LeconOfficielleDPFC = mongoose.model('LeconOfficielleDPFC', LeconOfficielleDPFCSchema);
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -485,6 +501,24 @@ async function trouverCompetencesDPFC({ discipline, classe }) {
     discipline: regexExactInsensible(discipline),
     classe: regexExactInsensible(classe)
   }).sort({ numero: 1 });
+}
+
+// Recherche la leçon officielle DPFC correspondant à cette discipline/classe
+// à partir du sous-thème du texte étudié (déduit de lecon+theme) : correspondance
+// insensible casse/accents, l'un des deux textes pouvant contenir l'autre —
+// le catalogue lui-même définit les sous-thèmes reconnus, aucune liste de
+// mots-clés n'est codée en dur ici.
+async function trouverLeconOfficielleDPFC({ discipline, classe, lecon, theme }) {
+  const cible = normaliserTexte(`${lecon || ''} ${theme || ''}`);
+  if (!cible) return null;
+  const candidates = await LeconOfficielleDPFC.find({
+    discipline: regexExactInsensible(discipline),
+    classe: regexExactInsensible(classe)
+  });
+  return candidates.find((l) => {
+    const sousThemeNorm = normaliserTexte(l.sousTheme);
+    return sousThemeNorm && (cible.includes(sousThemeNorm) || sousThemeNorm.includes(cible));
+  }) || null;
 }
 
 // Discipline/classe pour lesquelles la numérotation officielle DPFC n'a, à ce
@@ -691,8 +725,8 @@ function formaterCaracteristiquesReferentiel(caracteristiques) {
 
 const HABILETES_LECTURE_METHODIQUE = `  <tr><td style="border:1px solid #000;padding:6px;">Connaître</td><td style="border:1px solid #000;padding:6px;">le thème étudié</td></tr>
   <tr><td style="border:1px solid #000;padding:6px;">Identifier</td><td style="border:1px solid #000;padding:6px;">les outils de la langue pertinents / les champs lexicaux liés au thème</td></tr>
-  <tr><td style="border:1px solid #000;padding:6px;">Analyser</td><td style="border:1px solid #000;padding:6px;">les indices textuels relevés</td></tr>
-  <tr><td style="border:1px solid #000;padding:6px;">Interpréter</td><td style="border:1px solid #000;padding:6px;">les indices textuels relevés</td></tr>
+  <tr><td style="border:1px solid #000;padding:6px;">Analyser</td><td style="border:1px solid #000;padding:6px;">les procédés utilisés (choix lexicaux, temps verbaux, types de phrases, figures de style...)</td></tr>
+  <tr><td style="border:1px solid #000;padding:6px;">Interpréter</td><td style="border:1px solid #000;padding:6px;">les effets produits sur le lecteur par ces procédés</td></tr>
   <tr><td style="border:1px solid #000;padding:6px;">Appliquer</td><td style="border:1px solid #000;padding:6px;">la démarche de la lecture méthodique</td></tr>`;
 
 function construireInstructionsLectureMethodique(referentiel) {
@@ -702,7 +736,9 @@ function construireInstructionsLectureMethodique(referentiel) {
 
   return `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE (cette fiche est une lecture méthodique : les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête, la Situation d'apprentissage, les Supports didactiques/Bibliographie et la ligne PRÉSENTATION restent inchangés.) :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE (cette fiche est une lecture méthodique : les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête, la Situation d'apprentissage et les Supports didactiques/Bibliographie restent inchangés. La ligne PRÉSENTATION rituelle du début de séance reste aussi inchangée dans sa structure, SAUF la contrainte suivante :) :
+
+CONTRAINTE SUR LA LIGNE PRÉSENTATION RITUELLE (avant "I. Présentation du texte") : cette phase d'accueil ne doit JAMAIS révéler le thème précis du texte étudié, ni aucune conclusion, idée ou information tirée de son contenu. Reste strictement générique (ex. « un texte que nous allons découvrir ensemble », « la leçon du jour »). En particulier, les étapes (h) Identification de la notion à partir de la situation et (i) Annonce du titre officiel de la leçon ne doivent mentionner QUE le titre officiel de la leçon/l'activité (ex. « La description »), jamais le sujet précis du texte qui sera étudié (ex. jamais « nous allons étudier un texte sur un avion »). La découverte du thème se fait UNIQUEMENT via le questionnement guidé de la phase I ci-dessous.
 
 TABLEAU HABILETÉS ET CONTENUS — formule FIXE ci-dessous, obligatoire pour toute lecture méthodique, NE JAMAIS la réinventer ni l'adapter au texte :
 ${HABILETES_LECTURE_METHODIQUE}
@@ -1107,6 +1143,54 @@ app.get('/api/competences', async (req, res) => {
   }
 });
 
+app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res) => {
+  try {
+    const items = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: 'Le corps de la requête doit être un tableau JSON' });
+    }
+
+    let upserted = 0;
+    let ignores = 0;
+
+    for (const item of items) {
+      const discipline = (item && item.discipline || '').toString().trim();
+      const classe = (item && item.classe || '').toString().trim();
+      const sousTheme = (item && item.sousTheme || '').toString().trim();
+      const numeroLecon = item && item.numeroLecon != null ? parseInt(item.numeroLecon, 10) : NaN;
+      const titreLecon = (item && item.titreLecon || '').toString().trim();
+      const numeroSeance = item && item.numeroSeance != null ? parseInt(item.numeroSeance, 10) : NaN;
+      if (!discipline || !classe || !sousTheme || !Number.isFinite(numeroLecon) || !titreLecon || !Number.isFinite(numeroSeance)) {
+        ignores++; continue;
+      }
+
+      await LeconOfficielleDPFC.findOneAndUpdate(
+        { discipline, classe, sousTheme },
+        { discipline, classe, sousTheme, numeroLecon, titreLecon, numeroSeance },
+        { upsert: true, new: true }
+      );
+      upserted++;
+    }
+
+    res.json({ success: true, upserted, ignores, total: items.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/lecons-officielles', async (req, res) => {
+  try {
+    const { discipline, classe, lecon, theme } = req.query;
+    if (!discipline || !classe) {
+      return res.status(400).json({ error: 'discipline et classe requis' });
+    }
+    const resultat = await trouverLeconOfficielleDPFC({ discipline, classe, lecon, theme });
+    res.json(resultat);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/progressions', async (req, res) => {
   try {
     const { discipline, classe } = req.query;
@@ -1191,15 +1275,45 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
     let avertissementRappel = null;
 
     if (niveau !== 'primaire') {
+      const estLM = estLectureMethodique({ discipline, lecon, theme });
+      const estEE = estExpressionEcrite({ discipline, lecon, theme });
       const referentielTypeTexte = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`);
-      if (estLectureMethodique({ discipline, lecon, theme })) {
+
+      if (estLM) {
         systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexte);
-      } else if (estExpressionEcrite({ discipline, lecon, theme })) {
+      } else if (estEE) {
         if (referentielTypeTexte) {
           systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
         } else {
           const avertissementReferentiel = `Aucun référentiel de type de texte disponible pour cette leçon d'Expression écrite ("${lecon}") — les outils de la langue proposés restent une estimation libre du modèle.`;
           avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementReferentiel}` : avertissementReferentiel;
+        }
+      }
+
+      // Champ Leçon de l'entête : pour Lecture méthodique et Expression écrite
+      // uniquement, remplace le titre générique que le modèle avait tendance à
+      // inventer par le vrai intitulé du programme DPFC (ou le message
+      // d'indisponibilité, jamais un titre inventé, si le catalogue ne couvre pas
+      // encore cette discipline/classe/sous-thème).
+      if (estLM || estEE) {
+        // Le document source DPFC ("PROGRESSIONS DE FRANÇAIS") est une progression
+        // UNIQUE couvrant toutes les activités de Français (lecture, expression
+        // écrite, grammaire...) — la recherche se fait donc toujours sous la
+        // discipline "Français", même si l'enseignant a tapé "Lecture méthodique"
+        // ou "Expression écrite" comme discipline (convention déjà utilisée
+        // ailleurs dans l'app pour déclencher le bon gabarit de fiche).
+        const leconOfficielle = await trouverLeconOfficielleDPFC({ discipline: 'Français', classe, lecon, theme });
+        if (leconOfficielle) {
+          systemPrompt += `\n\nLEÇON OFFICIELLE DPFC : Leçon ${leconOfficielle.numeroLecon} : ${leconOfficielle.titreLecon}\n\nUtilise EXACTEMENT ce texte dans le champ Leçon de l'entête (format "Leçon N : Titre"), sans reformulation ni titre alternatif inventé.`;
+          const seanceNumIndicatif = parseInt(seance, 10);
+          if (Number.isFinite(seanceNumIndicatif) && seanceNumIndicatif !== leconOfficielle.numeroSeance) {
+            const avertissementSeance = `La séance officielle DPFC pour ce sous-thème est la séance ${leconOfficielle.numeroSeance}, mais la séance ${seanceNumIndicatif} a été indiquée — vérifie le numéro de séance.`;
+            avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementSeance}` : avertissementSeance;
+          }
+        } else {
+          systemPrompt += `\n\nLEÇON OFFICIELLE DPFC : NON DISPONIBLE (aucune correspondance dans le catalogue pour cette discipline/classe/sous-thème). Dans le champ Leçon de l'entête, écris EXACTEMENT le texte suivant, sans inventer de titre, même plausible : "Titre de leçon officiel non disponible — vérifier avec la progression papier".`;
+          const avertissementLecon = `Aucune leçon officielle DPFC trouvée dans le catalogue pour cette discipline/classe/sous-thème — le champ Leçon affiche un message à compléter manuellement avec la progression papier.`;
+          avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementLecon}` : avertissementLecon;
         }
       }
     }
@@ -1211,7 +1325,8 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
         const resume = resumerSeancesPrecedentes(fichesPrecedentes);
         systemPrompt += `\n\nCONTENU RÉEL DES SÉANCES PRÉCÉDENTES DE CETTE LEÇON :\n${resume}\n\nBase le rappel de la PRÉSENTATION EXCLUSIVEMENT sur ce contenu réel ci-dessus (questions, réponses, traces écrites déjà vues), PAS sur une supposition.`;
       } else {
-        avertissementRappel = "Aucune fiche de séance précédente trouvée pour cette leçon — le rappel généré est une estimation, vérifie-le.";
+        const avertissementHistorique = "Aucune fiche de séance précédente trouvée pour cette leçon — le rappel généré est une estimation, vérifie-le.";
+        avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementHistorique}` : avertissementHistorique;
       }
     }
 
