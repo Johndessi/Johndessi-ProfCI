@@ -584,6 +584,39 @@ function injecterTexteSupport(contenuHTML, texteSupport) {
   return resultat;
 }
 
+// Filet de sécurité serveur : un tableau HTML imbriqué dans une cellule
+// (<td>/<th>) d'un autre tableau rend mal en Word/PDF (colonnes écrasées,
+// texte compressé illisible). Même si le prompt interdit explicitement cette
+// imbrication (cas de la lecture méthodique : tableaux d'axes de lecture),
+// on ne fait jamais confiance uniquement à l'obéissance du modèle : cette
+// fonction extrait tout tableau imbriqué de sa cellule et le replace juste
+// après le tableau qui le contenait, comme élément autonome du document.
+function separerTableauxImbriques(contenuHTML) {
+  if (!contenuHTML || !contenuHTML.includes('<table')) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+
+  const tableauxImbriques = [];
+  $('table').each((_, table) => {
+    const $table = $(table);
+    if ($table.closest('td, th').length) tableauxImbriques.push($table);
+  });
+  if (!tableauxImbriques.length) return contenuHTML;
+
+  tableauxImbriques.reverse().forEach(($table) => {
+    const $celluleParente = $table.closest('td, th');
+    const $tableauExterne = $celluleParente.closest('table');
+    $table.remove();
+    if ($tableauExterne.length) {
+      $tableauExterne.after($table);
+    } else {
+      $celluleParente.after($table);
+    }
+  });
+
+  const $racine = $('.fiche-cours').first();
+  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+}
+
 // Détection stricte : uniquement "lecture méthodique" (ni "lecture" seule, ni
 // "résumé de texte", ni "commentaire de texte", qui gardent la structure générique).
 function estLectureMethodique({ discipline, lecon, theme, activite }) {
@@ -615,7 +648,8 @@ II. HYPOTHÈSE GÉNÉRALE — UNE SEULE phrase, dérivée EXPLICITEMENT de la na
 
 III. VÉRIFICATION DE L'HYPOTHÈSE GÉNÉRALE :
    1. Détermination des axes de lecture : EXACTEMENT 2 axes (jamais 3, jamais 4), obtenus en décomposant l'hypothèse générale en ses deux composantes.
-   2. Pour CHAQUE axe (donc 2 tableaux distincts, insérés dans la ligne III, par exemple dans la colonne Traces écrites ou juste après le tableau DÉROULEMENT), un tableau à 4 colonnes : Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations. Chaque tableau est rempli PAR QUESTIONNEMENT GUIDÉ dans les Activités de l'enseignant (jamais donné tout fait sans les questions qui y mènent) : chaque ligne correspond à une « entrée » (ex. temps verbaux, lexique, types de phrases, données chiffrées...) avec des relevés précis tirés du texte, l'analyse du procédé, et l'interprétation de son effet.
+   2. Dans la ligne III du tableau DÉROULEMENT, la colonne Traces écrites contient UNIQUEMENT du texte simple (jamais de tableau) : le libellé des 2 axes (ex. "Axe 1 : ... / Axe 2 : ..."). Les Activités de l'enseignant/des élèves de cette ligne portent le questionnement guidé qui permet de dégager ces axes.
+   3. Pour CHAQUE axe, un tableau à 4 colonnes (Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations) rempli PAR QUESTIONNEMENT GUIDÉ (chaque ligne correspond à une « entrée » — ex. temps verbaux, lexique, types de phrases, données chiffrées — avec des relevés précis tirés du texte, l'analyse du procédé, et l'interprétation de son effet). CES 2 TABLEAUX SONT DES ÉLÉMENTS AUTONOMES DU DOCUMENT HTML, PLACÉS APRÈS LE TABLEAU DÉROULEMENT COMPLET (donc en dehors de toute balise <td>/<th>) — JAMAIS imbriqués à l'intérieur d'une cellule d'un autre tableau (rendu illisible en Word/PDF : colonnes écrasées, texte compressé). Un tableau HTML ne doit JAMAIS contenir un autre tableau HTML dans une de ses cellules, nulle part dans la fiche.
 
 IV. BILAN GÉNÉRAL :
    - Question de synthèse : « Quels éléments de la langue/du texte ont permis d'étudier ce texte ? »
@@ -1211,6 +1245,9 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     stream.on('finalMessage', async () => {
       clearInterval(heartbeat);
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
+      if (estLectureMethodique({ discipline, lecon, theme })) {
+        contenuHTML = separerTableauxImbriques(contenuHTML);
+      }
       contenuHTML = injecterTexteSupport(contenuHTML, texteSupport);
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
