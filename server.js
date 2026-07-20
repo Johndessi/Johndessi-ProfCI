@@ -624,13 +624,83 @@ function estLectureMethodique({ discipline, lecon, theme, activite }) {
   return cible.includes('lecture methodique');
 }
 
+function estExpressionEcrite({ discipline, lecon, theme, activite }) {
+  const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
+  return cible.includes('expression ecrite');
+}
+
+// Référentiel partagé des caractéristiques langagières par type de texte,
+// utilisé à la fois pour les "entrées" du tableau de vérification en Lecture
+// méthodique et pour les "Outils de la langue à utiliser" en Expression
+// écrite — garantit que les deux activités restent cohérentes sur un même
+// type de texte au lieu que chaque fiche invente librement ses propres
+// entrées. À compléter progressivement (seuls 4 types couverts pour l'instant).
+const REFERENTIEL_TYPES_TEXTE = {
+  'texte explicatif': [
+    { categorie: 'lexique', description: 'vocabulaire technique/scientifique, champ lexical du phénomène expliqué' },
+    { categorie: 'temps_verbaux', description: 'présent de vérité générale (valeur de permanence)' },
+    { categorie: 'types_phrases', description: 'phrases déclaratives' },
+    { categorie: 'donnees_chiffrees', description: "statistiques, mesures, proportions appuyant l'explication" },
+    { categorie: 'connecteurs_logiques', description: "d'abord, ensuite, en effet, au final — articulation causale/chronologique" }
+  ],
+  'lettre personnelle': [
+    { categorie: 'presentation_materielle', description: "en-tête (lieu, date), formule d'appel, corps (introductive/développement/finale), signature" },
+    { categorie: 'indices_personne', description: 'pronoms personnels je/tu selon relation expéditeur-destinataire' },
+    { categorie: 'registre_langue', description: 'standard ou familier selon la relation' },
+    { categorie: 'types_phrases', description: 'déclaratives pour exprimer une certitude/intention' }
+  ],
+  'portrait': [
+    { categorie: 'lexique', description: 'vocabulaire évaluatif (appréciatif/dépréciatif), champs lexicaux physiques/moraux' },
+    { categorie: 'images', description: 'comparaisons' },
+    { categorie: 'temps_verbaux', description: "imparfait et présent de l'indicatif (effet de réalisme)" },
+    { categorie: 'adjectifs', description: 'adjectifs qualificatifs' },
+    { categorie: 'verbes', description: "verbes d'état" },
+    { categorie: 'structure', description: 'introduction / développement / conclusion' }
+  ],
+  'texte descriptif (objet)': [
+    { categorie: 'lexique', description: 'champ lexical du luxe/de la richesse ou du thème valorisé selon l\'objet' },
+    { categorie: 'adjectifs', description: 'adjectifs qualificatifs valorisants' },
+    { categorie: 'enumeration', description: 'énumération organisée (spatiale : extérieur→intérieur, haut→bas)' },
+    { categorie: 'procedes_stylistiques', description: "exclamations, apostrophe, hyperbole selon l'effet recherché" }
+  ]
+};
+
+// Recherche insensible à la casse/accents : correspondance exacte d'abord,
+// puis correspondance partielle (l'un des deux textes contient l'autre) —
+// permet à un enseignant de taper juste "Portrait" ou "texte descriptif"
+// sans connaître la clé exacte du référentiel.
+function trouverReferentielTypeTexte(typeTexteDemande) {
+  const cible = normaliserTexte(typeTexteDemande);
+  if (!cible) return null;
+  const cles = Object.keys(REFERENTIEL_TYPES_TEXTE);
+  const exact = cles.find((cle) => normaliserTexte(cle) === cible);
+  if (exact) return { typeTexte: exact, caracteristiques: REFERENTIEL_TYPES_TEXTE[exact] };
+  const partiel = cles.find((cle) => {
+    const cleNorm = normaliserTexte(cle);
+    // retire les qualificatifs entre parenthèses (ex. "texte descriptif (objet)" ->
+    // "texte descriptif") pour matcher même quand l'enseignant ne les précise pas.
+    const cleCoeur = cleNorm.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+    return cleNorm.includes(cible) || cible.includes(cleNorm) || cible.includes(cleCoeur);
+  });
+  return partiel ? { typeTexte: partiel, caracteristiques: REFERENTIEL_TYPES_TEXTE[partiel] } : null;
+}
+
+function formaterCaracteristiquesReferentiel(caracteristiques) {
+  return caracteristiques.map((c) => `- ${c.categorie} : ${c.description}`).join('\n');
+}
+
 const HABILETES_LECTURE_METHODIQUE = `  <tr><td style="border:1px solid #000;padding:6px;">Connaître</td><td style="border:1px solid #000;padding:6px;">le thème étudié</td></tr>
   <tr><td style="border:1px solid #000;padding:6px;">Identifier</td><td style="border:1px solid #000;padding:6px;">les outils de la langue pertinents / les champs lexicaux liés au thème</td></tr>
   <tr><td style="border:1px solid #000;padding:6px;">Analyser</td><td style="border:1px solid #000;padding:6px;">les indices textuels relevés</td></tr>
   <tr><td style="border:1px solid #000;padding:6px;">Interpréter</td><td style="border:1px solid #000;padding:6px;">les indices textuels relevés</td></tr>
   <tr><td style="border:1px solid #000;padding:6px;">Appliquer</td><td style="border:1px solid #000;padding:6px;">la démarche de la lecture méthodique</td></tr>`;
 
-const INSTRUCTIONS_LECTURE_METHODIQUE = `
+function construireInstructionsLectureMethodique(referentiel) {
+  const consigneEntrees = referentiel
+    ? `Les « entrées » possibles pour les 2 tableaux d'axes sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » ci-dessous — pioche EXCLUSIVEMENT dans ces catégories (tu peux n'en utiliser qu'une partie selon les 2 axes retenus, mais n'en invente AUCUNE en dehors de cette liste) :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}\n\nLes relevés précis (citations, exemples tirés du texte) restent bien sûr propres à CE texte : seules les catégories/étiquettes des « entrées » sont fixées par le référentiel.`
+    : `Aucun référentiel de caractéristiques n'est disponible pour ce type de texte précis : détermine les « entrées » les plus pertinentes toi-même, à partir d'une analyse rigoureuse du texte.`;
+
+  return `
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE (cette fiche est une lecture méthodique : les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête, la Situation d'apprentissage, les Supports didactiques/Bibliographie et la ligne PRÉSENTATION restent inchangés.) :
 
@@ -649,7 +719,7 @@ II. HYPOTHÈSE GÉNÉRALE — UNE SEULE phrase, dérivée EXPLICITEMENT de la na
 III. VÉRIFICATION DE L'HYPOTHÈSE GÉNÉRALE :
    1. Détermination des axes de lecture : EXACTEMENT 2 axes (jamais 3, jamais 4), obtenus en décomposant l'hypothèse générale en ses deux composantes.
    2. Dans la ligne III du tableau DÉROULEMENT, la colonne Traces écrites contient UNIQUEMENT du texte simple (jamais de tableau) : le libellé des 2 axes (ex. "Axe 1 : ... / Axe 2 : ..."). Les Activités de l'enseignant/des élèves de cette ligne portent le questionnement guidé qui permet de dégager ces axes.
-   3. Pour CHAQUE axe, un tableau à 4 colonnes (Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations) rempli PAR QUESTIONNEMENT GUIDÉ (chaque ligne correspond à une « entrée » — ex. temps verbaux, lexique, types de phrases, données chiffrées — avec des relevés précis tirés du texte, l'analyse du procédé, et l'interprétation de son effet). CES 2 TABLEAUX SONT DES ÉLÉMENTS AUTONOMES DU DOCUMENT HTML, PLACÉS APRÈS LE TABLEAU DÉROULEMENT COMPLET (donc en dehors de toute balise <td>/<th>) — JAMAIS imbriqués à l'intérieur d'une cellule d'un autre tableau (rendu illisible en Word/PDF : colonnes écrasées, texte compressé). Un tableau HTML ne doit JAMAIS contenir un autre tableau HTML dans une de ses cellules, nulle part dans la fiche.
+   3. Pour CHAQUE axe, un tableau à 4 colonnes (Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations) rempli PAR QUESTIONNEMENT GUIDÉ (chaque ligne correspond à une « entrée » avec des relevés précis tirés du texte, l'analyse du procédé, et l'interprétation de son effet). ${consigneEntrees} CES 2 TABLEAUX SONT DES ÉLÉMENTS AUTONOMES DU DOCUMENT HTML, PLACÉS APRÈS LE TABLEAU DÉROULEMENT COMPLET (donc en dehors de toute balise <td>/<th>) — JAMAIS imbriqués à l'intérieur d'une cellule d'un autre tableau (rendu illisible en Word/PDF : colonnes écrasées, texte compressé). Un tableau HTML ne doit JAMAIS contenir un autre tableau HTML dans une de ses cellules, nulle part dans la fiche.
 
 IV. BILAN GÉNÉRAL :
    - Question de synthèse : « Quels éléments de la langue/du texte ont permis d'étudier ce texte ? »
@@ -660,6 +730,15 @@ IV. BILAN GÉNÉRAL :
    - Fournis un relevé NEUF, non exploité dans le corps de la fiche (nouvelles citations du MÊME texte, non analysées plus haut dans les axes).
    - Demande à l'élève, SEUL : 1) d'identifier l'entrée correspondante, 2) d'analyser, 3) d'interpréter.
    - INTERDICTION ABSOLUE de remplacer ceci par des questions de compréhension du texte (ex. « qui est le narrateur ? », « que ressent-il ? ») : l'évaluation teste la maîtrise de la MÉTHODE de lecture méthodique, pas la compréhension du contenu.`;
+}
+
+function construireInstructionsExpressionEcriture(referentiel) {
+  if (!referentiel) return '';
+  return `
+
+OUTILS DE LA LANGUE À UTILISER — section obligatoire pour cette fiche d'Expression écrite (type de texte détecté : « ${referentiel.typeTexte} »). Insère dans la fiche une section/tableau intitulé « Outils de la langue à utiliser » qui liste EXACTEMENT les catégories suivantes (ni plus, ni moins, ne pas en inventer d'autres), chacune reformulée en une consigne concrète adaptée au thème précis de la leçon :
+${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}`;
+}
 
 function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
   const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
@@ -1109,11 +1188,22 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
 
     let systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : construirePromptSecondaire(avecVerbesTaxonomiques);
 
-    if (niveau !== 'primaire' && estLectureMethodique({ discipline, lecon, theme })) {
-      systemPrompt += INSTRUCTIONS_LECTURE_METHODIQUE;
+    let avertissementRappel = null;
+
+    if (niveau !== 'primaire') {
+      const referentielTypeTexte = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`);
+      if (estLectureMethodique({ discipline, lecon, theme })) {
+        systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexte);
+      } else if (estExpressionEcrite({ discipline, lecon, theme })) {
+        if (referentielTypeTexte) {
+          systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
+        } else {
+          const avertissementReferentiel = `Aucun référentiel de type de texte disponible pour cette leçon d'Expression écrite ("${lecon}") — les outils de la langue proposés restent une estimation libre du modèle.`;
+          avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementReferentiel}` : avertissementReferentiel;
+        }
+      }
     }
 
-    let avertissementRappel = null;
     const seanceNum = parseInt(seance, 10);
     if (Number.isFinite(seanceNum) && seanceNum > 1) {
       const fichesPrecedentes = await trouverFichesPrecedentes({ enseignantId, discipline, classe, lecon, niveau, seance });
