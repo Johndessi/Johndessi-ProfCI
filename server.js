@@ -430,11 +430,16 @@ const LeconOfficielleDPFCSchema = new mongoose.Schema({
   titreLecon  : String,
   ordre       : Number,
   seances: [{
-    numeroSeance : Number,
-    intitule     : String,    // intitulé officiel complet de la séance
-    activite     : String,    // "Expression écrite" | "Lecture méthodique" | ...
-    optionsChoix : [String],  // non vide -> menu déroulant d'options pour l'enseignant
-    choixLibre   : Boolean    // true -> champ texte libre (ex. "autre support au choix")
+    numeroSeance    : Number,
+    intitule        : String,    // intitulé officiel complet de la séance
+    activite        : String,    // "Expression écrite" | "Lecture méthodique" | ...
+    optionsChoix    : [String],  // non vide -> menu déroulant d'options pour l'enseignant
+    // Les deux choix ci-dessous sont indépendants : une séance peut porter
+    // UNIQUEMENT optionsChoix, UNIQUEMENT choixLibre, LES DEUX à la fois (ex.
+    // "type de récit" en liste + "thème des contenus intégrés" en texte libre),
+    // ou aucun des deux (séance sans choix enseignant).
+    choixLibre      : Boolean,   // true -> champ texte libre supplémentaire
+    choixLibreLabel : String     // libellé du champ texte libre (ex. "thème des contenus intégrés")
   }],
   createdAt   : { type: Date, default: Date.now }
 });
@@ -575,7 +580,8 @@ async function listerLeconsOfficielles({ discipline, classe, activite }) {
           numeroSeance: s.numeroSeance,
           intitule: s.intitule,
           optionsChoix: s.optionsChoix || [],
-          choixLibre: !!s.choixLibre
+          choixLibre: !!s.choixLibre,
+          choixLibreLabel: s.choixLibreLabel || ''
         }))
     }))
     .filter((l) => l.seances.length > 0);
@@ -1235,7 +1241,8 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
         seances.push({
           numeroSeance, intitule, activite,
           optionsChoix: Array.isArray(s.optionsChoix) ? s.optionsChoix.map((o) => String(o).trim()).filter(Boolean) : [],
-          choixLibre: !!s.choixLibre
+          choixLibre: !!s.choixLibre,
+          choixLibreLabel: (s.choixLibreLabel || '').toString().trim()
         });
       }
       if (seancesInvalides) { ignores++; continue; }
@@ -1347,7 +1354,7 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       enseignantId, niveau = 'secondaire', discipline,
       classe, lecon, seance = '1', duree = '1 heure',
       theme = '', planCours = '', approche = 'APC',
-      leconOfficielleId = '', seanceOfficielleId = '', optionChoisie = ''
+      leconOfficielleId = '', seanceOfficielleId = '', optionChoisie = '', optionLibre = ''
     } = req.body;
 
     const approcheNormalisee = (approche || 'APC').toString().trim().toUpperCase() || 'APC';
@@ -1409,9 +1416,17 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
           systemPrompt += `\n\nLEÇON OFFICIELLE DPFC : Leçon ${leconDoc.numeroLecon} : ${leconDoc.titreLecon}\n\nUtilise EXACTEMENT ce texte dans le champ Leçon de l'entête (format "Leçon N : Titre"), sans reformulation ni titre alternatif inventé.`;
           systemPrompt += `\n\nSÉANCE OFFICIELLE DPFC : Séance ${seanceDoc.numeroSeance} : ${seanceDoc.intitule}\n\nUtilise EXACTEMENT ce texte dans le champ Séance de l'entête (format "Séance N : Intitulé"), sans reformulation ni troncature.`;
 
+          // Une séance peut porter un choix en liste déroulante ET un choix en texte
+          // libre en même temps (ex. type de récit + thème des contenus intégrés) :
+          // les deux sont indépendants et injectés séparément quand fournis.
           const optionChoisieTexte = (optionChoisie || '').toString().trim();
           if (optionChoisieTexte) {
             systemPrompt += `\n\nOPTION CHOISIE PAR L'ENSEIGNANT (séance à choix) : "${optionChoisieTexte}"\n\nReprends EXACTEMENT ce texte pour préciser le support/thème traité dans cette séance, sans reformulation.`;
+          }
+          const optionLibreTexte = (optionLibre || '').toString().trim();
+          if (optionLibreTexte) {
+            const libelleChoixLibre = (seanceDoc.choixLibreLabel || '').toString().trim() || 'précision complémentaire';
+            systemPrompt += `\n\nOPTION LIBRE CHOISIE PAR L'ENSEIGNANT (${libelleChoixLibre}) : "${optionLibreTexte}"\n\nReprends EXACTEMENT ce texte, sans reformulation.`;
           }
 
           const seanceNumIndicatif = parseInt(seance, 10);
