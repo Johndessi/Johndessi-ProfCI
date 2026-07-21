@@ -259,11 +259,11 @@ function buildDocxTable($, $table) {
 }
 
 // Largeur fixe de la colonne "label" de l'entête, en twips (1/1440 de pouce).
-// Alignée sur les 180px de la colonne "grid-template-columns:180px 1fr" utilisée
-// dans l'aperçu HTML (180px ≈ 2700 twips), pour éviter qu'une largeur en
+// Alignée sur les 110px de la colonne "grid-template-columns:110px 1fr" utilisée
+// dans l'aperçu HTML (110px ≈ 1650 twips), pour éviter qu'une largeur en
 // pourcentage (calculée sur la largeur totale de la page, portrait OU paysage)
 // ne laisse un grand espace vide après les libellés courts (ex. "Date :").
-const ENTETE_LABEL_WIDTH_DXA = 2700;
+const ENTETE_LABEL_WIDTH_DXA = 1650;
 
 function buildEnteteTable($, $entete) {
   const champs = $entete.children('div').toArray();
@@ -415,6 +415,24 @@ const CompetenceDPFCSchema = new mongoose.Schema({
   createdAt  : { type: Date, default: Date.now }
 });
 
+// Compétences officielles qui ne se distinguent PAS par le seul (discipline,
+// classe) mais par l'activité (ex. Français 6e : Expression orale = Compétence
+// 1, Lecture = Compétence 2, Expression écrite = Compétence 3, Grammaire =
+// Compétence 4, Orthographe = Compétence 5 — toutes différentes bien que même
+// discipline/classe). Ces compétences viennent du Programme éducatif, un
+// document distinct de la progression DPFC (LeconOfficielleDPFC) — collection
+// dédiée, sans toucher à CompetenceDPFC ni à sa logique de résolution
+// existante (SVT, Histoire, Géographie... une seule compétence par
+// discipline/classe, pas besoin d'activité).
+const CompetenceParActiviteSchema = new mongoose.Schema({
+  discipline : String,
+  classe     : String,
+  activite   : String,
+  numero     : Number,
+  intitule   : String,
+  createdAt  : { type: Date, default: Date.now }
+});
+
 // Catalogue des leçons officielles DPFC, une entrée par (discipline, classe,
 // numeroLecon) avec ses séances imbriquées. discipline vaut toujours "Français"
 // (la progression DPFC source est unique pour tout le Français, toutes activités
@@ -448,6 +466,7 @@ const Modele = mongoose.model('Modele', ModeleSchema);
 const Fiche  = mongoose.model('Fiche',  FicheSchema);
 const ProgressionLecon = mongoose.model('ProgressionLecon', ProgressionLeconSchema);
 const CompetenceDPFC = mongoose.model('CompetenceDPFC', CompetenceDPFCSchema);
+const CompetenceParActivite = mongoose.model('CompetenceParActivite', CompetenceParActiviteSchema);
 const LeconOfficielleDPFC = mongoose.model('LeconOfficielleDPFC', LeconOfficielleDPFCSchema);
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -515,6 +534,21 @@ async function trouverCompetencesDPFC({ discipline, classe }) {
     discipline: regexExactInsensible(discipline),
     classe: regexExactInsensible(classe)
   }).sort({ numero: 1 });
+}
+
+// Résolution par (discipline, classe, activité) — prioritaire sur
+// trouverCompetencesDPFC quand une entrée existe (aujourd'hui : Français
+// uniquement). Correspondance exacte normalisée sur l'activité, jamais de
+// déduction/devinette : une activité non seedée retourne simplement null, et
+// l'appelant retombe sur la logique CompetenceDPFC existante.
+async function trouverCompetenceParActivite({ discipline, classe, activite }) {
+  if (!activite) return null;
+  const candidats = await CompetenceParActivite.find({
+    discipline: regexExactInsensible(discipline),
+    classe: regexExactInsensible(classe)
+  });
+  const activiteNorm = normaliserTexte(activite);
+  return candidats.find((c) => normaliserTexte(c.activite) === activiteNorm) || null;
 }
 
 // Recherche floue (texte libre) : la séance officielle DPFC dont l'intitulé
@@ -1009,15 +1043,18 @@ STRUCTURE OBLIGATOIRE EN HTML :
 <div class="fiche-cours">
 
 <!-- ENTÊTE VERTICAL -->
-<div class="entete-libre" style="display:grid;grid-template-columns:180px 1fr;column-gap:16px;row-gap:2px;margin-bottom:14px;">
+<!-- Les lignes Leçon et Séance n'ont PAS de libellé devant (cellule de gauche
+     vide) car {{lecon}} et {{seance}} contiennent déjà "Leçon N :"/"Séance N :"
+     -- ne JAMAIS ajouter "Leçon :"/"Séance n° :" devant, ce serait une répétition. -->
+<div class="entete-libre" style="display:grid;grid-template-columns:110px 1fr;column-gap:12px;row-gap:2px;margin-bottom:14px;">
   <div style="font-weight:bold;padding:2px 0;">Discipline :</div><div style="padding:2px 0;">{{discipline}}</div>
   <div style="font-weight:bold;padding:2px 0;">Date :</div><div style="padding:2px 0;"></div>
   <div style="font-weight:bold;padding:2px 0;">Classe :</div><div style="padding:2px 0;">{{classe}}</div>
   <div style="font-weight:bold;padding:2px 0;">Compétence :</div><div style="padding:2px 0;">{{competence}}</div>
   <div style="font-weight:bold;padding:2px 0;">Activité :</div><div style="padding:2px 0;">{{activite}}</div>
   <div style="font-weight:bold;padding:2px 0;">Durée :</div><div style="padding:2px 0;">{{duree}}</div>
-  <div style="font-weight:bold;padding:2px 0;">Leçon :</div><div style="padding:2px 0;">{{lecon}}</div>
-  <div style="font-weight:bold;padding:2px 0;">Séance n° :</div><div style="padding:2px 0;">{{seance}}</div>
+  <div style="padding:2px 0;"></div><div style="padding:2px 0;">{{lecon}}</div>
+  <div style="padding:2px 0;"></div><div style="padding:2px 0;">{{seance}}</div>
 </div>
 
 <!-- SI GRAMMAIRE : corpus de phrases avant le tableau habiletés -->
@@ -1100,7 +1137,7 @@ FORMAT PRIMAIRE :
 <div class="fiche-cours primaire">
   <div class="entete">
     <h2>FICHE DE LEÇON</h2>
-    <div class="entete-libre" style="display:grid;grid-template-columns:180px 1fr;column-gap:16px;row-gap:2px;">
+    <div class="entete-libre" style="display:grid;grid-template-columns:110px 1fr;column-gap:12px;row-gap:2px;">
       <div style="font-weight:bold;padding:2px 0;">École :</div><div style="padding:2px 0;">{{ecole}}</div>
       <div style="font-weight:bold;padding:2px 0;">Classe :</div><div style="padding:2px 0;">{{classe}}</div>
       <div style="font-weight:bold;padding:2px 0;">Matière :</div><div style="padding:2px 0;">{{discipline}}</div>
@@ -1243,6 +1280,38 @@ app.post('/api/admin/competences/seed', verifierCleAdmin, async (req, res) => {
       await CompetenceDPFC.findOneAndUpdate(
         { discipline, classe, numero },
         { discipline, classe, numero, libelle },
+        { upsert: true, new: true }
+      );
+      upserted++;
+    }
+
+    res.json({ success: true, upserted, ignores, total: items.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/competences-par-activite/seed', verifierCleAdmin, async (req, res) => {
+  try {
+    const items = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: 'Le corps de la requête doit être un tableau JSON' });
+    }
+
+    let upserted = 0;
+    let ignores = 0;
+
+    for (const item of items) {
+      const discipline = (item && item.discipline || '').toString().trim();
+      const classe = (item && item.classe || '').toString().trim();
+      const activite = (item && item.activite || '').toString().trim();
+      const numero = item && item.numero != null ? parseInt(item.numero, 10) : NaN;
+      const intitule = (item && item.intitule || '').toString().trim();
+      if (!discipline || !classe || !activite || !Number.isFinite(numero) || !intitule) { ignores++; continue; }
+
+      await CompetenceParActivite.findOneAndUpdate(
+        { discipline, classe, activite },
+        { discipline, classe, activite, numero, intitule },
         { upsert: true, new: true }
       );
       upserted++;
@@ -1534,7 +1603,17 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       let competenceResolue = null;
       let raisonIndisponible = null;
 
-      if (competenceNonDisponible({ discipline, classe })) {
+      // Certaines disciplines ont plusieurs compétences qui ne se distinguent que
+      // par l'activité (ex. Français : oral/lecture/écrit/grammaire/orthographe
+      // n'ont pas le même numéro) — vérifié en priorité, sans toucher à la
+      // logique CompetenceDPFC ci-dessous qui reste la source pour les
+      // disciplines à une seule compétence par discipline/classe.
+      const activiteEffective = (activite || '').toString().trim() || discipline;
+      const competenceParActiviteTrouvee = await trouverCompetenceParActivite({ discipline: 'Français', classe, activite: activiteEffective });
+
+      if (competenceParActiviteTrouvee) {
+        competenceResolue = { numero: competenceParActiviteTrouvee.numero, libelle: competenceParActiviteTrouvee.intitule };
+      } else if (competenceNonDisponible({ discipline, classe })) {
         raisonIndisponible = 'aucun document DPFC officiel publié à ce jour pour cette discipline/classe';
       } else {
         const competencesOfficielles = await trouverCompetencesDPFC({ discipline, classe });
