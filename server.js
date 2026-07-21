@@ -482,7 +482,13 @@ const CompetenceParActiviteSchema = new mongoose.Schema({
 const LeconOfficielleDPFCSchema = new mongoose.Schema({
   discipline  : String,
   classe      : String,
-  numeroLecon : Number,   // peut se répéter dans l'année — jamais utilisé seul comme identifiant
+  // Le vrai discriminant d'une leçon : la progression DPFC numérote ses leçons
+  // séparément PAR ACTIVITÉ (Grammaire a sa propre Leçon 1, Expression écrite
+  // a sa propre Leçon 1 — sujets sans rapport), donc numeroLecon seul se répète
+  // forcément entre activités. Sans ce champ, un seed Grammaire écraserait
+  // silencieusement le document Expression écrite partageant le même numéro.
+  activite    : String,
+  numeroLecon : Number,   // peut se répéter dans l'année, y compris au sein d'une même activité — jamais utilisé seul comme identifiant
   titreLecon  : String,
   ordre       : Number,
   seances: [{
@@ -1403,12 +1409,13 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
     for (const item of items) {
       const discipline = (item && item.discipline || '').toString().trim();
       const classe = (item && item.classe || '').toString().trim();
+      const activiteLecon = (item && item.activite || '').toString().trim();
       const numeroLecon = item && item.numeroLecon != null ? parseInt(item.numeroLecon, 10) : NaN;
       const titreLecon = (item && item.titreLecon || '').toString().trim();
       const ordre = item && item.ordre != null ? parseInt(item.ordre, 10) : undefined;
       const seancesBrutes = Array.isArray(item && item.seances) ? item.seances : [];
 
-      if (!discipline || !classe || !Number.isFinite(numeroLecon) || !titreLecon || !seancesBrutes.length) {
+      if (!discipline || !classe || !activiteLecon || !Number.isFinite(numeroLecon) || !titreLecon || !seancesBrutes.length) {
         ignores++; continue;
       }
 
@@ -1428,11 +1435,15 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
       }
       if (seancesInvalides) { ignores++; continue; }
 
-      const donnees = { discipline, classe, numeroLecon, titreLecon, seances };
+      const donnees = { discipline, classe, activite: activiteLecon, numeroLecon, titreLecon, seances };
       if (Number.isFinite(ordre)) donnees.ordre = ordre;
 
+      // Clé d'upsert incluant l'activité : Grammaire Leçon 1 et Expression
+      // écrite Leçon 1 sont des documents distincts, même numeroLecon, même
+      // discipline/classe — sans "activite" dans le filtre, ce seed écraserait
+      // silencieusement le document d'une autre activité partageant le numéro.
       await LeconOfficielleDPFC.findOneAndUpdate(
-        { discipline, classe, numeroLecon },
+        { discipline, classe, activite: activiteLecon, numeroLecon },
         donnees,
         { upsert: true, new: true }
       );
