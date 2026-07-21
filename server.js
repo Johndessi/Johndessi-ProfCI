@@ -153,7 +153,11 @@ async function genererPdfDepuisHtml(contenuHTML, landscape) {
   table { width: 100%; border-collapse: collapse; }
   td, th { border: 1px solid #000; padding: 5px; }
   tr, td { page-break-inside: avoid; break-inside: avoid; }
-  thead { display: table-header-group; }
+  /* Chromium répète nativement un <thead> sur chaque page (table-header-group
+     fait partie de sa feuille de style par défaut, même sans règle explicite) --
+     on l'annule ici pour que l'en-tête du tableau 5 colonnes n'apparaisse
+     qu'une seule fois, là où il se trouve dans le document (page 2). */
+  thead { display: table-row-group; }
   .pdf-tableau-deroulement { page-break-before: always; break-before: page; }
   .pdf-tableau-deroulement tr, .pdf-tableau-deroulement td { page-break-inside: auto; break-inside: auto; }
 </style>
