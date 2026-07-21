@@ -175,7 +175,8 @@ textarea { resize: vertical; min-height: 90px; }
       <div class="form-row">
         <div class="form-group">
           <label>Discipline / Matière *</label>
-          <input id="discipline" type="text" placeholder="Ex: Français, Maths, SVT..." onblur="chargerSuggestionsLecons();verifierCatalogueOfficiel()"/>
+          <input id="discipline" type="text" placeholder="Ex: Français, Maths, SVT..."
+            oninput="mettreAJourVisibiliteActivite()" onblur="chargerSuggestionsLecons();verifierCatalogueOfficiel()"/>
         </div>
         <div class="form-group">
           <label>Classe *</label>
@@ -192,6 +193,17 @@ textarea { resize: vertical; min-height: 90px; }
               <option>CE1</option><option>CE2</option>
               <option>CM1</option><option>CM2</option>
             </optgroup>
+          </select>
+        </div>
+        <div class="form-group" id="activiteGroup" style="display:none">
+          <label>Activité *</label>
+          <select id="activite" onchange="verifierCatalogueOfficiel()">
+            <option value="">-- Choisir une activité --</option>
+            <option>Expression écrite</option>
+            <option>Lecture méthodique</option>
+            <option>Grammaire/Orthographe</option>
+            <option>Expression orale</option>
+            <option>Étude d'œuvre intégrale</option>
           </select>
         </div>
       </div>
@@ -393,6 +405,26 @@ function setNiveau(niveau, btn) {
   niveauActuel = niveau;
   document.querySelectorAll('#tab-generer .niveau-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  mettreAJourVisibiliteActivite();
+  verifierCatalogueOfficiel();
+}
+
+// Insensible casse/accents, pour comparer "Français"/"français"/"FRANCAIS" côté
+// client de la même façon que normaliserTexte() côté serveur.
+function normaliserTexteSimple(s) {
+  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+// Le champ Discipline est un texte libre (l'enseignant tape "Français" à la
+// main, ce n'est pas un menu déroulant) : le sélecteur Activité n'a de sens
+// que pour le secondaire, et seulement quand la discipline saisie est le
+// Français (les autres matières n'ont pas cette subdivision aujourd'hui).
+function mettreAJourVisibiliteActivite() {
+  const discipline = document.getElementById('discipline').value.trim();
+  const estFrancais = normaliserTexteSimple(discipline) === 'francais';
+  const visible = niveauActuel === 'secondaire' && estFrancais;
+  document.getElementById('activiteGroup').style.display = visible ? 'block' : 'none';
+  if (!visible) document.getElementById('activite').value = '';
 }
 
 // Le natif <datalist> n'affiche aucune suggestion sur Safari (iOS/iPadOS/macOS),
@@ -473,8 +505,20 @@ function setNiveauModele(niveau, btn) {
 let catalogueLeconsDisponibles = [];
 let catalogueActif = false;
 
+// L'activité effective vient du sélecteur dédié quand la discipline saisie est
+// "Français" (cas réel majoritaire : l'enseignant tape la matière, pas
+// l'activité) ; sinon on garde la compatibilité avec la convention historique
+// où l'activité était tapée directement dans le champ Discipline (ex. "Lecture
+// méthodique", "Expression écrite").
+function calculerActiviteEffective() {
+  const disciplineTexte = document.getElementById('discipline').value.trim();
+  const estFrancais = normaliserTexteSimple(disciplineTexte) === 'francais';
+  return estFrancais ? document.getElementById('activite').value.trim() : disciplineTexte;
+}
+
 async function verifierCatalogueOfficiel() {
-  const activite = document.getElementById('discipline').value.trim();
+  mettreAJourVisibiliteActivite();
+  const activite = calculerActiviteEffective();
   const classe = document.getElementById('classe').value;
   catalogueLeconsDisponibles = [];
   catalogueActif = false;
@@ -614,6 +658,7 @@ async function genererFiche() {
         enseignantId : document.getElementById('enseignantId').value.trim() || 'anonyme',
         niveau       : niveauActuel,
         discipline, classe, lecon,
+        activite    : calculerActiviteEffective(),
         seance,
         duree       : document.getElementById('duree').value,
         approche    : document.getElementById('approche').value,
