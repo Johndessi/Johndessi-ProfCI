@@ -246,11 +246,6 @@ textarea { resize: vertical; min-height: 90px; }
         </div>
       </div>
 
-      <div class="form-group" id="catalogueOptionGroup" style="display:none;margin-bottom:14px">
-        <label>Option de la séance (choix enseignant) *</label>
-        <select id="catalogueOptionSelect"></select>
-      </div>
-
       <div class="form-group" id="catalogueOptionLibreGroup" style="display:none;margin-bottom:14px">
         <label id="catalogueOptionLibreLabel">Précision (choix enseignant) *</label>
         <input id="catalogueOptionTexte" type="text" placeholder="Précisez votre choix"/>
@@ -564,9 +559,13 @@ function choisirLeconCatalogue() {
   masquerOptionCatalogue();
   const leconTrouvee = catalogueLeconsDisponibles.find(l => l._id === leconId);
   if (leconTrouvee) {
-    leconTrouvee.seances.forEach(s => {
+    // Une séance à choix (optionsChoix) arrive déjà développée par le serveur en
+    // plusieurs entrées (même numéroSeance, intitulé résolu par entrée) : deux
+    // entrées peuvent donc partager le même _id réel, d'où l'indexation par
+    // position dans le tableau plutôt que par _id pour cette liste précise.
+    leconTrouvee.seances.forEach((s, idx) => {
       const opt = document.createElement('option');
-      opt.value = s._id;
+      opt.value = String(idx);
       opt.textContent = `Séance ${s.numeroSeance} : ${s.intitule}`;
       selectSeance.appendChild(opt);
     });
@@ -578,20 +577,10 @@ function choisirSeanceCatalogue() {
   const seanceTrouvee = trouverSeanceCatalogueSelectionnee();
   if (!seanceTrouvee) return;
 
-  // Les deux types de choix sont indépendants : une séance peut avoir une liste
-  // déroulante ET un champ texte libre en même temps (ex. type de récit + thème
-  // des contenus intégrés), l'un des deux seulement, ou aucun.
-  if (seanceTrouvee.optionsChoix && seanceTrouvee.optionsChoix.length) {
-    const select = document.getElementById('catalogueOptionSelect');
-    select.innerHTML = '<option value="">-- Choisir une option --</option>';
-    seanceTrouvee.optionsChoix.forEach(o => {
-      const opt = document.createElement('option');
-      opt.value = o; opt.textContent = o;
-      select.appendChild(opt);
-    });
-    document.getElementById('catalogueOptionGroup').style.display = 'block';
-  }
-
+  // Le choix en liste déroulante n'est plus un champ séparé : il correspond
+  // directement à l'entrée de séance sélectionnée (optionChoisie déjà résolu
+  // par le serveur). Seul le choix en texte libre (indépendant, ex. thème des
+  // contenus intégrés) garde son propre champ.
   if (seanceTrouvee.choixLibre) {
     document.getElementById('catalogueOptionLibreLabel').textContent =
       (seanceTrouvee.choixLibreLabel ? `Précision (${seanceTrouvee.choixLibreLabel}) *` : 'Précision (choix enseignant) *');
@@ -604,14 +593,12 @@ function choisirSeanceCatalogue() {
 
 function trouverSeanceCatalogueSelectionnee() {
   const leconId = document.getElementById('catalogueLecon').value;
-  const seanceId = document.getElementById('catalogueSeance').value;
+  const idx = document.getElementById('catalogueSeance').value;
   const leconTrouvee = catalogueLeconsDisponibles.find(l => l._id === leconId);
-  return leconTrouvee && leconTrouvee.seances.find(s => s._id === seanceId);
+  return leconTrouvee && idx !== '' ? leconTrouvee.seances[Number(idx)] : null;
 }
 
 function masquerOptionCatalogue() {
-  document.getElementById('catalogueOptionGroup').style.display = 'none';
-  document.getElementById('catalogueOptionSelect').innerHTML = '';
   document.getElementById('catalogueOptionLibreGroup').style.display = 'none';
   document.getElementById('catalogueOptionTexte').value = '';
 }
@@ -629,14 +616,13 @@ async function genererFiche() {
 
   if (catalogueActif) {
     leconOfficielleId = document.getElementById('catalogueLecon').value;
-    seanceOfficielleId = document.getElementById('catalogueSeance').value;
     const leconTrouvee = catalogueLeconsDisponibles.find(l => l._id === leconOfficielleId);
     const seanceTrouvee = trouverSeanceCatalogueSelectionnee();
     if (!leconTrouvee || !seanceTrouvee) { toast('❗ Choisis une leçon et une séance'); return; }
-    if (seanceTrouvee.optionsChoix && seanceTrouvee.optionsChoix.length) {
-      optionChoisie = document.getElementById('catalogueOptionSelect').value;
-      if (!optionChoisie) { toast('❗ Choisis l’option de la séance'); return; }
-    }
+    // La séance sélectionnée porte déjà l'_id réel et l'option choisie (résolue
+    // côté serveur) — le choix en liste n'est plus un champ à valider séparément.
+    seanceOfficielleId = seanceTrouvee._id;
+    optionChoisie = seanceTrouvee.optionChoisie || '';
     if (seanceTrouvee.choixLibre) {
       optionLibre = document.getElementById('catalogueOptionTexte').value.trim();
       if (!optionLibre) { toast('❗ Précise le choix libre de la séance'); return; }

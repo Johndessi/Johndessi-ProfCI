@@ -558,10 +558,65 @@ async function trouverLeconEtSeanceParId(leconOfficielleId, seanceOfficielleId) 
   return { lecon: leconDoc, seance: seanceDoc };
 }
 
+function motsDe(texte) {
+  return (texte || '').trim().split(/\s+/).filter(Boolean);
+}
+
+// Plus long k tel que les k derniers mots de motsA == les k premiers mots de motsB.
+function chevauchementSuffixePrefixe(motsA, motsB) {
+  const max = Math.min(motsA.length, motsB.length);
+  for (let k = max; k > 0; k--) {
+    if (motsA.slice(motsA.length - k).join(' ') === motsB.slice(0, k).join(' ')) return k;
+  }
+  return 0;
+}
+
+// Plus long k tel que les k premiers mots de motsA == les k derniers mots de motsB.
+function chevauchementPrefixeSuffixe(motsA, motsB) {
+  const max = Math.min(motsA.length, motsB.length);
+  for (let k = max; k > 0; k--) {
+    if (motsA.slice(0, k).join(' ') === motsB.slice(motsB.length - k).join(' ')) return k;
+  }
+  return 0;
+}
+
+// Résout l'intitulé "à barre oblique" d'une séance à choix enseignant (ex.
+// "Rédaction d'un récit simple / complexe et complet...") en substituant
+// l'alternance par l'option réellement choisie. Le contexte commun avant/après
+// la barre est déduit par recouvrement de mots avec la 1ère et la dernière
+// option du catalogue : ça marche aussi bien quand le contexte n'est écrit
+// qu'une fois ("récit simple / complexe et complet", "récit" élidé après
+// "simple") que quand chaque option répète le contexte en entier ("d'un objet
+// familier / d'un lieu non animé"). Générique, aucun mot codé en dur — vaut
+// pour toute leçon/activité/niveau présent ou futur du catalogue.
+function resoudreIntituleAvecOption(intitule, optionsChoix, optionChoisie) {
+  const texte = (intitule || '').trim();
+  if (!optionsChoix || !optionsChoix.length) return texte;
+  if (!texte.includes('/')) return optionChoisie ? `${texte} (${optionChoisie})` : texte;
+
+  const idxPremier = texte.indexOf('/');
+  const idxDernier = texte.lastIndexOf('/');
+  const tete = texte.slice(0, idxPremier).trim();
+  const queue = texte.slice(idxDernier + 1).trim();
+
+  const motsTete = motsDe(tete);
+  const kAvant = chevauchementSuffixePrefixe(motsTete, motsDe(optionsChoix[0]));
+  const contexteAvant = motsTete.slice(0, motsTete.length - kAvant).join(' ');
+
+  const motsQueue = motsDe(queue);
+  const kApres = chevauchementPrefixeSuffixe(motsQueue, motsDe(optionsChoix[optionsChoix.length - 1]));
+  const contexteApres = motsQueue.slice(kApres).join(' ');
+
+  return [contexteAvant, optionChoisie, contexteApres].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+}
+
 // Liste les leçons (avec, pour chacune, uniquement les séances de l'activité
 // demandée) pour alimenter les menus déroulants Leçon -> Séance de l'écran de
 // génération. Tableau vide = pas de catalogue pour cette combinaison = le
-// frontend doit basculer sur le champ libre Leçon/Thème.
+// frontend doit basculer sur le champ libre Leçon/Thème. Une séance à choix
+// (optionsChoix non vide) est développée en une entrée par option, avec
+// l'intitulé déjà résolu (plus de barre oblique) : c'est directement le menu
+// Séance qui porte le choix, il n'y a plus de champ Option séparé.
 async function listerLeconsOfficielles({ discipline, classe, activite }) {
   const lecons = await LeconOfficielleDPFC.find({
     discipline: regexExactInsensible(discipline),
@@ -575,14 +630,17 @@ async function listerLeconsOfficielles({ discipline, classe, activite }) {
       titreLecon: l.titreLecon,
       seances: (l.seances || [])
         .filter((s) => normaliserTexte(s.activite) === activiteNorm)
-        .map((s) => ({
-          _id: s._id,
-          numeroSeance: s.numeroSeance,
-          intitule: s.intitule,
-          optionsChoix: s.optionsChoix || [],
-          choixLibre: !!s.choixLibre,
-          choixLibreLabel: s.choixLibreLabel || ''
-        }))
+        .flatMap((s) => {
+          const base = { _id: s._id, numeroSeance: s.numeroSeance, choixLibre: !!s.choixLibre, choixLibreLabel: s.choixLibreLabel || '' };
+          if (s.optionsChoix && s.optionsChoix.length) {
+            return s.optionsChoix.map((option) => ({
+              ...base,
+              intitule: resoudreIntituleAvecOption(s.intitule, s.optionsChoix, option),
+              optionChoisie: option
+            }));
+          }
+          return [{ ...base, intitule: s.intitule, optionChoisie: '' }];
+        })
     }))
     .filter((l) => l.seances.length > 0);
 }
@@ -1415,12 +1473,21 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
         if (leconOfficielle) {
           const { lecon: leconDoc, seance: seanceDoc } = leconOfficielle;
           systemPrompt += `\n\nLEÇON OFFICIELLE DPFC : Leçon ${leconDoc.numeroLecon} : ${leconDoc.titreLecon}\n\nUtilise EXACTEMENT ce texte dans le champ Leçon de l'entête (format "Leçon N : Titre"), sans reformulation ni titre alternatif inventé.`;
-          systemPrompt += `\n\nSÉANCE OFFICIELLE DPFC : Séance ${seanceDoc.numeroSeance} : ${seanceDoc.intitule}\n\nUtilise EXACTEMENT ce texte dans le champ Séance de l'entête (format "Séance N : Intitulé"), sans reformulation ni troncature.`;
 
           // Une séance peut porter un choix en liste déroulante ET un choix en texte
           // libre en même temps (ex. type de récit + thème des contenus intégrés) :
           // les deux sont indépendants et injectés séparément quand fournis.
           const optionChoisieTexte = (optionChoisie || '').toString().trim();
+          const seanceOptionsChoix = Array.isArray(seanceDoc.optionsChoix) ? seanceDoc.optionsChoix : [];
+          // Le libellé "à barre oblique" ("simple / complexe...") n'est jamais celui
+          // affiché à l'enseignant ni injecté dans la fiche : on recalcule ici, côté
+          // serveur (jamais depuis un texte envoyé par le client), le même intitulé
+          // résolu déjà utilisé par le menu déroulant Séance.
+          const intituleSeanceResolu = (seanceOptionsChoix.length && seanceOptionsChoix.includes(optionChoisieTexte))
+            ? resoudreIntituleAvecOption(seanceDoc.intitule, seanceOptionsChoix, optionChoisieTexte)
+            : seanceDoc.intitule;
+          systemPrompt += `\n\nSÉANCE OFFICIELLE DPFC : Séance ${seanceDoc.numeroSeance} : ${intituleSeanceResolu}\n\nUtilise EXACTEMENT ce texte dans le champ Séance de l'entête (format "Séance N : Intitulé"), sans reformulation ni troncature.`;
+
           if (optionChoisieTexte) {
             systemPrompt += `\n\nOPTION CHOISIE PAR L'ENSEIGNANT (séance à choix) : "${optionChoisieTexte}"\n\nReprends EXACTEMENT ce texte pour préciser le support/thème traité dans cette séance, sans reformulation.`;
           }
