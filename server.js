@@ -1354,7 +1354,8 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       enseignantId, niveau = 'secondaire', discipline,
       classe, lecon, seance = '1', duree = '1 heure',
       theme = '', planCours = '', approche = 'APC',
-      leconOfficielleId = '', seanceOfficielleId = '', optionChoisie = '', optionLibre = ''
+      leconOfficielleId = '', seanceOfficielleId = '', optionChoisie = '', optionLibre = '',
+      activite = ''
     } = req.body;
 
     const approcheNormalisee = (approche || 'APC').toString().trim().toUpperCase() || 'APC';
@@ -1375,8 +1376,8 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
     let avertissementRappel = null;
 
     if (niveau !== 'primaire') {
-      const estLM = estLectureMethodique({ discipline, lecon, theme });
-      const estEE = estExpressionEcrite({ discipline, lecon, theme });
+      const estLM = estLectureMethodique({ discipline, lecon, theme, activite });
+      const estEE = estExpressionEcrite({ discipline, lecon, theme, activite });
       const referentielTypeTexte = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`);
 
       if (estLM) {
