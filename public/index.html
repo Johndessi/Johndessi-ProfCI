@@ -175,11 +175,11 @@ textarea { resize: vertical; min-height: 90px; }
       <div class="form-row">
         <div class="form-group">
           <label>Discipline / Matière *</label>
-          <input id="discipline" type="text" placeholder="Ex: Français, Maths, SVT..." onblur="chargerSuggestionsLecons()"/>
+          <input id="discipline" type="text" placeholder="Ex: Français, Maths, SVT..." onblur="chargerSuggestionsLecons();verifierCatalogueOfficiel()"/>
         </div>
         <div class="form-group">
           <label>Classe *</label>
-          <select id="classe" onchange="chargerSuggestionsLecons()">
+          <select id="classe" onchange="chargerSuggestionsLecons();verifierCatalogueOfficiel()">
             <optgroup label="Secondaire">
               <option>6ème</option><option>5ème</option>
               <option>4ème</option><option>3ème</option>
@@ -197,13 +197,25 @@ textarea { resize: vertical; min-height: 90px; }
       </div>
 
       <div class="form-row">
-        <div class="form-group">
+        <div class="form-group" id="leconLibreBox">
           <label>Leçon / Thème *</label>
           <input id="lecon" type="text" autocomplete="off" placeholder="Ex: Les modalités verbales de l'indicatif"
             oninput="filtrerSuggestionsLecons()" onfocus="filtrerSuggestionsLecons()"/>
           <div id="leconSuggestionsBox" class="lecon-suggestions"></div>
         </div>
-        <div class="form-group" style="max-width:100px">
+        <div class="form-group" id="catalogueLeconGroup" style="display:none">
+          <label>Leçon *</label>
+          <select id="catalogueLecon" onchange="choisirLeconCatalogue()">
+            <option value="">-- Choisir une leçon --</option>
+          </select>
+        </div>
+        <div class="form-group" id="catalogueSeanceGroup" style="display:none">
+          <label>Séance *</label>
+          <select id="catalogueSeance" onchange="choisirSeanceCatalogue()">
+            <option value="">-- Choisir une séance --</option>
+          </select>
+        </div>
+        <div class="form-group" id="seanceGroup" style="max-width:100px">
           <label>Séance n°</label>
           <input id="seance" type="number" value="1" min="1"/>
         </div>
@@ -220,6 +232,12 @@ textarea { resize: vertical; min-height: 90px; }
             <option value="flexible">Flexible</option>
           </select>
         </div>
+      </div>
+
+      <div class="form-group" id="catalogueOptionGroup" style="display:none;margin-bottom:14px">
+        <label>Option de la séance (choix enseignant) *</label>
+        <select id="catalogueOptionSelect" style="display:none"></select>
+        <input id="catalogueOptionTexte" type="text" style="display:none" placeholder="Précisez votre choix (ex. autre support au choix)"/>
       </div>
 
       <div class="form-group" style="margin-bottom:14px">
@@ -444,10 +462,136 @@ function setNiveauModele(niveau, btn) {
   btn.classList.add('active');
 }
 
+// Menus déroulants Leçon -> Séance -> Option, alimentés depuis le catalogue officiel
+// DPFC en base (jamais de données codées en dur). N'apparaissent que si un catalogue
+// existe pour la discipline/classe/activité sélectionnée ; sinon le champ libre
+// "Leçon / Thème" existant reste inchangé (fallback obligatoire).
+let catalogueLeconsDisponibles = [];
+let catalogueActif = false;
+
+async function verifierCatalogueOfficiel() {
+  const activite = document.getElementById('discipline').value.trim();
+  const classe = document.getElementById('classe').value;
+  catalogueLeconsDisponibles = [];
+  catalogueActif = false;
+  if (activite && classe) {
+    try {
+      const res = await fetch(`/api/lecons-officielles/liste?discipline=${encodeURIComponent('Français')}&classe=${encodeURIComponent(classe)}&activite=${encodeURIComponent(activite)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length) {
+          catalogueLeconsDisponibles = data;
+          catalogueActif = true;
+        }
+      }
+    } catch (e) {}
+  }
+  appliquerModeCatalogue();
+}
+
+function appliquerModeCatalogue() {
+  document.getElementById('leconLibreBox').style.display = catalogueActif ? 'none' : 'block';
+  document.getElementById('seanceGroup').style.display = catalogueActif ? 'none' : 'block';
+  document.getElementById('catalogueLeconGroup').style.display = catalogueActif ? 'block' : 'none';
+  document.getElementById('catalogueSeanceGroup').style.display = catalogueActif ? 'block' : 'none';
+
+  const selectLecon = document.getElementById('catalogueLecon');
+  selectLecon.innerHTML = '<option value="">-- Choisir une leçon --</option>';
+  if (catalogueActif) {
+    catalogueLeconsDisponibles.forEach(l => {
+      const opt = document.createElement('option');
+      opt.value = l._id;
+      opt.textContent = `Leçon ${l.numeroLecon} : ${l.titreLecon}`;
+      selectLecon.appendChild(opt);
+    });
+  }
+  document.getElementById('catalogueSeance').innerHTML = '<option value="">-- Choisir une séance --</option>';
+  masquerOptionCatalogue();
+}
+
+function choisirLeconCatalogue() {
+  const leconId = document.getElementById('catalogueLecon').value;
+  const selectSeance = document.getElementById('catalogueSeance');
+  selectSeance.innerHTML = '<option value="">-- Choisir une séance --</option>';
+  masquerOptionCatalogue();
+  const leconTrouvee = catalogueLeconsDisponibles.find(l => l._id === leconId);
+  if (leconTrouvee) {
+    leconTrouvee.seances.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s._id;
+      opt.textContent = `Séance ${s.numeroSeance} : ${s.intitule}`;
+      selectSeance.appendChild(opt);
+    });
+  }
+}
+
+function choisirSeanceCatalogue() {
+  masquerOptionCatalogue();
+  const seanceTrouvee = trouverSeanceCatalogueSelectionnee();
+  if (!seanceTrouvee) return;
+
+  if (seanceTrouvee.optionsChoix && seanceTrouvee.optionsChoix.length) {
+    const select = document.getElementById('catalogueOptionSelect');
+    select.innerHTML = '<option value="">-- Choisir une option --</option>';
+    seanceTrouvee.optionsChoix.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o; opt.textContent = o;
+      select.appendChild(opt);
+    });
+    select.style.display = 'block';
+    document.getElementById('catalogueOptionTexte').style.display = 'none';
+    document.getElementById('catalogueOptionGroup').style.display = 'block';
+  } else if (seanceTrouvee.choixLibre) {
+    document.getElementById('catalogueOptionTexte').value = '';
+    document.getElementById('catalogueOptionTexte').style.display = 'block';
+    document.getElementById('catalogueOptionSelect').style.display = 'none';
+    document.getElementById('catalogueOptionGroup').style.display = 'block';
+  }
+}
+
+function trouverSeanceCatalogueSelectionnee() {
+  const leconId = document.getElementById('catalogueLecon').value;
+  const seanceId = document.getElementById('catalogueSeance').value;
+  const leconTrouvee = catalogueLeconsDisponibles.find(l => l._id === leconId);
+  return leconTrouvee && leconTrouvee.seances.find(s => s._id === seanceId);
+}
+
+function masquerOptionCatalogue() {
+  document.getElementById('catalogueOptionGroup').style.display = 'none';
+  document.getElementById('catalogueOptionSelect').innerHTML = '';
+  document.getElementById('catalogueOptionSelect').style.display = 'none';
+  document.getElementById('catalogueOptionTexte').value = '';
+  document.getElementById('catalogueOptionTexte').style.display = 'none';
+}
+
 async function genererFiche() {
   const discipline = document.getElementById('discipline').value.trim();
   const classe     = document.getElementById('classe').value;
-  const lecon      = document.getElementById('lecon').value.trim();
+
+  let lecon = '';
+  let seance = document.getElementById('seance').value;
+  let leconOfficielleId = '';
+  let seanceOfficielleId = '';
+  let optionChoisie = '';
+
+  if (catalogueActif) {
+    leconOfficielleId = document.getElementById('catalogueLecon').value;
+    seanceOfficielleId = document.getElementById('catalogueSeance').value;
+    const leconTrouvee = catalogueLeconsDisponibles.find(l => l._id === leconOfficielleId);
+    const seanceTrouvee = trouverSeanceCatalogueSelectionnee();
+    if (!leconTrouvee || !seanceTrouvee) { toast('❗ Choisis une leçon et une séance'); return; }
+    if ((seanceTrouvee.optionsChoix && seanceTrouvee.optionsChoix.length) || seanceTrouvee.choixLibre) {
+      optionChoisie = (seanceTrouvee.optionsChoix && seanceTrouvee.optionsChoix.length)
+        ? document.getElementById('catalogueOptionSelect').value
+        : document.getElementById('catalogueOptionTexte').value.trim();
+      if (!optionChoisie) { toast('❗ Choisis l’option de la séance'); return; }
+    }
+    lecon = `Leçon ${leconTrouvee.numeroLecon} : ${leconTrouvee.titreLecon}`;
+    seance = String(seanceTrouvee.numeroSeance);
+  } else {
+    lecon = document.getElementById('lecon').value.trim();
+  }
+
   if (!discipline || !lecon) { toast('❗ Remplis la matière et la leçon'); return; }
 
   document.getElementById('btnGenerer').disabled = true;
@@ -459,11 +603,12 @@ async function genererFiche() {
         enseignantId : document.getElementById('enseignantId').value.trim() || 'anonyme',
         niveau       : niveauActuel,
         discipline, classe, lecon,
-        seance      : document.getElementById('seance').value,
+        seance,
         duree       : document.getElementById('duree').value,
         approche    : document.getElementById('approche').value,
         planCours   : document.getElementById('planCours').value.trim(),
-        texteSupport: document.getElementById('texteSupport').value.trim()
+        texteSupport: document.getElementById('texteSupport').value.trim(),
+        leconOfficielleId, seanceOfficielleId, optionChoisie
       };
       const fichierSupport = document.getElementById('texteSupportFichier').files[0];
 

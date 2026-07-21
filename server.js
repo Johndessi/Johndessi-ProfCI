@@ -415,19 +415,28 @@ const CompetenceDPFCSchema = new mongoose.Schema({
   createdAt  : { type: Date, default: Date.now }
 });
 
-// Catalogue des leçons officielles DPFC (numéro + titre + séance officiels),
-// keyé par (discipline, classe, sousTheme) — ex. Français/6ème/"objet familier"
-// -> Leçon 2 "La description", séance 1. Alimente le champ Leçon de l'entête
-// pour Lecture méthodique et Expression écrite, qui affichaient jusqu'ici un
-// titre générique inventé au lieu du vrai intitulé du programme.
+// Catalogue des leçons officielles DPFC, une entrée par (discipline, classe,
+// numeroLecon) avec ses séances imbriquées. discipline vaut toujours "Français"
+// (la progression DPFC source est unique pour tout le Français, toutes activités
+// confondues) ; chaque séance porte sa propre "activite" (Lecture méthodique,
+// Expression écrite...) car une même leçon peut être partagée entre activités
+// avec des séances différentes. Alimente le champ Leçon/Séance de l'entête
+// (qui affichaient jusqu'ici un titre générique inventé) et l'UI de sélection
+// Leçon -> Séance -> option de l'écran de génération.
 const LeconOfficielleDPFCSchema = new mongoose.Schema({
-  discipline   : String,
-  classe       : String,
-  sousTheme    : String,
-  numeroLecon  : Number,
-  titreLecon   : String,
-  numeroSeance : Number,
-  createdAt    : { type: Date, default: Date.now }
+  discipline  : String,
+  classe      : String,
+  numeroLecon : Number,   // peut se répéter dans l'année — jamais utilisé seul comme identifiant
+  titreLecon  : String,
+  ordre       : Number,
+  seances: [{
+    numeroSeance : Number,
+    intitule     : String,    // intitulé officiel complet de la séance
+    activite     : String,    // "Expression écrite" | "Lecture méthodique" | ...
+    optionsChoix : [String],  // non vide -> menu déroulant d'options pour l'enseignant
+    choixLibre   : Boolean    // true -> champ texte libre (ex. "autre support au choix")
+  }],
+  createdAt   : { type: Date, default: Date.now }
 });
 
 const Modele = mongoose.model('Modele', ModeleSchema);
@@ -503,22 +512,73 @@ async function trouverCompetencesDPFC({ discipline, classe }) {
   }).sort({ numero: 1 });
 }
 
-// Recherche la leçon officielle DPFC correspondant à cette discipline/classe
-// à partir du sous-thème du texte étudié (déduit de lecon+theme) : correspondance
-// insensible casse/accents, l'un des deux textes pouvant contenir l'autre —
-// le catalogue lui-même définit les sous-thèmes reconnus, aucune liste de
-// mots-clés n'est codée en dur ici.
-async function trouverLeconOfficielleDPFC({ discipline, classe, lecon, theme }) {
+// Recherche floue (texte libre) : la séance officielle DPFC dont l'intitulé
+// correspond au sous-thème du texte étudié (déduit de lecon+theme), parmi les
+// séances de l'activité demandée. Correspondance insensible casse/accents,
+// l'un des deux textes pouvant contenir l'autre — le catalogue lui-même
+// définit les intitulés reconnus, aucune liste de mots-clés n'est codée en dur.
+async function trouverLeconOfficielleDPFC({ discipline, classe, lecon, theme, activite }) {
   const cible = normaliserTexte(`${lecon || ''} ${theme || ''}`);
   if (!cible) return null;
-  const candidates = await LeconOfficielleDPFC.find({
+  const lecons = await LeconOfficielleDPFC.find({
     discipline: regexExactInsensible(discipline),
     classe: regexExactInsensible(classe)
   });
-  return candidates.find((l) => {
-    const sousThemeNorm = normaliserTexte(l.sousTheme);
-    return sousThemeNorm && (cible.includes(sousThemeNorm) || sousThemeNorm.includes(cible));
-  }) || null;
+  const activiteNorm = normaliserTexte(activite);
+  for (const leconDoc of lecons) {
+    for (const seanceDoc of (leconDoc.seances || [])) {
+      if (activiteNorm && normaliserTexte(seanceDoc.activite) !== activiteNorm) continue;
+      const intituleNorm = normaliserTexte(seanceDoc.intitule);
+      if (intituleNorm && (cible.includes(intituleNorm) || intituleNorm.includes(cible))) {
+        return { lecon: leconDoc, seance: seanceDoc };
+      }
+    }
+  }
+  return null;
+}
+
+// Résolution directe par ID (utilisée par l'UI de sélection Leçon -> Séance) :
+// aucune ambiguïté, aucun risque de faux positif contrairement à la recherche floue.
+async function trouverLeconEtSeanceParId(leconOfficielleId, seanceOfficielleId) {
+  if (!leconOfficielleId || !seanceOfficielleId) return null;
+  let leconDoc;
+  try {
+    leconDoc = await LeconOfficielleDPFC.findById(leconOfficielleId);
+  } catch {
+    return null; // ObjectId invalide
+  }
+  if (!leconDoc) return null;
+  const seanceDoc = leconDoc.seances.id(seanceOfficielleId);
+  if (!seanceDoc) return null;
+  return { lecon: leconDoc, seance: seanceDoc };
+}
+
+// Liste les leçons (avec, pour chacune, uniquement les séances de l'activité
+// demandée) pour alimenter les menus déroulants Leçon -> Séance de l'écran de
+// génération. Tableau vide = pas de catalogue pour cette combinaison = le
+// frontend doit basculer sur le champ libre Leçon/Thème.
+async function listerLeconsOfficielles({ discipline, classe, activite }) {
+  const lecons = await LeconOfficielleDPFC.find({
+    discipline: regexExactInsensible(discipline),
+    classe: regexExactInsensible(classe)
+  }).sort({ ordre: 1, numeroLecon: 1 });
+  const activiteNorm = normaliserTexte(activite);
+  return lecons
+    .map((l) => ({
+      _id: l._id,
+      numeroLecon: l.numeroLecon,
+      titreLecon: l.titreLecon,
+      seances: (l.seances || [])
+        .filter((s) => normaliserTexte(s.activite) === activiteNorm)
+        .map((s) => ({
+          _id: s._id,
+          numeroSeance: s.numeroSeance,
+          intitule: s.intitule,
+          optionsChoix: s.optionsChoix || [],
+          choixLibre: !!s.choixLibre
+        }))
+    }))
+    .filter((l) => l.seances.length > 0);
 }
 
 // Discipline/classe pour lesquelles la numérotation officielle DPFC n'a, à ce
@@ -1156,17 +1216,36 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
     for (const item of items) {
       const discipline = (item && item.discipline || '').toString().trim();
       const classe = (item && item.classe || '').toString().trim();
-      const sousTheme = (item && item.sousTheme || '').toString().trim();
       const numeroLecon = item && item.numeroLecon != null ? parseInt(item.numeroLecon, 10) : NaN;
       const titreLecon = (item && item.titreLecon || '').toString().trim();
-      const numeroSeance = item && item.numeroSeance != null ? parseInt(item.numeroSeance, 10) : NaN;
-      if (!discipline || !classe || !sousTheme || !Number.isFinite(numeroLecon) || !titreLecon || !Number.isFinite(numeroSeance)) {
+      const ordre = item && item.ordre != null ? parseInt(item.ordre, 10) : undefined;
+      const seancesBrutes = Array.isArray(item && item.seances) ? item.seances : [];
+
+      if (!discipline || !classe || !Number.isFinite(numeroLecon) || !titreLecon || !seancesBrutes.length) {
         ignores++; continue;
       }
 
+      const seances = [];
+      let seancesInvalides = false;
+      for (const s of seancesBrutes) {
+        const numeroSeance = s && s.numeroSeance != null ? parseInt(s.numeroSeance, 10) : NaN;
+        const intitule = (s && s.intitule || '').toString().trim();
+        const activite = (s && s.activite || '').toString().trim();
+        if (!Number.isFinite(numeroSeance) || !intitule || !activite) { seancesInvalides = true; break; }
+        seances.push({
+          numeroSeance, intitule, activite,
+          optionsChoix: Array.isArray(s.optionsChoix) ? s.optionsChoix.map((o) => String(o).trim()).filter(Boolean) : [],
+          choixLibre: !!s.choixLibre
+        });
+      }
+      if (seancesInvalides) { ignores++; continue; }
+
+      const donnees = { discipline, classe, numeroLecon, titreLecon, seances };
+      if (Number.isFinite(ordre)) donnees.ordre = ordre;
+
       await LeconOfficielleDPFC.findOneAndUpdate(
-        { discipline, classe, sousTheme },
-        { discipline, classe, sousTheme, numeroLecon, titreLecon, numeroSeance },
+        { discipline, classe, numeroLecon },
+        donnees,
         { upsert: true, new: true }
       );
       upserted++;
@@ -1180,12 +1259,25 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
 
 app.get('/api/lecons-officielles', async (req, res) => {
   try {
-    const { discipline, classe, lecon, theme } = req.query;
+    const { discipline, classe, lecon, theme, activite } = req.query;
     if (!discipline || !classe) {
       return res.status(400).json({ error: 'discipline et classe requis' });
     }
-    const resultat = await trouverLeconOfficielleDPFC({ discipline, classe, lecon, theme });
+    const resultat = await trouverLeconOfficielleDPFC({ discipline, classe, lecon, theme, activite });
     res.json(resultat);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/lecons-officielles/liste', async (req, res) => {
+  try {
+    const { discipline, classe, activite } = req.query;
+    if (!discipline || !classe || !activite) {
+      return res.status(400).json({ error: 'discipline, classe et activite requis' });
+    }
+    const lecons = await listerLeconsOfficielles({ discipline, classe, activite });
+    res.json(lecons);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1254,7 +1346,8 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
     const {
       enseignantId, niveau = 'secondaire', discipline,
       classe, lecon, seance = '1', duree = '1 heure',
-      theme = '', planCours = '', approche = 'APC'
+      theme = '', planCours = '', approche = 'APC',
+      leconOfficielleId = '', seanceOfficielleId = '', optionChoisie = ''
     } = req.body;
 
     const approcheNormalisee = (approche || 'APC').toString().trim().toUpperCase() || 'APC';
@@ -1302,12 +1395,28 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
         // discipline "Français", même si l'enseignant a tapé "Lecture méthodique"
         // ou "Expression écrite" comme discipline (convention déjà utilisée
         // ailleurs dans l'app pour déclencher le bon gabarit de fiche).
-        const leconOfficielle = await trouverLeconOfficielleDPFC({ discipline: 'Français', classe, lecon, theme });
+        const activiteRecherchee = estLM ? 'Lecture méthodique' : 'Expression écrite';
+
+        // Sélection via l'UI de menus dépendants (identification par ID, jamais
+        // par le seul numéro qui peut se répéter dans l'année) : prioritaire sur
+        // la recherche floue par texte libre ci-dessous.
+        const leconOfficielle = (leconOfficielleId && seanceOfficielleId)
+          ? await trouverLeconEtSeanceParId(leconOfficielleId, seanceOfficielleId)
+          : await trouverLeconOfficielleDPFC({ discipline: 'Français', classe, lecon, theme, activite: activiteRecherchee });
+
         if (leconOfficielle) {
-          systemPrompt += `\n\nLEÇON OFFICIELLE DPFC : Leçon ${leconOfficielle.numeroLecon} : ${leconOfficielle.titreLecon}\n\nUtilise EXACTEMENT ce texte dans le champ Leçon de l'entête (format "Leçon N : Titre"), sans reformulation ni titre alternatif inventé.`;
+          const { lecon: leconDoc, seance: seanceDoc } = leconOfficielle;
+          systemPrompt += `\n\nLEÇON OFFICIELLE DPFC : Leçon ${leconDoc.numeroLecon} : ${leconDoc.titreLecon}\n\nUtilise EXACTEMENT ce texte dans le champ Leçon de l'entête (format "Leçon N : Titre"), sans reformulation ni titre alternatif inventé.`;
+          systemPrompt += `\n\nSÉANCE OFFICIELLE DPFC : Séance ${seanceDoc.numeroSeance} : ${seanceDoc.intitule}\n\nUtilise EXACTEMENT ce texte dans le champ Séance de l'entête (format "Séance N : Intitulé"), sans reformulation ni troncature.`;
+
+          const optionChoisieTexte = (optionChoisie || '').toString().trim();
+          if (optionChoisieTexte) {
+            systemPrompt += `\n\nOPTION CHOISIE PAR L'ENSEIGNANT (séance à choix) : "${optionChoisieTexte}"\n\nReprends EXACTEMENT ce texte pour préciser le support/thème traité dans cette séance, sans reformulation.`;
+          }
+
           const seanceNumIndicatif = parseInt(seance, 10);
-          if (Number.isFinite(seanceNumIndicatif) && seanceNumIndicatif !== leconOfficielle.numeroSeance) {
-            const avertissementSeance = `La séance officielle DPFC pour ce sous-thème est la séance ${leconOfficielle.numeroSeance}, mais la séance ${seanceNumIndicatif} a été indiquée — vérifie le numéro de séance.`;
+          if (Number.isFinite(seanceNumIndicatif) && seanceNumIndicatif !== seanceDoc.numeroSeance) {
+            const avertissementSeance = `La séance officielle DPFC pour cette leçon est la séance ${seanceDoc.numeroSeance}, mais la séance ${seanceNumIndicatif} a été indiquée — vérifie le numéro de séance.`;
             avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementSeance}` : avertissementSeance;
           }
         } else {
