@@ -113,6 +113,37 @@ function getBrowser() {
   return browserPromise;
 }
 
+// Repère le tableau pédagogique à 5 colonnes (Moments / Stratégies /
+// Activités enseignant / Activités élèves / Traces écrites) : c'est le seul
+// tableau de la fiche dont la première ligne compte exactement 5 <th> --
+// signature de contenu, pas une classe CSS, pour ne jamais toucher au HTML de
+// la fiche tel que stocké/affiché/exporté en Word. Transformation appliquée
+// uniquement à la copie en mémoire envoyée à Puppeteer pour le rendu PDF :
+// ajoute un <thead>/<tbody> réels (pour que l'en-tête se répète sur chaque
+// page) et marque le tableau pour lui appliquer une pagination différente
+// (saut de page avant, lignes libres de se couper) des petits tableaux.
+function preparerHtmlPourPdf(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  $('table').each((_, table) => {
+    const $table = $(table);
+    // .find() et non .children() : le parseur HTML de cheerio enveloppe
+    // automatiquement les <tr> orphelins dans un <tbody> implicite, donc les
+    // lignes ne sont presque jamais des enfants DIRECTS de <table>.
+    const $lignes = $table.find('tr');
+    const $premiereLigne = $lignes.first();
+    if ($premiereLigne.length && $premiereLigne.children('th').length === 5) {
+      $table.addClass('pdf-tableau-deroulement');
+      const $autresLignes = $lignes.slice(1);
+      const $thead = $('<thead></thead>').append($premiereLigne);
+      const $tbody = $('<tbody></tbody>').append($autresLignes);
+      $table.empty().append($thead).append($tbody);
+    }
+  });
+  const $racine = $('.fiche-cours').first();
+  return $racine.length ? $.html($racine) : contenuHTML;
+}
+
 async function genererPdfDepuisHtml(contenuHTML, landscape) {
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
@@ -121,9 +152,12 @@ async function genererPdfDepuisHtml(contenuHTML, landscape) {
   body { font-family: Arial, sans-serif; font-size: 11px; color: #000; margin: 0; }
   table { width: 100%; border-collapse: collapse; }
   td, th { border: 1px solid #000; padding: 5px; }
-  tr { page-break-inside: avoid; }
+  tr, td { page-break-inside: avoid; break-inside: avoid; }
+  thead { display: table-header-group; }
+  .pdf-tableau-deroulement { page-break-before: always; break-before: page; }
+  .pdf-tableau-deroulement tr, .pdf-tableau-deroulement td { page-break-inside: auto; break-inside: auto; }
 </style>
-</head><body>${contenuHTML}</body></html>`;
+</head><body>${preparerHtmlPourPdf(contenuHTML)}</body></html>`;
 
   const browser = await getBrowser();
   const page = await browser.newPage();
