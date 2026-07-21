@@ -1547,7 +1547,7 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       classe, lecon, seance = '1', duree = '1 heure',
       theme = '', planCours = '', approche = 'APC',
       leconOfficielleId = '', seanceOfficielleId = '', optionChoisie = '', optionLibre = '',
-      activite = ''
+      activite = '', seanceIntitule = ''
     } = req.body;
 
     const approcheNormalisee = (approche || 'APC').toString().trim().toUpperCase() || 'APC';
@@ -1641,6 +1641,17 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
           const avertissementLecon = `Aucune leçon officielle DPFC trouvée dans le catalogue pour cette discipline/classe/sous-thème — le champ Leçon affiche un message à compléter manuellement avec la progression papier.`;
           avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementLecon}` : avertissementLecon;
         }
+      }
+
+      // Fallback (saisie libre, hors catalogue) : quand l'enseignant tape lui-même
+      // l'intitulé de la séance, il doit être repris tel quel dans le champ Séance
+      // de l'entête, exactement comme l'intitulé officiel du catalogue ci-dessus —
+      // jamais reformulé ni complété par le modèle. N'est envoyé par le frontend
+      // que lorsque le catalogue n'est pas actif pour cette combinaison.
+      const seanceIntituleTexte = (seanceIntitule || '').toString().trim();
+      const seanceNumPourIntitule = parseInt(seance, 10);
+      if (seanceIntituleTexte && Number.isFinite(seanceNumPourIntitule)) {
+        systemPrompt += `\n\nSÉANCE (saisie libre par l'enseignant) : Séance ${seanceNumPourIntitule} : ${seanceIntituleTexte}\n\nUtilise EXACTEMENT ce texte dans le champ Séance de l'entête (format "Séance N : Intitulé"), sans reformulation ni troncature.`;
       }
     }
 

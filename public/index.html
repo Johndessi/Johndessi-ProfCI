@@ -247,6 +247,13 @@ textarea { resize: vertical; min-height: 90px; }
         </div>
       </div>
 
+      <div class="form-row">
+        <div class="form-group" id="seanceIntituleGroup">
+          <label>Intitulé de la séance (optionnel)</label>
+          <input id="seanceIntitule" type="text" placeholder="Ex: Les types de phrases : type déclaratif et type interrogatif"/>
+        </div>
+      </div>
+
       <div class="form-group" id="catalogueOptionLibreGroup" style="display:none;margin-bottom:14px">
         <label id="catalogueOptionLibreLabel">Précision (choix enseignant) *</label>
         <input id="catalogueOptionTexte" type="text" placeholder="Précisez votre choix"/>
@@ -536,6 +543,8 @@ async function verifierCatalogueOfficiel() {
 function appliquerModeCatalogue() {
   document.getElementById('leconLibreBox').style.display = catalogueActif ? 'none' : 'block';
   document.getElementById('seanceGroup').style.display = catalogueActif ? 'none' : 'block';
+  document.getElementById('seanceIntituleGroup').style.display = catalogueActif ? 'none' : 'block';
+  if (catalogueActif) document.getElementById('seanceIntitule').value = '';
   document.getElementById('catalogueLeconGroup').style.display = catalogueActif ? 'block' : 'none';
   document.getElementById('catalogueSeanceGroup').style.display = catalogueActif ? 'block' : 'none';
 
@@ -651,6 +660,7 @@ async function genererFiche() {
         approche    : document.getElementById('approche').value,
         planCours   : document.getElementById('planCours').value.trim(),
         texteSupport: document.getElementById('texteSupport').value.trim(),
+        seanceIntitule: document.getElementById('seanceIntitule').value.trim(),
         leconOfficielleId, seanceOfficielleId, optionChoisie, optionLibre
       };
       const fichierSupport = document.getElementById('texteSupportFichier').files[0];
