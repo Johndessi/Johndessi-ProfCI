@@ -1336,6 +1336,22 @@ app.get('/api/competences', async (req, res) => {
   }
 });
 
+app.get('/api/competences-par-activite', async (req, res) => {
+  try {
+    const { discipline, classe } = req.query;
+    if (!discipline || !classe) {
+      return res.status(400).json({ error: 'discipline et classe requis' });
+    }
+    const competences = await CompetenceParActivite.find({
+      discipline: regexExactInsensible(discipline),
+      classe: regexExactInsensible(classe)
+    }).sort({ numero: 1 });
+    res.json(competences);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res) => {
   try {
     const items = req.body;
@@ -1622,21 +1638,13 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
         } else if (competencesOfficielles.length === 1) {
           competenceResolue = competencesOfficielles[0];
         } else {
-          // Plusieurs compétences existent pour cette discipline/classe : on ne peut
-          // choisir la bonne QUE si le catalogue de leçons indique explicitement à
-          // quelle compétence cette leçon précise appartient (ProgressionLecon.competenceNumero).
-          // Laisser le modèle "deviner" parmi la liste a déjà produit une compétence
-          // hallucinée (ni le bon numéro, ni le bon libellé) : c'est donc interdit.
-          const progressionPourCompetence = await trouverProgressionLecon({ discipline, classe, lecon });
-          const numeroCible = progressionPourCompetence && Number.isFinite(progressionPourCompetence.competenceNumero)
-            ? progressionPourCompetence.competenceNumero
-            : null;
-          const match = numeroCible != null ? competencesOfficielles.find((c) => c.numero === numeroCible) : null;
-          if (match) {
-            competenceResolue = match;
-          } else {
-            raisonIndisponible = 'plusieurs compétences officielles existent pour cette discipline/classe mais aucune n\'est reliée à cette leçon précise dans le catalogue';
-          }
+          // La compétence est déterminée par (discipline, classe, activité), JAMAIS
+          // par la leçon en cours — plusieurs compétences pour cette discipline/classe
+          // sans mapping par activité (CompetenceParActivite) signifient donc qu'on
+          // ne peut pas les distinguer avec certitude. Laisser le modèle "deviner"
+          // parmi la liste a déjà produit une compétence hallucinée (ni le bon
+          // numéro, ni le bon libellé) : c'est donc interdit, pas de repli par leçon.
+          raisonIndisponible = 'plusieurs compétences officielles existent pour cette discipline/classe et ne peuvent être distinguées sans mapping par activité';
         }
       }
 
