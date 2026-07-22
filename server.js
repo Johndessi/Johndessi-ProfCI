@@ -1106,9 +1106,10 @@ STRUCTURE OBLIGATOIRE EN HTML :
 <div class="fiche-cours">
 
 <!-- ENTÊTE VERTICAL -->
-<!-- Les lignes Leçon et Séance n'ont PAS de libellé devant (cellule de gauche
-     vide) car {{lecon}} et {{seance}} contiennent déjà "Leçon N :"/"Séance N :"
-     -- ne JAMAIS ajouter "Leçon :"/"Séance n° :" devant, ce serait une répétition. -->
+<!-- Les lignes Leçon et Séance ONT un libellé devant, comme tous les autres
+     champs : {{lecon}} et {{seance}} ne contiennent QUE "N : Titre"/"N : Intitulé"
+     (le numéro et le texte), JAMAIS le mot "Leçon"/"Séance" en toutes lettres,
+     puisqu'il est déjà dans le libellé -- ce serait sinon une répétition. -->
 <div class="entete-libre" style="display:grid;grid-template-columns:110px 1fr;column-gap:12px;row-gap:2px;margin-bottom:14px;">
   <div style="font-weight:bold;padding:2px 0;">Discipline :</div><div style="padding:2px 0;">{{discipline}}</div>
   <div style="font-weight:bold;padding:2px 0;">Date :</div><div style="padding:2px 0;"></div>
@@ -1116,8 +1117,8 @@ STRUCTURE OBLIGATOIRE EN HTML :
   <div style="font-weight:bold;padding:2px 0;">Compétence :</div><div style="padding:2px 0;">{{competence}}</div>
   <div style="font-weight:bold;padding:2px 0;">Activité :</div><div style="padding:2px 0;">{{activite}}</div>
   <div style="font-weight:bold;padding:2px 0;">Durée :</div><div style="padding:2px 0;">{{duree}}</div>
-  <div style="padding:2px 0;"></div><div style="padding:2px 0;">{{lecon}}</div>
-  <div style="padding:2px 0;"></div><div style="padding:2px 0;">{{seance}}</div>
+  <div style="font-weight:bold;padding:2px 0;">Leçon :</div><div style="padding:2px 0;">{{lecon}}</div>
+  <div style="font-weight:bold;padding:2px 0;">Séance :</div><div style="padding:2px 0;">{{seance}}</div>
 </div>
 
 <!-- SI GRAMMAIRE : corpus de phrases avant le tableau habiletés -->
@@ -1625,7 +1626,7 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
 
         if (leconOfficielle) {
           const { lecon: leconDoc, seance: seanceDoc } = leconOfficielle;
-          systemPrompt += `\n\nLEÇON OFFICIELLE DPFC : Leçon ${leconDoc.numeroLecon} : ${leconDoc.titreLecon}\n\nUtilise EXACTEMENT ce texte dans le champ Leçon de l'entête (format "Leçon N : Titre"), sans reformulation ni titre alternatif inventé.`;
+          systemPrompt += `\n\nLEÇON OFFICIELLE DPFC : Leçon ${leconDoc.numeroLecon} : ${leconDoc.titreLecon}\n\nDans le champ Leçon de l'entête (à droite du libellé "Leçon :" déjà présent), écris EXACTEMENT "${leconDoc.numeroLecon} : ${leconDoc.titreLecon}" -- le numéro et le titre SEULEMENT, SANS répéter le mot "Leçon" qui est déjà dans le libellé, sans reformulation ni titre alternatif inventé.`;
 
           // Une séance peut porter un choix en liste déroulante ET un choix en texte
           // libre en même temps (ex. type de récit + thème des contenus intégrés) :
@@ -1639,7 +1640,7 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
           const intituleSeanceResolu = (seanceOptionsChoix.length && seanceOptionsChoix.includes(optionChoisieTexte))
             ? resoudreIntituleAvecOption(seanceDoc.intitule, seanceOptionsChoix, optionChoisieTexte)
             : seanceDoc.intitule;
-          systemPrompt += `\n\nSÉANCE OFFICIELLE DPFC : Séance ${seanceDoc.numeroSeance} : ${intituleSeanceResolu}\n\nUtilise EXACTEMENT ce texte dans le champ Séance de l'entête (format "Séance N : Intitulé"), sans reformulation ni troncature.`;
+          systemPrompt += `\n\nSÉANCE OFFICIELLE DPFC : Séance ${seanceDoc.numeroSeance} : ${intituleSeanceResolu}\n\nDans le champ Séance de l'entête (à droite du libellé "Séance :" déjà présent), écris EXACTEMENT "${seanceDoc.numeroSeance} : ${intituleSeanceResolu}" -- le numéro et l'intitulé SEULEMENT, SANS répéter le mot "Séance" qui est déjà dans le libellé, sans reformulation ni troncature.`;
 
           if (optionChoisieTexte) {
             systemPrompt += `\n\nOPTION CHOISIE PAR L'ENSEIGNANT (séance à choix) : "${optionChoisieTexte}"\n\nReprends EXACTEMENT ce texte pour préciser le support/thème traité dans cette séance, sans reformulation.`;
@@ -1670,7 +1671,7 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       const seanceIntituleTexte = (seanceIntitule || '').toString().trim();
       const seanceNumPourIntitule = parseInt(seance, 10);
       if (seanceIntituleTexte && Number.isFinite(seanceNumPourIntitule)) {
-        systemPrompt += `\n\nSÉANCE (saisie libre par l'enseignant) : Séance ${seanceNumPourIntitule} : ${seanceIntituleTexte}\n\nUtilise EXACTEMENT ce texte dans le champ Séance de l'entête (format "Séance N : Intitulé"), sans reformulation ni troncature.`;
+        systemPrompt += `\n\nSÉANCE (saisie libre par l'enseignant) : Séance ${seanceNumPourIntitule} : ${seanceIntituleTexte}\n\nDans le champ Séance de l'entête (à droite du libellé "Séance :" déjà présent), écris EXACTEMENT "${seanceNumPourIntitule} : ${seanceIntituleTexte}" -- le numéro et l'intitulé SEULEMENT, SANS répéter le mot "Séance" qui est déjà dans le libellé, sans reformulation ni troncature.`;
       }
     }
 
