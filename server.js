@@ -303,18 +303,37 @@ function buildDocxTable($, $table) {
 // ne laisse un grand espace vide après les libellés courts (ex. "Date :").
 const ENTETE_LABEL_WIDTH_DXA = 1650;
 
+// Un div "libellé" est soit vide (cellule de gauche volontairement blanche,
+// ex. devant Leçon/Séance), soit un texte terminé par ":" (ex. "Discipline :").
+// Sert à réparer par le contenu la ligne Leçon/Séance quand le modèle omet le
+// <div> vide de gauche au lieu de le garder vide : sans cette détection, le
+// texte de la leçon serait pris pour un libellé et celui de la séance
+// basculerait à sa suite sur la même ligne (champs décalés/imbriqués).
+function estDivLibelleEntete($, node) {
+  const texte = $(node).text().replace(/ /g, ' ').trim();
+  return texte === '' || /:\s*$/.test(texte);
+}
+
 function buildEnteteTable($, $entete) {
   const champs = $entete.children('div').toArray();
   const rows = [];
-  for (let i = 0; i < champs.length; i += 2) {
-    const labelEl = champs[i];
-    const valueEl = champs[i + 1];
-    if (!labelEl) break;
-    const labelCell = tableCellFromNode($, labelEl, { forceBold: true, widthDxa: ENTETE_LABEL_WIDTH_DXA });
-    const valueCell = valueEl
-      ? tableCellFromNode($, valueEl, {})
-      : new TableCell({ children: [new Paragraph({})] });
-    rows.push(new TableRow({ children: [labelCell, valueCell] }));
+  let i = 0;
+  while (i < champs.length) {
+    const el = champs[i];
+    if (estDivLibelleEntete($, el)) {
+      const valueEl = champs[i + 1];
+      const labelCell = tableCellFromNode($, el, { forceBold: true, widthDxa: ENTETE_LABEL_WIDTH_DXA });
+      const valueCell = valueEl
+        ? tableCellFromNode($, valueEl, {})
+        : new TableCell({ children: [new Paragraph({})] });
+      rows.push(new TableRow({ children: [labelCell, valueCell] }));
+      i += 2;
+    } else {
+      const labelCell = new TableCell({ children: [new Paragraph({})], width: { size: ENTETE_LABEL_WIDTH_DXA, type: WidthType.DXA } });
+      const valueCell = tableCellFromNode($, el, {});
+      rows.push(new TableRow({ children: [labelCell, valueCell] }));
+      i += 1;
+    }
   }
   if (!rows.length) return null;
   return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, borders: DOCX_NO_BORDERS });
