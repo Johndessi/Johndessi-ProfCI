@@ -199,13 +199,58 @@ function widthPctFromStyle(style) {
   return m ? parseFloat(m[1]) : null;
 }
 
+function fontSizeFromStyle(style) {
+  const m = /font-size\s*:\s*([\d.]+)\s*px/i.exec(style || '');
+  return m ? parseFloat(m[1]) : null;
+}
+
+// docx exprime la taille de police en demi-points ; à 96 dpi, 1px = 0.75pt,
+// donc demi-points = px * 1.5.
+function pxVersDemiPoints(px) {
+  return Math.round(px * 1.5);
+}
+
+// Convertit récursivement un <div> "texte support" (texte-support,
+// texte-support-page-unique, texte-support-copie...) -- avec son éventuel
+// <h3> de titre et ses sous-divs à taille de police réduite (cf.
+// envelopperTexteSupportUnePage / la copie en Lecture méthodique) -- en
+// paragraphes/tableaux docx, en respectant la taille de police voulue au lieu
+// de l'aplatir en un seul bloc de texte brut sans mise en forme.
+function elementsTexteSupportDepuisDiv($, $div, sizeHalfPtHerite) {
+  const taillePx = fontSizeFromStyle($div.attr('style') || '');
+  const sizeHalfPt = taillePx ? pxVersDemiPoints(taillePx) : sizeHalfPtHerite;
+  const elements = [];
+
+  $div.contents().each((_, enfant) => {
+    if (enfant.type !== 'tag') return;
+    const $enfant = $(enfant);
+    const tagEnfant = enfant.name.toLowerCase();
+    if (tagEnfant === 'div') {
+      elements.push(...elementsTexteSupportDepuisDiv($, $enfant, sizeHalfPt));
+    } else if (tagEnfant === 'h3' || tagEnfant === 'h2') {
+      elements.push(new Paragraph({ children: [new TextRun({ text: $enfant.text().trim(), bold: true, size: sizeHalfPt })], spacing: { before: 120, after: 80 } }));
+    } else if (tagEnfant === 'p') {
+      const runs = collectRuns($, enfant, { size: sizeHalfPt });
+      if (runs.length) elements.push(new Paragraph({ children: runs }));
+    } else if (tagEnfant === 'table') {
+      const table = buildDocxTable($, $enfant);
+      if (table) elements.push(table);
+    } else {
+      const texte = $enfant.text().trim();
+      if (texte) elements.push(new Paragraph({ children: [new TextRun({ text: texte, size: sizeHalfPt })] }));
+    }
+  });
+
+  return elements;
+}
+
 function collectRuns($, el, fmt = {}) {
   let runs = [];
   $(el).contents().each((_, child) => {
     if (child.type === 'text') {
       const text = (child.data || '').replace(/\s+/g, ' ');
       if (text.trim() !== '' || text === ' ') {
-        runs.push(new TextRun({ text, bold: fmt.bold, italics: fmt.italics, color: fmt.color }));
+        runs.push(new TextRun({ text, bold: fmt.bold, italics: fmt.italics, color: fmt.color, size: fmt.size }));
       }
     } else if (child.type === 'tag') {
       const tag = child.name.toLowerCase();
@@ -373,13 +418,20 @@ function contenuToDocxChildren(html) {
     } else if (tag === 'div' && /deroulement/.test(cls)) {
       $node.children().each((_, inner) => {
         const $inner = $(inner);
+        const innerCls = $inner.attr('class') || '';
         if (inner.name === 'h3') {
           elements.push(titrePar($inner.text().trim(), 24));
         } else if (inner.name === 'table') {
           const table = buildDocxTable($, $inner);
           if (table) { elements.push(table); elements.push(new Paragraph({ text: '' })); }
+        } else if (inner.name === 'div' && /texte-support/.test(innerCls)) {
+          elements.push(...elementsTexteSupportDepuisDiv($, $inner));
+          elements.push(new Paragraph({ text: '' }));
         }
       });
+    } else if (tag === 'div' && /texte-support/.test(cls)) {
+      elements.push(...elementsTexteSupportDepuisDiv($, $node));
+      elements.push(new Paragraph({ text: '' }));
     } else if (tag === 'p') {
       const runs = collectRuns($, $node);
       if (runs.length) elements.push(new Paragraph({ children: runs, spacing: { after: 120 } }));
@@ -804,29 +856,72 @@ function texteSupportDoitEtreDuplique(texteSupport) {
   return compterMots(texteSupport) <= SEUIL_DUPLICATION_TEXTE_SUPPORT_MOTS;
 }
 
-function injecterTexteSupport(contenuHTML, texteSupport) {
+// Pour l'Expression écrite : le texte support (lettre/écrit modèle que l'élève
+// doit observer et reproduire) DOIT tenir sur une seule page, quelle que soit
+// son origine (texte fourni par l'enseignant OU exemple généré par l'app) --
+// contrairement à la duplication ci-dessus (2 exemplaires, propre à la
+// photocopie), ici on réduit simplement la police en fonction de la longueur
+// pour que le texte tienne sur une page A4 (corps de fiche en 11px par défaut,
+// cf. genererPdfDepuisHtml). Seuils estimés empiriquement, pas une mesure exacte.
+function taillePoliceTexteSupportUnePage(motsTexteSupport) {
+  if (motsTexteSupport <= 300) return 11;
+  if (motsTexteSupport <= 420) return 9.5;
+  if (motsTexteSupport <= 550) return 8.5;
+  if (motsTexteSupport <= 700) return 7.5;
+  return 7;
+}
+
+// Au-delà de ce nombre de mots, même la police minimale encore lisible (7px)
+// risque de déborder sur une deuxième page une fois l'entête et les marges
+// comptés : on ne réduit pas davantage (illisible), on avertit l'enseignant
+// à la place plutôt que de tronquer silencieusement son texte.
+const SEUIL_DEBORDEMENT_TEXTE_SUPPORT_UNE_PAGE_MOTS = 750;
+
+function texteSupportRisqueDeDeborder(motsTexteSupport) {
+  return motsTexteSupport > SEUIL_DEBORDEMENT_TEXTE_SUPPORT_UNE_PAGE_MOTS;
+}
+
+function envelopperTexteSupportUnePage(texteHtml, motsTexteSupport) {
+  const taille = taillePoliceTexteSupportUnePage(motsTexteSupport);
+  // Taille normale (texte déjà assez court) : pas d'enveloppe, pour que le
+  // texte support hérite exactement du même rendu que le reste du document
+  // (Word comme PDF) au lieu de forcer une taille explicite inutile.
+  if (taille >= 11) return texteHtml;
+  return `<div class="texte-support-page-unique" style="font-size:${taille}px;line-height:1.25;page-break-inside:avoid;break-inside:avoid;">${texteHtml}</div>`;
+}
+
+function injecterTexteSupport(contenuHTML, texteSupport, options = {}) {
   if (!texteSupport) return contenuHTML;
   const texteHtml = texteSupportVersHtml(texteSupport);
   if (!texteHtml) return contenuHTML;
 
+  const motsTexteSupport = compterMots(texteSupport);
+  const texteAInserer = options.unePage
+    ? envelopperTexteSupportUnePage(texteHtml, motsTexteSupport)
+    : texteHtml;
+
   let resultat;
   if (contenuHTML.includes('{{TEXTE_SUPPORT}}')) {
-    resultat = contenuHTML.split('{{TEXTE_SUPPORT}}').join(texteHtml);
+    resultat = contenuHTML.split('{{TEXTE_SUPPORT}}').join(texteAInserer);
   } else {
     // Le modèle a oublié le marqueur : insère une section dédiée juste avant le
     // tableau de déroulement (qui contient les questions), donc en fin de fiche
     // mais avant la partie questions.
-    const section = `<div class="texte-support"><h3>Texte support</h3>${texteHtml}</div>\n`;
+    const section = `<div class="texte-support"><h3>Texte support</h3>${texteAInserer}</div>\n`;
     const derniereTable = contenuHTML.lastIndexOf('<table');
     resultat = derniereTable !== -1
       ? contenuHTML.slice(0, derniereTable) + section + contenuHTML.slice(derniereTable)
       : contenuHTML + section;
   }
 
-  // Duplication conditionnelle : décidée UNIQUEMENT côté serveur (nombre de mots
-  // réel), jamais laissée au jugement du modèle — même si le modèle a inclus le
-  // marqueur {{TEXTE_SUPPORT_COPIE}} par erreur pour un texte long, il est retiré ici.
-  if (resultat.includes('{{TEXTE_SUPPORT_COPIE}}')) {
+  if (options.unePage) {
+    // Pas de duplication en Expression écrite (contrainte : une seule page) --
+    // si le modèle a quand même ajouté le marqueur par erreur, on le retire.
+    resultat = resultat.split('{{TEXTE_SUPPORT_COPIE}}').join('');
+  } else if (resultat.includes('{{TEXTE_SUPPORT_COPIE}}')) {
+    // Duplication conditionnelle : décidée UNIQUEMENT côté serveur (nombre de
+    // mots réel), jamais laissée au jugement du modèle — même si le modèle a
+    // inclus le marqueur par erreur pour un texte long, il est retiré ici.
     const copieHtml = texteSupportDoitEtreDuplique(texteSupport)
       ? `<div class="texte-support-copie" style="font-size:8px;line-height:1.3;border-top:1px dashed #999;margin-top:10px;padding-top:6px;">
   <strong>Copie pour photocopie (2<sup>e</sup> exemplaire) :</strong>
@@ -886,10 +981,12 @@ function estExpressionEcrite({ discipline, lecon, theme, activite }) {
 
 // Référentiel partagé des caractéristiques langagières par type de texte,
 // utilisé à la fois pour les "entrées" du tableau de vérification en Lecture
-// méthodique et pour les "Outils de la langue à utiliser" en Expression
-// écrite — garantit que les deux activités restent cohérentes sur un même
-// type de texte au lieu que chaque fiche invente librement ses propres
-// entrées. À compléter progressivement (seuls 4 types couverts pour l'instant).
+// méthodique et pour la section III "Outils de la langue" du tableau 5
+// colonnes en Expression écrite (JAMAIS un tableau séparé — voir
+// construireInstructionsExpressionEcriture) — garantit que les deux activités
+// restent cohérentes sur un même type de texte au lieu que chaque fiche
+// invente librement ses propres entrées. À compléter progressivement (seuls
+// 4 types couverts pour l'instant).
 const REFERENTIEL_TYPES_TEXTE = {
   'texte explicatif': [
     { categorie: 'lexique', description: 'vocabulaire technique/scientifique, champ lexical du phénomène expliqué' },
@@ -1012,6 +1109,10 @@ TABLEAU HABILETÉS ET CONTENUS (2 colonnes : Habiletés | Contenus), placé avan
 TABLEAU SUPPORTS DIDACTIQUES / BIBLIOGRAPHIE (2 colonnes, juste après la Situation d'apprentissage) : la colonne « Supports didactiques » indique la source du texte/support utilisé ; la colonne « Bibliographie » REPREND EXACTEMENT LE MÊME CONTENU que la colonne « Supports didactiques » (les deux colonnes doivent être identiques — ne jamais la laisser vide, ni y mettre autre chose que ce contenu dupliqué).
 
 TABLEAU 5 COLONNES — la ligne d'en-tête (Moments didactiques/Durée | Stratégies | Activités de l'enseignant | Activités des élèves | Traces écrites) n'apparaît QU'UNE SEULE FOIS, en haut du tableau, jamais répétée sur les pages suivantes en cas de saut de page.
+
+NE CRÉE JAMAIS de tableau séparé intitulé « Outils de la langue à utiliser » (ni aucun autre tableau annexe portant ce contenu) entre le tableau Supports didactiques/Bibliographie et le tableau 5 colonnes : les outils de la langue (grammaticaux et lexicaux) sont intégrés UNIQUEMENT dans la section III (« Outils de la langue ») du tableau 5 colonnes ci-dessous, jamais dupliqués ailleurs dans le document.
+
+CONTRAINTE DE MISE EN PAGE DU TEXTE SUPPORT (modèle que les élèves doivent observer et reproduire) : il DOIT tenir sur une seule page, sans jamais déborder sur une deuxième, pour que sa mise en forme (en-tête, alinéas, disposition, espacement de la formule de politesse...) reste observable d'un coup d'œil — cette règle vaut à l'identique, que le texte support soit fourni par l'enseignant (collé ou importé) ou que tu doives en proposer un exemple toi-même faute de texte fourni. Utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}} pour un texte fourni (une seule fois, jamais {{TEXTE_SUPPORT_COPIE}} : pas de duplication en Expression écrite, contrairement à la Lecture méthodique). Si tu dois rédiger toi-même l'exemple, reste sous les 250 mots et places-le dans une balise <div class="texte-support-page-unique">.
 
 PHASE DE PRÉSENTATION (première ligne du tableau 5 colonnes, 5 à 10 mn) — rituel obligatoire, sous forme d'échanges questions/réponses alignés 1 pour 1 entre Activités de l'enseignant et Activités des élèves :
    - « Quelle activité avons-nous aujourd'hui ? »
@@ -1803,12 +1904,27 @@ ${planCours ? `\nPLAN DE COURS FOURNI :\n${planCours}\n\nAdapte ce plan au forma
 Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     }
 
+    const estFicheExpressionEcrite = estExpressionEcrite({ discipline, lecon, theme, activite });
+
     if (texteSupport) {
       const motsTexteSupport = compterMots(texteSupport);
-      const instructionDuplication = texteSupportDoitEtreDuplique(texteSupport)
-        ? `Ce texte support fait environ ${motsTexteSupport} mots : assez court pour tenir deux fois sur la même page. Immédiatement APRÈS le marqueur {{TEXTE_SUPPORT}}, ajoute le marqueur exact {{TEXTE_SUPPORT_COPIE}} pour insérer un second exemplaire en police réduite (permet à l'enseignant de photocopier une seule feuille et distribuer deux exemplaires, économie de papier).`
-        : `Ce texte support fait environ ${motsTexteSupport} mots : trop long pour être dupliqué sur la même page. N'ajoute PAS de second exemplaire — utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois, sans {{TEXTE_SUPPORT_COPIE}}.`;
-      userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} à l'endroit où le texte doit apparaître dans le HTML. ${instructionDuplication}\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
+      let instructionMiseEnPage;
+      if (estFicheExpressionEcrite) {
+        instructionMiseEnPage = texteSupportRisqueDeDeborder(motsTexteSupport)
+          ? `Ce texte support fait environ ${motsTexteSupport} mots : même en réduisant la police, il risque de déborder sur une deuxième page. Utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois, sans {{TEXTE_SUPPORT_COPIE}} (pas de duplication en Expression écrite).`
+          : `Ce texte support fait environ ${motsTexteSupport} mots : utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois (jamais {{TEXTE_SUPPORT_COPIE}}, pas de duplication en Expression écrite) — la police sera automatiquement ajustée côté serveur pour qu'il tienne sur une seule page.`;
+        if (texteSupportRisqueDeDeborder(motsTexteSupport)) {
+          const avertissementLongueur = `Le texte support fourni (~${motsTexteSupport} mots) risque de déborder sur une deuxième page malgré la réduction automatique de police — envisagez de le raccourcir pour préserver la lisibilité de sa mise en forme.`;
+          avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementLongueur}` : avertissementLongueur;
+        }
+      } else {
+        instructionMiseEnPage = texteSupportDoitEtreDuplique(texteSupport)
+          ? `Ce texte support fait environ ${motsTexteSupport} mots : assez court pour tenir deux fois sur la même page. Immédiatement APRÈS le marqueur {{TEXTE_SUPPORT}}, ajoute le marqueur exact {{TEXTE_SUPPORT_COPIE}} pour insérer un second exemplaire en police réduite (permet à l'enseignant de photocopier une seule feuille et distribuer deux exemplaires, économie de papier).`
+          : `Ce texte support fait environ ${motsTexteSupport} mots : trop long pour être dupliqué sur la même page. N'ajoute PAS de second exemplaire — utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois, sans {{TEXTE_SUPPORT_COPIE}}.`;
+      }
+      userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} à l'endroit où le texte doit apparaître dans le HTML. ${instructionMiseEnPage}\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
+    } else if (estFicheExpressionEcrite) {
+      userMessage += `\n\nAucun texte support n'a été fourni par l'enseignant : si tu dois toi-même rédiger un exemple de texte (lettre, etc.) à titre de modèle, reste sous les 250 mots afin qu'il tienne sur une seule page (mise en forme observable d'un coup d'œil par les élèves), et places-le dans une balise <div class="texte-support-page-unique">...</div> pour qu'il bénéficie du même traitement de mise en page qu'un texte support fourni par l'enseignant.`;
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -1844,7 +1960,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
       }
-      contenuHTML = injecterTexteSupport(contenuHTML, texteSupport);
+      contenuHTML = injecterTexteSupport(contenuHTML, texteSupport, { unePage: estFicheExpressionEcrite });
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
         discipline, classe, lecon, seance, duree, niveau,
