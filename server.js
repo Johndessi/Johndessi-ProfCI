@@ -995,11 +995,39 @@ IV. BILAN GÉNÉRAL :
 }
 
 function construireInstructionsExpressionEcriture(referentiel) {
-  if (!referentiel) return '';
+  const consigneOutils = referentiel
+    ? `Les catégories ci-dessous sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » — reprends EXACTEMENT ces catégories (ni plus, ni moins, ne pas en inventer d'autres), chacune reformulée en une consigne concrète adaptée au thème précis de la leçon :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}`
+    : `Aucun référentiel de catégories n'est disponible pour ce type de texte précis : détermine toi-même les outils de la langue (grammaticaux et lexicaux) les plus pertinents, à partir d'une analyse rigoureuse du genre de texte demandé.`;
+
   return `
 
-OUTILS DE LA LANGUE À UTILISER — section obligatoire pour cette fiche d'Expression écrite (type de texte détecté : « ${referentiel.typeTexte} »). Insère dans la fiche une section/tableau intitulé « Outils de la langue à utiliser » qui liste EXACTEMENT les catégories suivantes (ni plus, ni moins, ne pas en inventer d'autres), chacune reformulée en une consigne concrète adaptée au thème précis de la leçon :
-${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}`;
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPRESSION ÉCRITE (cette fiche est une expression écrite : les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, l'ORDRE des tableaux, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête garde son format standard — libellés en gras à gauche, valeur à droite, jamais de répétition du mot "Leçon"/"Séance" déjà présent dans le libellé.) :
+
+Ce squelette est IDENTIQUE quel que soit le niveau (6e à 3e) et quel que soit le genre de texte (lettre, portrait, texte explicatif, résumé, compte-rendu, dialogue argumentatif, description...) : seul le contenu injecté (habiletés, situation, textes, outils de langue) change, jamais la structure ni l'ordre des tableaux ci-dessous.
+
+ORDRE OBLIGATOIRE DES ÉLÉMENTS (remplace l'ordre générique "Situation puis Habiletés" décrit plus haut) : Entête, PUIS Tableau Habiletés/Contenus, PUIS Situation d'apprentissage, PUIS Tableau Supports didactiques/Bibliographie, PUIS Tableau 5 colonnes. Le tableau Habiletés/Contenus vient TOUJOURS AVANT la Situation d'apprentissage pour cette activité (jamais après, contrairement à l'ordre par défaut).
+
+TABLEAU HABILETÉS ET CONTENUS (2 colonnes : Habiletés | Contenus), placé avant la Situation d'apprentissage — généré DYNAMIQUEMENT à partir du genre de texte et de la leçon en cours, JAMAIS codé en dur pour un seul type de texte : colonne 1 = verbes taxonomiques pertinents pour CETTE leçon (le nombre et l'ordre varient librement selon la leçon — ex. Identifier, Définir, Utiliser, Organiser, Appliquer — ne fige jamais une liste unique valable pour tous les genres) ; colonne 2 = le contenu associé à chaque verbe, spécifique au genre de texte/à la séance en cours.
+
+TABLEAU SUPPORTS DIDACTIQUES / BIBLIOGRAPHIE (2 colonnes, juste après la Situation d'apprentissage) : la colonne « Supports didactiques » indique la source du texte/support utilisé ; la colonne « Bibliographie » REPREND EXACTEMENT LE MÊME CONTENU que la colonne « Supports didactiques » (les deux colonnes doivent être identiques — ne jamais la laisser vide, ni y mettre autre chose que ce contenu dupliqué).
+
+TABLEAU 5 COLONNES — la ligne d'en-tête (Moments didactiques/Durée | Stratégies | Activités de l'enseignant | Activités des élèves | Traces écrites) n'apparaît QU'UNE SEULE FOIS, en haut du tableau, jamais répétée sur les pages suivantes en cas de saut de page.
+
+PHASE DE PRÉSENTATION (première ligne du tableau 5 colonnes, 5 à 10 mn) — rituel obligatoire, sous forme d'échanges questions/réponses alignés 1 pour 1 entre Activités de l'enseignant et Activités des élèves :
+   - « Quelle activité avons-nous aujourd'hui ? »
+   - Rappel des notions/moyens déjà vus par les élèves en lien avec la leçon du jour (ex. « quels types de textes/moyens de communication avez-vous déjà rencontrés ? »).
+   - Annonce du thème du jour (« aujourd'hui nous allons étudier... »).
+   - Le professeur écrit la situation d'apprentissage dans un coin du tableau.
+   - SI la séance est la suite d'une leçon déjà entamée (Séance 2, 3...) : l'enseignant rappelle D'ABORD la leçon et la séance précédentes, AVANT d'annoncer la nouvelle séance — ne traite JAMAIS une séance 2/3 comme si c'était une nouvelle leçon.
+
+DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa propre ligne numérotée du tableau DÉROULEMENT (jamais fusionnés entre eux, jamais réordonnés) :
+   I. DÉFINITION — définir le genre de texte étudié.
+   II. STRUCTURE/CARACTÉRISTIQUES — selon le genre de texte (ex. présentation matérielle d'une lettre, plan d'un texte explicatif...).
+   III. OUTILS DE LA LANGUE (grammaticaux et lexicaux) — ${consigneOutils}
+   IV. RECHERCHE ET ORGANISATION DES IDÉES — un tableau à 3 colonnes Introduction | Développement | Conclusion, rempli en Traces écrites avec les idées dégagées collectivement par les élèves pour LE sujet/la situation du jour. CE TABLEAU EST UN ÉLÉMENT AUTONOME DU DOCUMENT HTML, placé juste après la ligne IV du tableau DÉROULEMENT — JAMAIS imbriqué à l'intérieur d'une cellule <td>/<th> d'un autre tableau (un tableau HTML ne doit jamais en contenir un autre dans une de ses cellules, nulle part dans la fiche).
+   V. RÉDACTION COLLECTIVE — élaboration collective, à l'oral puis à l'écrit, d'un texte modèle à partir du plan Introduction/Développement/Conclusion ci-dessus.
+
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose une SITUATION NOUVELLE, non traitée en classe (sujet différent de celui exploité en développement), demandant à l'élève de rédiger SEUL un texte du même genre en réinvestissant la définition, la structure et les outils de la langue vus plus haut.`;
 }
 
 function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
@@ -1600,9 +1628,8 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       if (estLM) {
         systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexte);
       } else if (estEE) {
-        if (referentielTypeTexte) {
-          systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
-        } else {
+        systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
+        if (!referentielTypeTexte) {
           const avertissementReferentiel = `Aucun référentiel de type de texte disponible pour cette leçon d'Expression écrite ("${lecon}") — les outils de la langue proposés restent une estimation libre du modèle.`;
           avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementReferentiel}` : avertissementReferentiel;
         }
