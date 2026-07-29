@@ -884,76 +884,167 @@ function estExpressionEcrite({ discipline, lecon, theme, activite }) {
   return cible.includes('expression ecrite');
 }
 
+// Palier de la classe pour l'adaptation par niveau de la Lecture méthodique
+// (tonalité, figures de style) : 6e/5e retirent des notions de lycée que les
+// élèves de début de collège n'ont pas encore. Toute classe non reconnue
+// (2nde, 1ère, Tle...) retombe sur "lycee", le comportement le plus permissif
+// et donc le plus sûr par défaut (celui d'avant ce correctif).
+function niveauLectureMethodique(classe) {
+  const c = normaliserTexte(classe);
+  if (/^6/.test(c)) return '6e';
+  if (/^5/.test(c)) return '5e';
+  if (/^4/.test(c) || /^3/.test(c)) return '4e_3e';
+  return 'lycee';
+}
+
 // Référentiel partagé des caractéristiques langagières par type de texte,
 // utilisé à la fois pour les "entrées" du tableau de vérification en Lecture
 // méthodique et pour les "Outils de la langue à utiliser" en Expression
 // écrite — garantit que les deux activités restent cohérentes sur un même
 // type de texte au lieu que chaque fiche invente librement ses propres
 // entrées. À compléter progressivement (seuls 4 types couverts pour l'instant).
+// Socle d'outils de base pour la Lecture méthodique en collège (6e/5e/4e/3e) :
+// des notions de langue simples, communes à tout type de texte, disponibles
+// AVANT les procédés stylistiques plus fins réservés au lycée dans
+// "caracteristiques" (liste complète, historique, par type de texte, ci-dessous).
+const OUTILS_BASE_LECTURE_COLLEGE = [
+  { categorie: 'structure_texte', description: 'organisation du texte (introduction / développement / conclusion, ou parties selon le type de texte)' },
+  { categorie: 'indices_personne', description: 'pronoms personnels et marques de la personne (je/tu/il/elle...)' },
+  { categorie: 'types_phrases', description: 'types de phrases (déclarative, interrogative, exclamative, impérative)' },
+  { categorie: 'temps_verbaux', description: 'temps verbaux dominants et leur valeur' },
+  { categorie: 'lexique', description: 'vocabulaire et champ lexical du thème' },
+  { categorie: 'indices_spatiaux', description: 'indices de lieu (prépositions, adverbes de lieu)' },
+  { categorie: 'verbes_etat', description: "verbes d'état (être, sembler, paraître, devenir...)" },
+  { categorie: 'mode', description: 'mode verbal (indicatif, impératif...)' }
+];
+
+// Figures de style disponibles par palier collège, ajoutées progressivement.
+// Le "UNIQUEMENT si..." est répété ici (pas seulement dans consigneEntrees) car
+// cette liste peut être citée isolément par formaterCaracteristiquesReferentiel.
+function figureStyleParNiveauCollege(niveau) {
+  const listes = {
+    '6e': 'comparaison, métaphore, énumération/gradation',
+    '5e': 'comparaison, métaphore, énumération/gradation, hyperbole',
+    '4e_3e': 'comparaison, métaphore, énumération/gradation, hyperbole, personnification'
+  };
+  return { categorie: 'figures_style', description: `${listes[niveau]} — UNIQUEMENT si réellement présentes dans le texte support, jamais de façon systématique` };
+}
+
+function entreesLectureCollege(niveau) {
+  return [...OUTILS_BASE_LECTURE_COLLEGE, figureStyleParNiveauCollege(niveau)];
+}
+
 const REFERENTIEL_TYPES_TEXTE = {
-  'texte explicatif': [
-    { categorie: 'lexique', description: 'vocabulaire technique/scientifique, champ lexical du phénomène expliqué' },
-    { categorie: 'temps_verbaux', description: 'présent de vérité générale (valeur de permanence)' },
-    { categorie: 'types_phrases', description: 'phrases déclaratives' },
-    { categorie: 'donnees_chiffrees', description: "statistiques, mesures, proportions appuyant l'explication" },
-    { categorie: 'connecteurs_logiques', description: "d'abord, ensuite, en effet, au final — articulation causale/chronologique" }
-  ],
-  'lettre personnelle': [
-    { categorie: 'presentation_materielle', description: "en-tête (lieu, date), formule d'appel, corps (introductive/développement/finale), signature" },
-    { categorie: 'indices_personne', description: 'pronoms personnels je/tu selon relation expéditeur-destinataire' },
-    { categorie: 'registre_langue', description: 'standard ou familier selon la relation' },
-    { categorie: 'types_phrases', description: 'déclaratives pour exprimer une certitude/intention' }
-  ],
-  'portrait': [
-    { categorie: 'lexique', description: 'vocabulaire évaluatif (appréciatif/dépréciatif), champs lexicaux physiques/moraux' },
-    { categorie: 'images', description: 'comparaisons' },
-    { categorie: 'temps_verbaux', description: "imparfait et présent de l'indicatif (effet de réalisme)" },
-    { categorie: 'adjectifs', description: 'adjectifs qualificatifs' },
-    { categorie: 'verbes', description: "verbes d'état" },
-    { categorie: 'structure', description: 'introduction / développement / conclusion' }
-  ],
-  'texte descriptif (objet)': [
-    { categorie: 'lexique', description: 'champ lexical du luxe/de la richesse ou du thème valorisé selon l\'objet' },
-    { categorie: 'adjectifs', description: 'adjectifs qualificatifs valorisants' },
-    { categorie: 'enumeration', description: 'énumération organisée (spatiale : extérieur→intérieur, haut→bas)' },
-    { categorie: 'procedes_stylistiques', description: "exclamations, apostrophe, hyperbole selon l'effet recherché" }
-  ]
+  'texte explicatif': {
+    caracteristiques: [
+      { categorie: 'lexique', description: 'vocabulaire technique/scientifique, champ lexical du phénomène expliqué' },
+      { categorie: 'temps_verbaux', description: 'présent de vérité générale (valeur de permanence)' },
+      { categorie: 'types_phrases', description: 'phrases déclaratives' },
+      { categorie: 'donnees_chiffrees', description: "statistiques, mesures, proportions appuyant l'explication" },
+      { categorie: 'connecteurs_logiques', description: "d'abord, ensuite, en effet, au final — articulation causale/chronologique" }
+    ],
+    entreesParNiveau: { niveau_6e: entreesLectureCollege('6e'), niveau_5e: entreesLectureCollege('5e'), niveau_4e_3e: entreesLectureCollege('4e_3e') }
+  },
+  'lettre personnelle': {
+    caracteristiques: [
+      { categorie: 'presentation_materielle', description: "en-tête (lieu, date), formule d'appel, corps (introductive/développement/finale), signature" },
+      { categorie: 'indices_personne', description: 'pronoms personnels je/tu selon relation expéditeur-destinataire' },
+      { categorie: 'registre_langue', description: 'standard ou familier selon la relation' },
+      { categorie: 'types_phrases', description: 'déclaratives pour exprimer une certitude/intention' }
+    ],
+    entreesParNiveau: { niveau_6e: entreesLectureCollege('6e'), niveau_5e: entreesLectureCollege('5e'), niveau_4e_3e: entreesLectureCollege('4e_3e') }
+  },
+  'portrait': {
+    caracteristiques: [
+      { categorie: 'lexique', description: 'vocabulaire évaluatif (appréciatif/dépréciatif), champs lexicaux physiques/moraux' },
+      { categorie: 'images', description: 'comparaisons' },
+      { categorie: 'temps_verbaux', description: "imparfait et présent de l'indicatif (effet de réalisme)" },
+      { categorie: 'adjectifs', description: 'adjectifs qualificatifs' },
+      { categorie: 'verbes', description: "verbes d'état" },
+      { categorie: 'structure', description: 'introduction / développement / conclusion' }
+    ],
+    entreesParNiveau: { niveau_6e: entreesLectureCollege('6e'), niveau_5e: entreesLectureCollege('5e'), niveau_4e_3e: entreesLectureCollege('4e_3e') }
+  },
+  'texte descriptif (objet)': {
+    caracteristiques: [
+      { categorie: 'lexique', description: 'champ lexical du luxe/de la richesse ou du thème valorisé selon l\'objet' },
+      { categorie: 'adjectifs', description: 'adjectifs qualificatifs valorisants' },
+      { categorie: 'enumeration', description: 'énumération organisée (spatiale : extérieur→intérieur, haut→bas)' },
+      { categorie: 'procedes_stylistiques', description: "exclamations, apostrophe, hyperbole selon l'effet recherché" }
+    ],
+    entreesParNiveau: { niveau_6e: entreesLectureCollege('6e'), niveau_5e: entreesLectureCollege('5e'), niveau_4e_3e: entreesLectureCollege('4e_3e') }
+  }
 };
 
 // Recherche insensible à la casse/accents : correspondance exacte d'abord,
 // puis correspondance partielle (l'un des deux textes contient l'autre) —
 // permet à un enseignant de taper juste "Portrait" ou "texte descriptif"
 // sans connaître la clé exacte du référentiel.
-function trouverReferentielTypeTexte(typeTexteDemande) {
+// "classe" est optionnel : quand omis (cas Expression écrite), le comportement
+// est EXACTEMENT celui d'avant ce correctif -- liste "caracteristiques" complète,
+// non filtrée. Quand fourni (cas Lecture méthodique uniquement), la liste est
+// remplacée par le sous-ensemble adapté au palier (6e/5e/4e_3e), sauf au lycée
+// où "caracteristiques" (comportement historique, sans restriction) reste utilisée.
+function trouverReferentielTypeTexte(typeTexteDemande, classe) {
   const cible = normaliserTexte(typeTexteDemande);
   if (!cible) return null;
   const cles = Object.keys(REFERENTIEL_TYPES_TEXTE);
   const exact = cles.find((cle) => normaliserTexte(cle) === cible);
-  if (exact) return { typeTexte: exact, caracteristiques: REFERENTIEL_TYPES_TEXTE[exact] };
-  const partiel = cles.find((cle) => {
+  const cleTrouvee = exact || cles.find((cle) => {
     const cleNorm = normaliserTexte(cle);
     // retire les qualificatifs entre parenthèses (ex. "texte descriptif (objet)" ->
     // "texte descriptif") pour matcher même quand l'enseignant ne les précise pas.
     const cleCoeur = cleNorm.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
     return cleNorm.includes(cible) || cible.includes(cleNorm) || cible.includes(cleCoeur);
   });
-  return partiel ? { typeTexte: partiel, caracteristiques: REFERENTIEL_TYPES_TEXTE[partiel] } : null;
+  if (!cleTrouvee) return null;
+
+  const entree = REFERENTIEL_TYPES_TEXTE[cleTrouvee];
+  if (classe) {
+    const niveau = niveauLectureMethodique(classe);
+    const caracteristiquesNiveau = niveau === 'lycee' ? entree.caracteristiques : entree.entreesParNiveau[`niveau_${niveau}`];
+    return { typeTexte: cleTrouvee, caracteristiques: caracteristiquesNiveau };
+  }
+  return { typeTexte: cleTrouvee, caracteristiques: entree.caracteristiques };
 }
 
 function formaterCaracteristiquesReferentiel(caracteristiques) {
   return caracteristiques.map((c) => `- ${c.categorie} : ${c.description}`).join('\n');
 }
 
-const HABILETES_LECTURE_METHODIQUE = `  <tr><td style="border:1px solid #000;padding:6px;">Connaître</td><td style="border:1px solid #000;padding:6px;">le thème étudié</td></tr>
+// Figures citées dans la ligne "Analyser" du tableau Habiletés : même
+// progression par palier que figureStyleParNiveauCollege ci-dessus, mais en
+// une seule chaîne (pas un objet {categorie, description}) puisqu'elle
+// s'insère directement dans le texte de la ligne. Au lycée, texte inchangé.
+function figuresAnalyserParNiveau(niveau) {
+  if (niveau === '6e') return 'comparaison, métaphore, énumération/gradation';
+  if (niveau === '5e') return 'comparaison, métaphore, énumération/gradation, hyperbole';
+  if (niveau === '4e_3e') return 'comparaison, métaphore, énumération/gradation, hyperbole, personnification';
+  return 'figures de style';
+}
+
+function habiletesLectureMethodique(niveau) {
+  return `  <tr><td style="border:1px solid #000;padding:6px;">Connaître</td><td style="border:1px solid #000;padding:6px;">le thème étudié</td></tr>
   <tr><td style="border:1px solid #000;padding:6px;">Identifier</td><td style="border:1px solid #000;padding:6px;">les outils de la langue pertinents / les champs lexicaux liés au thème</td></tr>
-  <tr><td style="border:1px solid #000;padding:6px;">Analyser</td><td style="border:1px solid #000;padding:6px;">les procédés utilisés (choix lexicaux, temps verbaux, types de phrases, figures de style...)</td></tr>
+  <tr><td style="border:1px solid #000;padding:6px;">Analyser</td><td style="border:1px solid #000;padding:6px;">les procédés utilisés (choix lexicaux, temps verbaux, types de phrases, ${figuresAnalyserParNiveau(niveau)}...)</td></tr>
   <tr><td style="border:1px solid #000;padding:6px;">Interpréter</td><td style="border:1px solid #000;padding:6px;">les effets produits sur le lecteur par ces procédés</td></tr>
   <tr><td style="border:1px solid #000;padding:6px;">Appliquer</td><td style="border:1px solid #000;padding:6px;">la démarche de la lecture méthodique</td></tr>`;
+}
 
-function construireInstructionsLectureMethodique(referentiel) {
+function construireInstructionsLectureMethodique(referentiel, classe) {
+  const niveau = niveauLectureMethodique(classe);
+  const reglesFiguresReelles = ' Les figures de style éventuellement listées ci-dessus ne sont que des possibilités : n\'utilise QUE celles réellement présentes dans le texte support fourni, jamais de façon systématique — si aucune de ces figures n\'apparaît dans le texte, n\'en invente aucune et appuie-toi sur les autres catégories.';
   const consigneEntrees = referentiel
-    ? `Les « entrées » possibles pour les 2 tableaux d'axes sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » ci-dessous — pioche EXCLUSIVEMENT dans ces catégories (tu peux n'en utiliser qu'une partie selon les 2 axes retenus, mais n'en invente AUCUNE en dehors de cette liste) :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}\n\nLes relevés précis (citations, exemples tirés du texte) restent bien sûr propres à CE texte : seules les catégories/étiquettes des « entrées » sont fixées par le référentiel.`
-    : `Aucun référentiel de caractéristiques n'est disponible pour ce type de texte précis : détermine les « entrées » les plus pertinentes toi-même, à partir d'une analyse rigoureuse du texte.`;
+    ? `Les « entrées » possibles pour les 2 tableaux d'axes sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » ci-dessous — pioche EXCLUSIVEMENT dans ces catégories (tu peux n'en utiliser qu'une partie selon les 2 axes retenus, mais n'en invente AUCUNE en dehors de cette liste) :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}\n\nLes relevés précis (citations, exemples tirés du texte) restent bien sûr propres à CE texte : seules les catégories/étiquettes des « entrées » sont fixées par le référentiel.${reglesFiguresReelles}`
+    : `Aucun référentiel de caractéristiques n'est disponible pour ce type de texte précis : détermine les « entrées » les plus pertinentes toi-même, à partir d'une analyse rigoureuse du texte.${reglesFiguresReelles}`;
+
+  // 6e/5e : les élèves de début de collège n'ont pas encore la notion de
+  // tonalité littéraire -- retirée de la question de lecture ET de la phrase
+  // qui en dérive l'hypothèse générale, pour rester cohérent avec ce qui a
+  // réellement été établi en I. Inchangé à partir de 4e (comportement
+  // historique).
+  const questionTonalite = (niveau === '6e' || niveau === '5e') ? '' : ' Quelle est sa tonalité ?';
+  const composantesHypothese = (niveau === '6e' || niveau === '5e') ? 'de la nature + le thème identifiés en I' : 'de la nature + la tonalité + le thème identifiés en I';
 
   return `
 
@@ -962,16 +1053,16 @@ STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE (cette fiche est une l
 CONTRAINTE SUR LA LIGNE PRÉSENTATION RITUELLE (avant "I. Présentation du texte") : cette phase d'accueil ne doit JAMAIS révéler le thème précis du texte étudié, ni aucune conclusion, idée ou information tirée de son contenu. Reste strictement générique (ex. « un texte que nous allons découvrir ensemble », « la leçon du jour »). En particulier, les étapes (h) Identification de la notion à partir de la situation et (i) Annonce du titre officiel de la leçon ne doivent mentionner QUE le titre officiel de la leçon/l'activité (ex. « La description »), jamais le sujet précis du texte qui sera étudié (ex. jamais « nous allons étudier un texte sur un avion »). La découverte du thème se fait UNIQUEMENT via le questionnement guidé de la phase I ci-dessous.
 
 TABLEAU HABILETÉS ET CONTENUS — formule FIXE ci-dessous, obligatoire pour toute lecture méthodique, NE JAMAIS la réinventer ni l'adapter au texte :
-${HABILETES_LECTURE_METHODIQUE}
+${habiletesLectureMethodique(niveau)}
 
 DÉVELOPPEMENT — remplace la règle "ligne Développement unique" : utilise OBLIGATOIREMENT 4 lignes numérotées I à IV dans le tableau DÉROULEMENT (jamais moins, jamais plus), chacune avec les 5 colonnes standard (Moments didactiques/Durée | Stratégies pédagogiques/Plan du cours | Activités de l'enseignant | Activités des élèves | Traces écrites) :
 
 I. PRÉSENTATION (du texte, distincte de la ligne PRÉSENTATION rituelle du début de séance) — uniquement sous forme de QUESTIONS-RÉPONSES, jamais de texte narratif :
    - Quel est le titre du texte ? Quelle est la source/l'édition ? Qui est l'auteur (si applicable) ? → à partir de ces réponses, rédige la présentation en Traces écrites (1 à 2 phrases seulement).
    - Lecture silencieuse : question ouverte « De quoi peut-il s'agir ? »
-   - Lecture magistrale, puis questions : Quelle est la nature du texte ? Quelle est sa tonalité ? Quel est son thème ?
+   - Lecture magistrale, puis questions : Quelle est la nature du texte ?${questionTonalite} Quel est son thème ?
 
-II. HYPOTHÈSE GÉNÉRALE — UNE SEULE phrase, dérivée EXPLICITEMENT de la nature + la tonalité + le thème identifiés en I. Ne la donne JAMAIS d'emblée : présente-la comme la synthèse/déduction des réponses précédentes (question du type « À partir de ce que nous venons d'identifier, quelle hypothèse pouvons-nous formuler sur ce texte ? »).
+II. HYPOTHÈSE GÉNÉRALE — UNE SEULE phrase, dérivée EXPLICITEMENT ${composantesHypothese}. Ne la donne JAMAIS d'emblée : présente-la comme la synthèse/déduction des réponses précédentes (question du type « À partir de ce que nous venons d'identifier, quelle hypothèse pouvons-nous formuler sur ce texte ? »).
 
 III. VÉRIFICATION DE L'HYPOTHÈSE GÉNÉRALE :
    1. Détermination des axes de lecture : EXACTEMENT 2 axes (jamais 3, jamais 4), obtenus en décomposant l'hypothèse générale en ses deux composantes.
@@ -1590,10 +1681,14 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
     if (niveau !== 'primaire') {
       const estLM = estLectureMethodique({ discipline, lecon, theme, activite });
       const estEE = estExpressionEcrite({ discipline, lecon, theme, activite });
+      // Appel SANS classe : comportement inchangé (référentiel complet, non
+      // filtré par niveau), utilisé par Expression écrite ci-dessous. Lecture
+      // méthodique utilise son propre appel avec classe, isolé, juste après.
       const referentielTypeTexte = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`);
 
       if (estLM) {
-        systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexte);
+        const referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
+        systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
       } else if (estEE) {
         if (referentielTypeTexte) {
           systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
