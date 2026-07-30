@@ -1214,6 +1214,59 @@ IV. BILAN GÉNÉRAL :
    - INTERDICTION ABSOLUE de remplacer ceci par des questions de compréhension du texte (ex. « qui est le narrateur ? », « que ressent-il ? ») : l'évaluation teste la maîtrise de la MÉTHODE de lecture méthodique, pas la compréhension du contenu.`;
 }
 
+// Seuil arbitraire mais raisonnable pour distinguer un vrai plan de cours rédigé
+// (plusieurs phrases, généralement structuré autour de ses propres repères
+// I/II/III/IV) d'un champ vide ou d'un texte insignifiant tapé par erreur. Pas
+// besoin d'exiger la présence des repères eux-mêmes ici : leur détection est
+// laissée au modèle (voir construireInstructionsLectureMethodiqueAvecPlanEnseignant).
+const SEUIL_PLAN_COURS_SUBSTANTIEL_CARACTERES = 60;
+
+function planCoursEstSubstantiel(planCours) {
+  return (planCours || '').toString().trim().length >= SEUIL_PLAN_COURS_SUBSTANTIEL_CARACTERES;
+}
+
+// Mode "plan fourni par l'enseignant" -- ALTERNATIF à construireInstructionsLectureMethodique
+// ci-dessus (qui reste utilisée telle quelle quand ce mode n'est pas déclenché,
+// cf. planCoursEstSubstantiel) : ici, l'enseignant a rédigé lui-même l'intégralité
+// du contenu pédagogique (hypothèse, axes, analyses, interprétations) dans le
+// champ Plan du cours -- l'IA ne fait plus que le structurer, le corriger et le
+// mettre en forme, jamais l'inventer. Ajouté pour contourner les bugs récurrents
+// de la génération automatique (incohérence hypothèse/axes, texte support
+// dupliqué) sans attendre que cette génération soit parfaite : les enseignants
+// qui ont déjà un plan rédigé peuvent tester la mise en page dès maintenant.
+function construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours) {
+  const niveau = niveauLectureMethodique(classe);
+
+  return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE, MODE "PLAN FOURNI PAR L'ENSEIGNANT" (cette fiche est une lecture méthodique dont l'enseignant a rédigé lui-même l'intégralité du contenu pédagogique du développement -- hypothèse, axes, analyses, interprétations -- dans le "PLAN DE COURS FOURNI PAR L'ENSEIGNANT" reproduit à la fin de ce message. Les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut, ainsi que TOUTES les règles de génération de contenu pédagogique du mode automatique de Lecture méthodique décrit par ailleurs dans ce message -- aucune d'elles ne s'applique ici) :
+
+RÈGLE ABSOLUE — AUCUN CONTENU PÉDAGOGIQUE INVENTÉ : tu ne dois JAMAIS inventer, compléter ou reformuler substantiellement l'hypothèse générale, les axes de lecture, les entrées des tableaux de vérification, les analyses ou les interprétations. Tout ce contenu vient à 100% du texte de l'enseignant reproduit plus bas. Ton seul travail sur ce texte est : (a) corriger l'orthographe et la grammaire, sans changer le sens ni les idées ; (b) le répartir dans les bonnes cellules du tableau attendu ci-dessous ; (c) le mettre en forme HTML. N'ajoute AUCUNE phrase, idée, exemple ou relevé qui ne soit pas déjà présent, même reformulé, dans le texte de l'enseignant.
+
+CONTRAINTE SUR LA LIGNE PRÉSENTATION RITUELLE (avant "I. Présentation du texte", début de séance) : inchangée par rapport au mode automatique -- cette phase d'accueil ne doit JAMAIS révéler le thème précis du texte étudié. Reste strictement générique (ex. « un texte que nous allons découvrir ensemble »). Ne la rédige toi-même que si l'enseignant ne l'a pas incluse dans son plan.
+
+TEXTE SUPPORT — UNE SEULE INSERTION DANS TOUT LE DOCUMENT : utilise le marqueur {{TEXTE_SUPPORT}} UNE SEULE FOIS, à un seul endroit de la fiche (par exemple avec la partie I. Présentation). Ne le recopie, ne le mentionne et ne le réinsère JAMAIS une deuxième fois ailleurs -- en particulier JAMAIS entre le tableau de vérification de l'Axe 1 et celui de l'Axe 2, ni entre aucun autre tableau. Une seule occurrence du marqueur, nulle part ailleurs dans le document.
+
+SUPPORTS DIDACTIQUES/BIBLIOGRAPHIE — structure en tableau à deux colonnes inchangée ; le contenu de la colonne Supports didactiques doit mentionner explicitement que le texte support est photocopié et distribué en un exemplaire par élève -- JAMAIS recopié au tableau ni affiché.
+
+TABLEAU HABILETÉS ET CONTENUS — formule FIXE ci-dessous, obligatoire pour toute lecture méthodique, NE JAMAIS la réinventer ni l'adapter au texte (élément mécanique, non concerné par le plan de l'enseignant) :
+${habiletesLectureMethodique(niveau)}
+
+DÉVELOPPEMENT — utilise OBLIGATOIREMENT 4 lignes numérotées I à IV dans le tableau DÉROULEMENT (jamais moins, jamais plus), chacune avec les 5 colonnes standard (Moments didactiques/Durée | Stratégies pédagogiques/Plan du cours | Activités de l'enseignant | Activités des élèves | Traces écrites), PLUS une ligne ÉVALUATION distincte si l'enseignant en a rédigé une.
+
+DÉTECTION DES PARTIES DANS LE PLAN DE L'ENSEIGNANT : son texte utilise ses propres repères (« I. », « II. », « III. », « IV. », éventuellement « Évaluation ») pour indiquer les grandes parties de son déroulement. Identifie ces repères et range leur contenu textuel (une fois corrigé orthographiquement/grammaticalement) dans les lignes correspondantes, avec EXACTEMENT la même correspondance que le mode automatique :
+   I. Présentation du texte (peut inclure la situation d'apprentissage si l'enseignant l'y a intégrée) -- son texte réparti entre Activités de l'enseignant / Activités des élèves / Traces écrites, selon ce qu'il a écrit.
+   II. Hypothèse générale -- reprends l'hypothèse EXACTEMENT telle qu'écrite par l'enseignant (corrigée orthographiquement), en Traces écrites de la ligne II.
+   III. Vérification / axes de lecture -- le libellé des 2 axes tels qu'écrits par l'enseignant va en Traces écrites de la ligne III. Pour CHAQUE axe qu'il a rédigé, construis un tableau à 4 colonnes (Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations) reprenant FIDÈLEMENT (corrigé orthographiquement seulement) les entrées/indices/analyses/interprétations qu'il a lui-même écrites pour cet axe. Ce tableau COMMENCE par une ligne-titre fusionnée sur les 4 colonnes (<td colspan="4">) annonçant le nom de l'axe tel qu'écrit par l'enseignant. CES 2 TABLEAUX SONT DES ÉLÉMENTS AUTONOMES DU DOCUMENT HTML, PLACÉS APRÈS LE TABLEAU DÉROULEMENT COMPLET (donc en dehors de toute balise <td>/<th>) -- JAMAIS imbriqués à l'intérieur d'une cellule d'un autre tableau (rendu illisible en Word/PDF). Si l'enseignant n'a pas structuré un axe en lignes Entrées/Indices/Analyses/Interprétations mais a écrit un texte continu, répartis fidèlement ce texte entre les 4 colonnes sans en changer le contenu ni l'enrichir.
+   IV. Bilan général -- reprends la confrontation hypothèse/bilan telle qu'écrite par l'enseignant ; n'utilise la formule « Notre hypothèse générale est donc vérifiée. » que si l'enseignant confirme lui-même cette vérification dans son texte.
+   Évaluation -- UNIQUEMENT si l'enseignant a rédigé une partie Évaluation dans son plan ; reprends-la fidèlement. Si son plan n'en contient pas, laisse la ligne ÉVALUATION avec des cellules vides plutôt que d'en inventer une.
+
+Si un repère (I, II, III ou IV) est absent du texte de l'enseignant, laisse la ligne ou la cellule correspondante du tableau vide plutôt que d'inventer un contenu pour la compléter.
+
+PLAN DE COURS FOURNI PAR L'ENSEIGNANT (contenu pédagogique à structurer et corriger orthographiquement -- jamais à réinventer) :
+${planCours}`;
+}
+
 function construireInstructionsExpressionEcriture(referentiel) {
   const consigneOutils = referentiel
     ? `Les catégories ci-dessous sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » — reprends EXACTEMENT ces catégories (ni plus, ni moins, ne pas en inventer d'autres), chacune reformulée en une consigne concrète adaptée au thème précis de la leçon :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}`
@@ -1853,8 +1906,17 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       const referentielTypeTexte = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`);
 
       if (estLM) {
-        const referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
-        systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
+        // Mode "plan fourni par l'enseignant" : quand l'enseignant a rédigé
+        // lui-même le contenu pédagogique (hypothèse/axes/analyses), on ne
+        // génère plus rien -- on structure et corrige uniquement. Ajout, pas
+        // remplacement : le mode génération automatique (construireInstructionsLectureMethodique)
+        // reste inchangé et s'applique dès que le plan n'est pas substantiel.
+        if (planCoursEstSubstantiel(planCours)) {
+          systemPrompt += construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours);
+        } else {
+          const referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
+          systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
+        }
       } else if (estEE) {
         systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
         if (!referentielTypeTexte) {
