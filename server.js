@@ -1487,11 +1487,20 @@ function construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planC
   const niveau = niveauLectureMethodique(classe);
   const resultatParsing = parserPlanEnseignant(planCours);
 
+  // Portée de la restriction explicitement bornée au DÉVELOPPEMENT (tableau
+  // de vérification) -- tout le reste de la fiche (entête, Compétence,
+  // Situation d'apprentissage, Habiletés/Contenus, Supports/Bibliographie)
+  // reste à rédiger NORMALEMENT, comme en mode automatique, à partir des
+  // instructions données plus haut/plus bas dans ce message. Reformulé après
+  // un test réel où une formulation trop générale ("REMPLACE... aucune ne
+  // s'applique ici", "ta seule tâche") avait fait disparaître le champ
+  // Compétence -- le modèle avait sur-généralisé la restriction à toute la
+  // fiche au lieu de la seule partie développement/vérification.
   const enteteCommun = `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE, MODE "PLAN FOURNI PAR L'ENSEIGNANT" (cette fiche est une lecture méthodique dont l'enseignant a rédigé lui-même l'intégralité du contenu pédagogique du développement -- hypothèse, axes, analyses, interprétations -- dans le "PLAN DE COURS FOURNI PAR L'ENSEIGNANT" reproduit à la fin de ce message. Les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut, ainsi que TOUTES les règles de génération de contenu pédagogique du mode automatique de Lecture méthodique décrit par ailleurs dans ce message -- aucune d'elles ne s'applique ici) :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE, MODE "PLAN FOURNI PAR L'ENSEIGNANT" (cette fiche est une lecture méthodique dont l'enseignant a rédigé lui-même l'intégralité du contenu pédagogique du développement -- hypothèse, axes, analyses, interprétations. Les instructions ci-dessous concernent UNIQUEMENT le tableau Habiletés/Contenus, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION : elles REMPLACENT, pour ces 3 éléments SEULEMENT, les règles du mode automatique de Lecture méthodique décrites par ailleurs dans ce message. TOUT LE RESTE DE LA FICHE N'EST PAS CONCERNÉ et reste à rédiger NORMALEMENT à partir des instructions générales données ailleurs dans ce message : entête (y compris le champ Compétence, à résoudre exactement comme d'habitude), Situation d'apprentissage, Supports didactiques/Bibliographie ci-dessous.) :
 
-RÈGLE ABSOLUE — AUCUN CONTENU PÉDAGOGIQUE INVENTÉ : tu ne dois JAMAIS inventer, compléter ou reformuler substantiellement l'hypothèse générale, les axes de lecture, les entrées des tableaux de vérification, les analyses ou les interprétations. Tout ce contenu vient à 100% du texte de l'enseignant.
+RÈGLE ABSOLUE, UNIQUEMENT POUR LE CONTENU PÉDAGOGIQUE DU DÉVELOPPEMENT (hypothèse, axes de lecture, entrées des tableaux de vérification, analyses, interprétations) : tu ne dois JAMAIS l'inventer, le compléter ou le reformuler substantiellement. Il vient à 100% du texte de l'enseignant. Cette règle ne concerne QUE ce contenu précis -- elle ne restreint rien d'autre dans la fiche.
 
 CONTRAINTE SUR LA LIGNE PRÉSENTATION RITUELLE (avant "I. Présentation du texte", début de séance) : inchangée par rapport au mode automatique -- cette phase d'accueil ne doit JAMAIS révéler le thème précis du texte étudié. Reste strictement générique (ex. « un texte que nous allons découvrir ensemble »). Ne la rédige toi-même que si l'enseignant ne l'a pas incluse dans son plan.
 
@@ -1503,15 +1512,17 @@ ${habiletesLectureMethodique(niveau)}`;
   if (!resultatParsing.ok) {
     const instructions = enteteCommun + `
 
-ÉCHEC DE LA DÉTECTION AUTOMATIQUE DES PARTIES (${resultatParsing.raison}) : le plan fourni par l'enseignant ne suit pas le format attendu (repères "I.", "II.", "III.", "IV." -- chacun en tout début de ligne, suivi d'un point, d'une parenthèse fermante, de deux-points ou d'un tiret -- manquants, mal placés ou dans le désordre). MODE DE REPLI, obligatoire dans ce cas : place l'INTÉGRALITÉ du texte de l'enseignant (corrigé orthographiquement, jamais réécrit sur le fond) dans la ligne DÉVELOPPEMENT unique du tableau DÉROULEMENT, à l'intérieur d'un bloc commençant EXACTEMENT par : "<strong>⚠ Plan non structuré automatiquement (format des repères I./II./III./IV. non reconnu) :</strong>" suivi du texte de l'enseignant. N'essaie PAS de deviner ou de reconstituer la structure toi-même.
-
-PLAN DE COURS FOURNI PAR L'ENSEIGNANT (contenu à corriger orthographiquement, jamais à réinventer) :
-${planCours}`;
+ÉCHEC DE LA DÉTECTION AUTOMATIQUE DES PARTIES (${resultatParsing.raison}) : le plan fourni par l'enseignant ne suit pas le format attendu (repères "I.", "II.", "III.", "IV." -- chacun en tout début de ligne, suivi d'un point, d'une parenthèse fermante, de deux-points ou d'un tiret -- manquants, mal placés ou dans le désordre). MODE DE REPLI, obligatoire dans ce cas, et UNIQUEMENT pour la partie DÉVELOPPEMENT : place l'INTÉGRALITÉ du texte de l'enseignant (reproduit à la toute fin de ce message, corrigé orthographiquement, jamais réécrit sur le fond) dans la ligne DÉVELOPPEMENT unique du tableau DÉROULEMENT, à l'intérieur d'un bloc commençant EXACTEMENT par : "<strong>⚠ Plan non structuré automatiquement (format des repères I./II./III./IV. non reconnu) :</strong>" suivi du texte de l'enseignant. N'essaie PAS de deviner ou de reconstituer la structure toi-même. Le reste de la fiche (entête, Compétence, Situation, etc.) n'est pas concerné par ce mode de repli.`;
 
     return {
       instructions,
       injectionDeroulement: null,
       injectionAxes: null,
+      // Reproduit APRÈS toutes les autres instructions du message (Leçon/
+      // Séance/Compétence officielles...), jamais juste avant -- pour ne pas
+      // noyer ces instructions sous un pavé de texte brut potentiellement
+      // long (cause probable du champ Compétence disparu constaté en test).
+      planCoursPourPromptFinal: `\n\nPLAN DE COURS FOURNI PAR L'ENSEIGNANT (contenu à corriger orthographiquement, jamais à réinventer, pour la ligne DÉVELOPPEMENT UNIQUEMENT -- ne concerne aucun autre champ de la fiche) :\n${planCours}`,
       avertissement: `Le plan de cours fourni n'a pas pu être structuré automatiquement (${resultatParsing.raison}) : les repères "I.", "II.", "III.", "IV." sont attendus chacun en tout début de ligne. La fiche a été générée en mode de repli (texte non structuré, clairement signalé dans le document) -- corrigez le format des repères et régénérez pour obtenir un tableau correctement réparti.`
     };
   }
@@ -1520,16 +1531,18 @@ ${planCours}`;
 
   const instructions = enteteCommun + `
 
-DÉTECTION RÉUSSIE — le plan de l'enseignant a déjà été segmenté et mis en tableau AUTOMATIQUEMENT, côté serveur (pas par toi), selon ses repères I/II/III/IV${resultatParsing.segments.evaluation ? '/Évaluation' : ''}. Le tableau DÉROULEMENT (lignes I à IV${resultatParsing.segments.evaluation ? ' et Évaluation' : ''}) et le ou les tableaux d'axes sont DÉJÀ CONSTRUITS. Ta seule tâche sur ce contenu est de placer 3 marqueurs au bon endroit, SANS RIEN ÉCRIRE D'AUTRE à leur place :
+DÉTECTION RÉUSSIE — le plan de l'enseignant a déjà été segmenté et mis en tableau AUTOMATIQUEMENT, côté serveur (pas par toi), selon ses repères I/II/III/IV${resultatParsing.segments.evaluation ? '/Évaluation' : ''}. Le tableau DÉROULEMENT (lignes I à IV${resultatParsing.segments.evaluation ? ' et Évaluation' : ''}) et le ou les tableaux d'axes sont DÉJÀ CONSTRUITS. Concernant UNIQUEMENT cette partie développement/vérification (pas le reste de la fiche), ta tâche est de placer 3 marqueurs au bon endroit, sans rien écrire d'autre à leur place :
    1. Dans le tableau DÉROULEMENT (5 colonnes), juste après la ligne PRÉSENTATION rituelle (celle-ci, générique, reste à ta charge comme d'habitude), place EXACTEMENT le marqueur {{DEROULEMENT_PLAN_ENSEIGNANT}} comme SEUL contenu de cette position -- il sera remplacé par les lignes I à IV${resultatParsing.segments.evaluation ? ' et Évaluation' : ''} déjà construites. Referme normalement le tableau juste après (</table>).
    2. Juste APRÈS ce tableau DÉROULEMENT (donc après son </table>, au même niveau que les autres tableaux de la fiche, JAMAIS à l'intérieur d'une cellule), place EXACTEMENT le marqueur {{TEXTE_SUPPORT}} sur sa propre ligne, UNE SEULE FOIS dans tout le document -- il sera remplacé par le texte support fourni par l'enseignant.
    3. Juste après {{TEXTE_SUPPORT}}, place EXACTEMENT le marqueur {{AXES_PLAN_ENSEIGNANT}} sur sa propre ligne -- il sera remplacé par le ou les tableaux d'axes déjà construits.
-N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi-même : il est déjà entièrement construit ; ta seule tâche ici est de placer ces 3 marqueurs, chacun UNE SEULE FOIS, au bon endroit.
+N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi-même pour cette partie : il est déjà entièrement construit. Le reste de la fiche (entête, Compétence, Situation d'apprentissage, Supports/Bibliographie...) n'est PAS concerné par cette restriction et se rédige normalement.`;
 
-PLAN DE COURS FOURNI PAR L'ENSEIGNANT (pour information seulement -- déjà structuré et injecté automatiquement, NE LE RECOPIE PAS) :
-${planCours}`;
-
-  return { instructions, injectionDeroulement: lignesHTML, injectionAxes: axesHTML, avertissement: null };
+  // Le texte brut du plan n'a plus besoin d'être montré au modèle dans le cas
+  // réussi : il ne sert plus qu'à la structuration, déjà faite côté code --
+  // ne pas l'inclure supprime à la fois le risque de dilution des
+  // instructions suivantes (Leçon/Séance/Compétence) et toute tentation du
+  // modèle de réécrire lui-même ce contenu.
+  return { instructions, injectionDeroulement: lignesHTML, injectionAxes: axesHTML, avertissement: null, planCoursPourPromptFinal: null };
 }
 
 // Injecte, comme injecterTexteSupport ci-dessus, le contenu déjà construit
@@ -2208,6 +2221,14 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
           if (resultatPlanFourni.avertissement) {
             avertissementRappel = avertissementRappel ? `${avertissementRappel} ${resultatPlanFourni.avertissement}` : resultatPlanFourni.avertissement;
           }
+          // LOG TEMPORAIRE DE DIAGNOSTIC (à retirer une fois le bug du
+          // tableau de vérification "fracturé" identifié) : imprime le HTML
+          // déjà construit déterministiquement AVANT toute génération par le
+          // modèle, pour distinguer un bug de construction (visible ici) d'un
+          // bug de placement/mélange par le modèle (invisible ici, mais alors
+          // absent du HTML final malgré sa présence ci-dessous).
+          console.log('🔍 [DEBUG plan-enseignant] injectionDeroulement construit :\n' + resultatPlanFourni.injectionDeroulement);
+          console.log('🔍 [DEBUG plan-enseignant] injectionAxes construit :\n' + resultatPlanFourni.injectionAxes);
         } else {
           const referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
           systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
@@ -2359,6 +2380,16 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
       avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementTexte}` : avertissementTexte;
     }
 
+    // Texte brut du plan de l'enseignant (mode plan-enseignant, cas d'échec du
+    // parsing UNIQUEMENT -- cf. construireInstructionsLectureMethodiqueAvecPlanEnseignant)
+    // ajouté ICI, APRÈS toutes les instructions Leçon/Séance/Compétence
+    // ci-dessus, jamais avant : un pavé de texte libre potentiellement long
+    // juste avant ces instructions risquait de noyer leur saillance pour le
+    // modèle (cause probable constatée d'un champ Compétence resté vide).
+    if (planFourniInjection && planFourniInjection.planCoursPourPromptFinal) {
+      systemPrompt += planFourniInjection.planCoursPourPromptFinal;
+    }
+
     let userMessage = '';
     if (modelePersonnel) {
       userMessage = `REPRODUIS exactement la STRUCTURE de ce modèle de fiche pour générer une nouvelle fiche.
@@ -2441,7 +2472,18 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     stream.on('finalMessage', async () => {
       clearInterval(heartbeat);
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
+      // LOG TEMPORAIRE DE DIAGNOSTIC (à retirer avec les logs ci-dessus) :
+      // le HTML BRUT renvoyé par le modèle, AVANT toute injection -- permet
+      // de voir si le modèle a bien placé les 3 marqueurs seuls, ou s'il a
+      // écrit son propre contenu en plus (ce qui expliquerait un tableau
+      // "fracturé"/mélangé après injection).
+      if (planFourniInjection) {
+        console.log('🔍 [DEBUG plan-enseignant] HTML brut du modèle AVANT injection :\n' + contenuHTML);
+      }
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
+      if (planFourniInjection) {
+        console.log('🔍 [DEBUG plan-enseignant] HTML APRÈS injection déroulement/axes :\n' + contenuHTML);
+      }
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
       }
