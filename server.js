@@ -199,13 +199,58 @@ function widthPctFromStyle(style) {
   return m ? parseFloat(m[1]) : null;
 }
 
+function fontSizeFromStyle(style) {
+  const m = /font-size\s*:\s*([\d.]+)\s*px/i.exec(style || '');
+  return m ? parseFloat(m[1]) : null;
+}
+
+// docx exprime la taille de police en demi-points ; à 96 dpi, 1px = 0.75pt,
+// donc demi-points = px * 1.5.
+function pxVersDemiPoints(px) {
+  return Math.round(px * 1.5);
+}
+
+// Convertit récursivement un <div> "texte support" (texte-support,
+// texte-support-page-unique, texte-support-copie...) -- avec son éventuel
+// <h3> de titre et ses sous-divs à taille de police réduite (cf.
+// envelopperTexteSupportUnePage / la copie en Lecture méthodique) -- en
+// paragraphes/tableaux docx, en respectant la taille de police voulue au lieu
+// de l'aplatir en un seul bloc de texte brut sans mise en forme.
+function elementsTexteSupportDepuisDiv($, $div, sizeHalfPtHerite) {
+  const taillePx = fontSizeFromStyle($div.attr('style') || '');
+  const sizeHalfPt = taillePx ? pxVersDemiPoints(taillePx) : sizeHalfPtHerite;
+  const elements = [];
+
+  $div.contents().each((_, enfant) => {
+    if (enfant.type !== 'tag') return;
+    const $enfant = $(enfant);
+    const tagEnfant = enfant.name.toLowerCase();
+    if (tagEnfant === 'div') {
+      elements.push(...elementsTexteSupportDepuisDiv($, $enfant, sizeHalfPt));
+    } else if (tagEnfant === 'h3' || tagEnfant === 'h2') {
+      elements.push(new Paragraph({ children: [new TextRun({ text: $enfant.text().trim(), bold: true, size: sizeHalfPt })], spacing: { before: 120, after: 80 } }));
+    } else if (tagEnfant === 'p') {
+      const runs = collectRuns($, enfant, { size: sizeHalfPt });
+      if (runs.length) elements.push(new Paragraph({ children: runs }));
+    } else if (tagEnfant === 'table') {
+      const table = buildDocxTable($, $enfant);
+      if (table) elements.push(table);
+    } else {
+      const texte = $enfant.text().trim();
+      if (texte) elements.push(new Paragraph({ children: [new TextRun({ text: texte, size: sizeHalfPt })] }));
+    }
+  });
+
+  return elements;
+}
+
 function collectRuns($, el, fmt = {}) {
   let runs = [];
   $(el).contents().each((_, child) => {
     if (child.type === 'text') {
       const text = (child.data || '').replace(/\s+/g, ' ');
       if (text.trim() !== '' || text === ' ') {
-        runs.push(new TextRun({ text, bold: fmt.bold, italics: fmt.italics, color: fmt.color }));
+        runs.push(new TextRun({ text, bold: fmt.bold, italics: fmt.italics, color: fmt.color, size: fmt.size }));
       }
     } else if (child.type === 'tag') {
       const tag = child.name.toLowerCase();
@@ -373,13 +418,20 @@ function contenuToDocxChildren(html) {
     } else if (tag === 'div' && /deroulement/.test(cls)) {
       $node.children().each((_, inner) => {
         const $inner = $(inner);
+        const innerCls = $inner.attr('class') || '';
         if (inner.name === 'h3') {
           elements.push(titrePar($inner.text().trim(), 24));
         } else if (inner.name === 'table') {
           const table = buildDocxTable($, $inner);
           if (table) { elements.push(table); elements.push(new Paragraph({ text: '' })); }
+        } else if (inner.name === 'div' && /texte-support/.test(innerCls)) {
+          elements.push(...elementsTexteSupportDepuisDiv($, $inner));
+          elements.push(new Paragraph({ text: '' }));
         }
       });
+    } else if (tag === 'div' && /texte-support/.test(cls)) {
+      elements.push(...elementsTexteSupportDepuisDiv($, $node));
+      elements.push(new Paragraph({ text: '' }));
     } else if (tag === 'p') {
       const runs = collectRuns($, $node);
       if (runs.length) elements.push(new Paragraph({ children: runs, spacing: { after: 120 } }));
@@ -804,29 +856,72 @@ function texteSupportDoitEtreDuplique(texteSupport) {
   return compterMots(texteSupport) <= SEUIL_DUPLICATION_TEXTE_SUPPORT_MOTS;
 }
 
-function injecterTexteSupport(contenuHTML, texteSupport) {
+// Pour l'Expression écrite : le texte support (lettre/écrit modèle que l'élève
+// doit observer et reproduire) DOIT tenir sur une seule page, quelle que soit
+// son origine (texte fourni par l'enseignant OU exemple généré par l'app) --
+// contrairement à la duplication ci-dessus (2 exemplaires, propre à la
+// photocopie), ici on réduit simplement la police en fonction de la longueur
+// pour que le texte tienne sur une page A4 (corps de fiche en 11px par défaut,
+// cf. genererPdfDepuisHtml). Seuils estimés empiriquement, pas une mesure exacte.
+function taillePoliceTexteSupportUnePage(motsTexteSupport) {
+  if (motsTexteSupport <= 300) return 11;
+  if (motsTexteSupport <= 420) return 9.5;
+  if (motsTexteSupport <= 550) return 8.5;
+  if (motsTexteSupport <= 700) return 7.5;
+  return 7;
+}
+
+// Au-delà de ce nombre de mots, même la police minimale encore lisible (7px)
+// risque de déborder sur une deuxième page une fois l'entête et les marges
+// comptés : on ne réduit pas davantage (illisible), on avertit l'enseignant
+// à la place plutôt que de tronquer silencieusement son texte.
+const SEUIL_DEBORDEMENT_TEXTE_SUPPORT_UNE_PAGE_MOTS = 750;
+
+function texteSupportRisqueDeDeborder(motsTexteSupport) {
+  return motsTexteSupport > SEUIL_DEBORDEMENT_TEXTE_SUPPORT_UNE_PAGE_MOTS;
+}
+
+function envelopperTexteSupportUnePage(texteHtml, motsTexteSupport) {
+  const taille = taillePoliceTexteSupportUnePage(motsTexteSupport);
+  // Taille normale (texte déjà assez court) : pas d'enveloppe, pour que le
+  // texte support hérite exactement du même rendu que le reste du document
+  // (Word comme PDF) au lieu de forcer une taille explicite inutile.
+  if (taille >= 11) return texteHtml;
+  return `<div class="texte-support-page-unique" style="font-size:${taille}px;line-height:1.25;page-break-inside:avoid;break-inside:avoid;">${texteHtml}</div>`;
+}
+
+function injecterTexteSupport(contenuHTML, texteSupport, options = {}) {
   if (!texteSupport) return contenuHTML;
   const texteHtml = texteSupportVersHtml(texteSupport);
   if (!texteHtml) return contenuHTML;
 
+  const motsTexteSupport = compterMots(texteSupport);
+  const texteAInserer = options.unePage
+    ? envelopperTexteSupportUnePage(texteHtml, motsTexteSupport)
+    : texteHtml;
+
   let resultat;
   if (contenuHTML.includes('{{TEXTE_SUPPORT}}')) {
-    resultat = contenuHTML.split('{{TEXTE_SUPPORT}}').join(texteHtml);
+    resultat = contenuHTML.split('{{TEXTE_SUPPORT}}').join(texteAInserer);
   } else {
     // Le modèle a oublié le marqueur : insère une section dédiée juste avant le
     // tableau de déroulement (qui contient les questions), donc en fin de fiche
     // mais avant la partie questions.
-    const section = `<div class="texte-support"><h3>Texte support</h3>${texteHtml}</div>\n`;
+    const section = `<div class="texte-support"><h3>Texte support</h3>${texteAInserer}</div>\n`;
     const derniereTable = contenuHTML.lastIndexOf('<table');
     resultat = derniereTable !== -1
       ? contenuHTML.slice(0, derniereTable) + section + contenuHTML.slice(derniereTable)
       : contenuHTML + section;
   }
 
-  // Duplication conditionnelle : décidée UNIQUEMENT côté serveur (nombre de mots
-  // réel), jamais laissée au jugement du modèle — même si le modèle a inclus le
-  // marqueur {{TEXTE_SUPPORT_COPIE}} par erreur pour un texte long, il est retiré ici.
-  if (resultat.includes('{{TEXTE_SUPPORT_COPIE}}')) {
+  if (options.unePage) {
+    // Pas de duplication en Expression écrite (contrainte : une seule page) --
+    // si le modèle a quand même ajouté le marqueur par erreur, on le retire.
+    resultat = resultat.split('{{TEXTE_SUPPORT_COPIE}}').join('');
+  } else if (resultat.includes('{{TEXTE_SUPPORT_COPIE}}')) {
+    // Duplication conditionnelle : décidée UNIQUEMENT côté serveur (nombre de
+    // mots réel), jamais laissée au jugement du modèle — même si le modèle a
+    // inclus le marqueur par erreur pour un texte long, il est retiré ici.
     const copieHtml = texteSupportDoitEtreDuplique(texteSupport)
       ? `<div class="texte-support-copie" style="font-size:8px;line-height:1.3;border-top:1px dashed #999;margin-top:10px;padding-top:6px;">
   <strong>Copie pour photocopie (2<sup>e</sup> exemplaire) :</strong>
@@ -899,10 +994,12 @@ function niveauLectureMethodique(classe) {
 
 // Référentiel partagé des caractéristiques langagières par type de texte,
 // utilisé à la fois pour les "entrées" du tableau de vérification en Lecture
-// méthodique et pour les "Outils de la langue à utiliser" en Expression
-// écrite — garantit que les deux activités restent cohérentes sur un même
-// type de texte au lieu que chaque fiche invente librement ses propres
-// entrées. À compléter progressivement (seuls 4 types couverts pour l'instant).
+// méthodique et pour la section III "Outils de la langue" du tableau 5
+// colonnes en Expression écrite (JAMAIS un tableau séparé — voir
+// construireInstructionsExpressionEcriture) — garantit que les deux activités
+// restent cohérentes sur un même type de texte au lieu que chaque fiche
+// invente librement ses propres entrées. À compléter progressivement (seuls
+// 4 types couverts pour l'instant).
 // Socle d'outils de base pour la Lecture méthodique en collège (6e/5e/4e/3e) :
 // des notions de langue simples, communes à tout type de texte, disponibles
 // AVANT les procédés stylistiques plus fins réservés au lycée dans
@@ -1036,7 +1133,7 @@ function construireInstructionsLectureMethodique(referentiel, classe) {
   const reglesFiguresReelles = ' Les figures de style éventuellement listées ci-dessus ne sont que des possibilités : n\'utilise QUE celles réellement présentes dans le texte support fourni, jamais de façon systématique — si aucune de ces figures n\'apparaît dans le texte, n\'en invente aucune et appuie-toi sur les autres catégories.';
   const consigneEntrees = referentiel
     ? `Les « entrées » possibles pour les 2 tableaux d'axes sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » ci-dessous — pioche EXCLUSIVEMENT dans ces catégories (tu peux n'en utiliser qu'une partie selon les 2 axes retenus, mais n'en invente AUCUNE en dehors de cette liste) :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}\n\nLes relevés précis (citations, exemples tirés du texte) restent bien sûr propres à CE texte : seules les catégories/étiquettes des « entrées » sont fixées par le référentiel.${reglesFiguresReelles}`
-    : `Aucun référentiel de caractéristiques n'est disponible pour ce type de texte précis : détermine les « entrées » les plus pertinentes toi-même, à partir d'une analyse rigoureuse du texte.${reglesFiguresReelles}`;
+    : `Aucun référentiel de caractéristiques n'est disponible pour ce type de texte précis : détermine les « entrées » les plus pertinentes toi-même, à partir d'une analyse rigoureuse du texte, en respectant STRICTEMENT la contrainte ci-dessous sur la nature des entrées.${reglesFiguresReelles}`;
 
   // 6e/5e : les élèves de début de collège n'ont pas encore la notion de
   // tonalité littéraire -- retirée de la question de lecture ET de la phrase
@@ -1048,9 +1145,13 @@ function construireInstructionsLectureMethodique(referentiel, classe) {
 
   return `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE (cette fiche est une lecture méthodique : les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête, la Situation d'apprentissage et les Supports didactiques/Bibliographie restent inchangés. La ligne PRÉSENTATION rituelle du début de séance reste aussi inchangée dans sa structure, SAUF la contrainte suivante :) :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE (cette fiche est une lecture méthodique : les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête et la Situation d'apprentissage restent inchangés. La ligne PRÉSENTATION rituelle du début de séance reste aussi inchangée dans sa structure, SAUF la contrainte suivante :) :
 
 CONTRAINTE SUR LA LIGNE PRÉSENTATION RITUELLE (avant "I. Présentation du texte") : cette phase d'accueil ne doit JAMAIS révéler le thème précis du texte étudié, ni aucune conclusion, idée ou information tirée de son contenu. Reste strictement générique (ex. « un texte que nous allons découvrir ensemble », « la leçon du jour »). En particulier, les étapes (h) Identification de la notion à partir de la situation et (i) Annonce du titre officiel de la leçon ne doivent mentionner QUE le titre officiel de la leçon/l'activité (ex. « La description »), jamais le sujet précis du texte qui sera étudié (ex. jamais « nous allons étudier un texte sur un avion »). La découverte du thème se fait UNIQUEMENT via le questionnement guidé de la phase I ci-dessous.
+
+RÈGLE ANTI-RÉPÉTITION (valable pour toute la fiche) : chaque moment (Présentation du texte, Hypothèse générale, Vérification, Bilan général) pose des questions propres à SON contenu précis. Ne reformule JAMAIS une question déjà posée à une étape antérieure à une étape suivante — chaque question doit faire progresser l'analyse, pas la répéter.
+
+SUPPORTS DIDACTIQUES/BIBLIOGRAPHIE — structure en tableau à deux colonnes inchangée, mais le contenu de la colonne Supports didactiques doit mentionner explicitement que le texte support est photocopié et distribué en un exemplaire par élève — JAMAIS recopié au tableau ni affiché.
 
 TABLEAU HABILETÉS ET CONTENUS — formule FIXE ci-dessous, obligatoire pour toute lecture méthodique, NE JAMAIS la réinventer ni l'adapter au texte :
 ${habiletesLectureMethodique(niveau)}
@@ -1058,16 +1159,16 @@ ${habiletesLectureMethodique(niveau)}
 DÉVELOPPEMENT — remplace la règle "ligne Développement unique" : utilise OBLIGATOIREMENT 4 lignes numérotées I à IV dans le tableau DÉROULEMENT (jamais moins, jamais plus), chacune avec les 5 colonnes standard (Moments didactiques/Durée | Stratégies pédagogiques/Plan du cours | Activités de l'enseignant | Activités des élèves | Traces écrites) :
 
 I. PRÉSENTATION (du texte, distincte de la ligne PRÉSENTATION rituelle du début de séance) — uniquement sous forme de QUESTIONS-RÉPONSES, jamais de texte narratif :
-   - Quel est le titre du texte ? Quelle est la source/l'édition ? Qui est l'auteur (si applicable) ? → à partir de ces réponses, rédige la présentation en Traces écrites (1 à 2 phrases seulement).
+   - Le professeur distribue le texte (un exemplaire par élève), puis questionne sur le paratexte : Quel est le titre du texte ? Quelle est la source/l'édition ? Qui est l'auteur (si applicable) ? → à partir de ces réponses, rédige la présentation en Traces écrites (1 à 2 phrases seulement).
    - Lecture silencieuse : question ouverte « De quoi peut-il s'agir ? »
    - Lecture magistrale, puis questions : Quelle est la nature du texte ?${questionTonalite} Quel est son thème ?
 
-II. HYPOTHÈSE GÉNÉRALE — UNE SEULE phrase, dérivée EXPLICITEMENT ${composantesHypothese}. Ne la donne JAMAIS d'emblée : présente-la comme la synthèse/déduction des réponses précédentes (question du type « À partir de ce que nous venons d'identifier, quelle hypothèse pouvons-nous formuler sur ce texte ? »).
+II. HYPOTHÈSE GÉNÉRALE — UNE SEULE phrase, dérivée EXPLICITEMENT ${composantesHypothese}. Ne la donne JAMAIS d'emblée : présente-la comme la synthèse/déduction des réponses précédentes (question du type « À partir de ce que nous venons d'identifier, quelle hypothèse pouvons-nous formuler sur ce texte ? »). Formule-la comme une COURTE PHRASE NOMINALE, jamais deux propositions accolées par « puis », « et exprime », « et décrit »... : patron « [Nature du texte] présentant/décrivant/exprimant [thème/idée]. » — une seule idée, jamais une double proposition.
 
 III. VÉRIFICATION DE L'HYPOTHÈSE GÉNÉRALE :
    1. Détermination des axes de lecture : EXACTEMENT 2 axes (jamais 3, jamais 4), obtenus en décomposant l'hypothèse générale en ses deux composantes.
    2. Dans la ligne III du tableau DÉROULEMENT, la colonne Traces écrites contient UNIQUEMENT du texte simple (jamais de tableau) : le libellé des 2 axes (ex. "Axe 1 : ... / Axe 2 : ..."). Les Activités de l'enseignant/des élèves de cette ligne portent le questionnement guidé qui permet de dégager ces axes.
-   3. Pour CHAQUE axe, un tableau à 4 colonnes (Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations) rempli PAR QUESTIONNEMENT GUIDÉ (chaque ligne correspond à une « entrée » avec des relevés précis tirés du texte, l'analyse du procédé, et l'interprétation de son effet). ${consigneEntrees} CES 2 TABLEAUX SONT DES ÉLÉMENTS AUTONOMES DU DOCUMENT HTML, PLACÉS APRÈS LE TABLEAU DÉROULEMENT COMPLET (donc en dehors de toute balise <td>/<th>) — JAMAIS imbriqués à l'intérieur d'une cellule d'un autre tableau (rendu illisible en Word/PDF : colonnes écrasées, texte compressé). Un tableau HTML ne doit JAMAIS contenir un autre tableau HTML dans une de ses cellules, nulle part dans la fiche.
+   3. Pour CHAQUE axe, un tableau à 4 colonnes (Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations) rempli PAR QUESTIONNEMENT GUIDÉ (chaque ligne correspond à une « entrée » avec des relevés précis tirés du texte, l'analyse du procédé, et l'interprétation de son effet). Ce tableau COMMENCE par une ligne-titre fusionnée sur les 4 colonnes (<td colspan="4">) annonçant « Axe 1 : [libellé] » (ou « Axe 2 : ... »). Chaque cellule « Entrées » contient une question numérotée intégrée, reformulée SPÉCIFIQUEMENT pour ce que cette ligne observe dans CE texte — jamais un gabarit générique recopié tel quel d'une entrée à l'autre (style attendu : « 1- Relevez... », « 2- Nommez et justifiez... », « 4- Pourquoi/Que révèle... »). ${consigneEntrees} Dans tous les cas (référentiel disponible ou non), les entrées sont STRICTEMENT des catégories linguistiques/grammaticales/lexicales (temps verbaux, types et formes de phrase, indices spatiaux/temporels, lexique thématique/mélioratif/péjoratif, pronoms, comparaisons et autres figures de style, ponctuation...) — JAMAIS une entrée thématique ou psychologisante (interdits, ex. : « le regret », « l'attachement affectif », « les détails techniques », « l'irruption du sentiment »...). Si un tel aspect thématique/affectif apparaît dans le texte sans être couvert par les 2 axes, il devient la matière de l'extrait d'ÉVALUATION plus bas — jamais une entrée de ce tableau. CES 2 TABLEAUX SONT DES ÉLÉMENTS AUTONOMES DU DOCUMENT HTML, PLACÉS APRÈS LE TABLEAU DÉROULEMENT COMPLET (donc en dehors de toute balise <td>/<th>) — JAMAIS imbriqués à l'intérieur d'une cellule d'un autre tableau (rendu illisible en Word/PDF : colonnes écrasées, texte compressé). Un tableau HTML ne doit JAMAIS contenir un autre tableau HTML dans une de ses cellules, nulle part dans la fiche.
 
 IV. BILAN GÉNÉRAL :
    - Question de synthèse : « Quels éléments de la langue/du texte ont permis d'étudier ce texte ? »
@@ -1076,16 +1177,49 @@ IV. BILAN GÉNÉRAL :
 
 ÉVALUATION (ligne distincte du tableau DÉROULEMENT, différente et SÉPARÉE du Bilan général — ne jamais fusionner les deux) :
    - Fournis un relevé NEUF, non exploité dans le corps de la fiche (nouvelles citations du MÊME texte, non analysées plus haut dans les axes).
-   - Demande à l'élève, SEUL : 1) d'identifier l'entrée correspondante, 2) d'analyser, 3) d'interpréter.
+   - Demande à l'élève, SEUL : 1) d'identifier l'entrée correspondante, 2) d'analyser, 3) d'interpréter. Ce sont les SEULS moments de toute la fiche où ce registre de verbes taxonomiques (Identifier, Analyser, Interpréter, Appliquer) s'adresse directement à l'élève dans une consigne — partout ailleurs dans la fiche, langage naturel de classe.
+   - Si un aspect thématique/affectif du texte n'a pas été traité dans les 2 axes (ex. un revirement de sentiment en fin de texte), c'est CET extrait d'évaluation qui doit le faire travailler.
    - INTERDICTION ABSOLUE de remplacer ceci par des questions de compréhension du texte (ex. « qui est le narrateur ? », « que ressent-il ? ») : l'évaluation teste la maîtrise de la MÉTHODE de lecture méthodique, pas la compréhension du contenu.`;
 }
 
 function construireInstructionsExpressionEcriture(referentiel) {
-  if (!referentiel) return '';
+  const consigneOutils = referentiel
+    ? `Les catégories ci-dessous sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » — reprends EXACTEMENT ces catégories (ni plus, ni moins, ne pas en inventer d'autres), chacune reformulée en une consigne concrète adaptée au thème précis de la leçon :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}`
+    : `Aucun référentiel de catégories n'est disponible pour ce type de texte précis : détermine toi-même les outils de la langue (grammaticaux et lexicaux) les plus pertinents, à partir d'une analyse rigoureuse du genre de texte demandé.`;
+
   return `
 
-OUTILS DE LA LANGUE À UTILISER — section obligatoire pour cette fiche d'Expression écrite (type de texte détecté : « ${referentiel.typeTexte} »). Insère dans la fiche une section/tableau intitulé « Outils de la langue à utiliser » qui liste EXACTEMENT les catégories suivantes (ni plus, ni moins, ne pas en inventer d'autres), chacune reformulée en une consigne concrète adaptée au thème précis de la leçon :
-${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}`;
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPRESSION ÉCRITE (cette fiche est une expression écrite : les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, l'ORDRE des tableaux, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête garde son format standard — libellés en gras à gauche, valeur à droite, jamais de répétition du mot "Leçon"/"Séance" déjà présent dans le libellé.) :
+
+Ce squelette est IDENTIQUE quel que soit le niveau (6e à 3e) et quel que soit le genre de texte (lettre, portrait, texte explicatif, résumé, compte-rendu, dialogue argumentatif, description...) : seul le contenu injecté (habiletés, situation, textes, outils de langue) change, jamais la structure ni l'ordre des tableaux ci-dessous.
+
+ORDRE OBLIGATOIRE DES ÉLÉMENTS (remplace l'ordre générique "Situation puis Habiletés" décrit plus haut) : Entête, PUIS Tableau Habiletés/Contenus, PUIS Situation d'apprentissage, PUIS Tableau Supports didactiques/Bibliographie, PUIS Tableau 5 colonnes. Le tableau Habiletés/Contenus vient TOUJOURS AVANT la Situation d'apprentissage pour cette activité (jamais après, contrairement à l'ordre par défaut).
+
+TABLEAU HABILETÉS ET CONTENUS (2 colonnes : Habiletés | Contenus), placé avant la Situation d'apprentissage — généré DYNAMIQUEMENT à partir du genre de texte et de la leçon en cours, JAMAIS codé en dur pour un seul type de texte : colonne 1 = verbes taxonomiques pertinents pour CETTE leçon (le nombre et l'ordre varient librement selon la leçon — ex. Identifier, Définir, Utiliser, Organiser, Appliquer — ne fige jamais une liste unique valable pour tous les genres) ; colonne 2 = le contenu associé à chaque verbe, spécifique au genre de texte/à la séance en cours.
+
+TABLEAU SUPPORTS DIDACTIQUES / BIBLIOGRAPHIE (2 colonnes, juste après la Situation d'apprentissage) : la colonne « Supports didactiques » indique la source du texte/support utilisé ; la colonne « Bibliographie » REPREND EXACTEMENT LE MÊME CONTENU que la colonne « Supports didactiques » (les deux colonnes doivent être identiques — ne jamais la laisser vide, ni y mettre autre chose que ce contenu dupliqué).
+
+TABLEAU 5 COLONNES — la ligne d'en-tête (Moments didactiques/Durée | Stratégies | Activités de l'enseignant | Activités des élèves | Traces écrites) n'apparaît QU'UNE SEULE FOIS, en haut du tableau, jamais répétée sur les pages suivantes en cas de saut de page.
+
+NE CRÉE JAMAIS de tableau séparé intitulé « Outils de la langue à utiliser » (ni aucun autre tableau annexe portant ce contenu) entre le tableau Supports didactiques/Bibliographie et le tableau 5 colonnes : les outils de la langue (grammaticaux et lexicaux) sont intégrés UNIQUEMENT dans la section III (« Outils de la langue ») du tableau 5 colonnes ci-dessous, jamais dupliqués ailleurs dans le document.
+
+CONTRAINTE DE MISE EN PAGE DU TEXTE SUPPORT (modèle que les élèves doivent observer et reproduire) : il DOIT tenir sur une seule page, sans jamais déborder sur une deuxième, pour que sa mise en forme (en-tête, alinéas, disposition, espacement de la formule de politesse...) reste observable d'un coup d'œil — cette règle vaut à l'identique, que le texte support soit fourni par l'enseignant (collé ou importé) ou que tu doives en proposer un exemple toi-même faute de texte fourni. Utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}} pour un texte fourni (une seule fois, jamais {{TEXTE_SUPPORT_COPIE}} : pas de duplication en Expression écrite, contrairement à la Lecture méthodique). Si tu dois rédiger toi-même l'exemple, reste sous les 250 mots et places-le dans une balise <div class="texte-support-page-unique">.
+
+PHASE DE PRÉSENTATION (première ligne du tableau 5 colonnes, 5 à 10 mn) — rituel obligatoire, sous forme d'échanges questions/réponses alignés 1 pour 1 entre Activités de l'enseignant et Activités des élèves :
+   - « Quelle activité avons-nous aujourd'hui ? »
+   - Rappel des notions/moyens déjà vus par les élèves en lien avec la leçon du jour (ex. « quels types de textes/moyens de communication avez-vous déjà rencontrés ? »).
+   - Annonce du thème du jour (« aujourd'hui nous allons étudier... »).
+   - Le professeur écrit la situation d'apprentissage dans un coin du tableau.
+   - SI la séance est la suite d'une leçon déjà entamée (Séance 2, 3...) : l'enseignant rappelle D'ABORD la leçon et la séance précédentes, AVANT d'annoncer la nouvelle séance — ne traite JAMAIS une séance 2/3 comme si c'était une nouvelle leçon.
+
+DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa propre ligne numérotée du tableau DÉROULEMENT (jamais fusionnés entre eux, jamais réordonnés) :
+   I. DÉFINITION — définir le genre de texte étudié.
+   II. STRUCTURE/CARACTÉRISTIQUES — selon le genre de texte (ex. présentation matérielle d'une lettre, plan d'un texte explicatif...).
+   III. OUTILS DE LA LANGUE (grammaticaux et lexicaux) — ${consigneOutils}
+   IV. RECHERCHE ET ORGANISATION DES IDÉES — un tableau à 3 colonnes Introduction | Développement | Conclusion, rempli en Traces écrites avec les idées dégagées collectivement par les élèves pour LE sujet/la situation du jour. CE TABLEAU EST UN ÉLÉMENT AUTONOME DU DOCUMENT HTML, placé juste après la ligne IV du tableau DÉROULEMENT — JAMAIS imbriqué à l'intérieur d'une cellule <td>/<th> d'un autre tableau (un tableau HTML ne doit jamais en contenir un autre dans une de ses cellules, nulle part dans la fiche).
+   V. RÉDACTION COLLECTIVE — élaboration collective, à l'oral puis à l'écrit, d'un texte modèle à partir du plan Introduction/Développement/Conclusion ci-dessus.
+
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose une SITUATION NOUVELLE, non traitée en classe (sujet différent de celui exploité en développement), demandant à l'élève de rédiger SEUL un texte du même genre en réinvestissant la définition, la structure et les outils de la langue vus plus haut.`;
 }
 
 function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
@@ -1690,9 +1824,8 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
         const referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
         systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
       } else if (estEE) {
-        if (referentielTypeTexte) {
-          systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
-        } else {
+        systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
+        if (!referentielTypeTexte) {
           const avertissementReferentiel = `Aucun référentiel de type de texte disponible pour cette leçon d'Expression écrite ("${lecon}") — les outils de la langue proposés restent une estimation libre du modèle.`;
           avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementReferentiel}` : avertissementReferentiel;
         }
@@ -1866,12 +1999,27 @@ ${planCours ? `\nPLAN DE COURS FOURNI :\n${planCours}\n\nAdapte ce plan au forma
 Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     }
 
+    const estFicheExpressionEcrite = estExpressionEcrite({ discipline, lecon, theme, activite });
+
     if (texteSupport) {
       const motsTexteSupport = compterMots(texteSupport);
-      const instructionDuplication = texteSupportDoitEtreDuplique(texteSupport)
-        ? `Ce texte support fait environ ${motsTexteSupport} mots : assez court pour tenir deux fois sur la même page. Immédiatement APRÈS le marqueur {{TEXTE_SUPPORT}}, ajoute le marqueur exact {{TEXTE_SUPPORT_COPIE}} pour insérer un second exemplaire en police réduite (permet à l'enseignant de photocopier une seule feuille et distribuer deux exemplaires, économie de papier).`
-        : `Ce texte support fait environ ${motsTexteSupport} mots : trop long pour être dupliqué sur la même page. N'ajoute PAS de second exemplaire — utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois, sans {{TEXTE_SUPPORT_COPIE}}.`;
-      userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} à l'endroit où le texte doit apparaître dans le HTML. ${instructionDuplication}\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
+      let instructionMiseEnPage;
+      if (estFicheExpressionEcrite) {
+        instructionMiseEnPage = texteSupportRisqueDeDeborder(motsTexteSupport)
+          ? `Ce texte support fait environ ${motsTexteSupport} mots : même en réduisant la police, il risque de déborder sur une deuxième page. Utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois, sans {{TEXTE_SUPPORT_COPIE}} (pas de duplication en Expression écrite).`
+          : `Ce texte support fait environ ${motsTexteSupport} mots : utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois (jamais {{TEXTE_SUPPORT_COPIE}}, pas de duplication en Expression écrite) — la police sera automatiquement ajustée côté serveur pour qu'il tienne sur une seule page.`;
+        if (texteSupportRisqueDeDeborder(motsTexteSupport)) {
+          const avertissementLongueur = `Le texte support fourni (~${motsTexteSupport} mots) risque de déborder sur une deuxième page malgré la réduction automatique de police — envisagez de le raccourcir pour préserver la lisibilité de sa mise en forme.`;
+          avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementLongueur}` : avertissementLongueur;
+        }
+      } else {
+        instructionMiseEnPage = texteSupportDoitEtreDuplique(texteSupport)
+          ? `Ce texte support fait environ ${motsTexteSupport} mots : assez court pour tenir deux fois sur la même page. Immédiatement APRÈS le marqueur {{TEXTE_SUPPORT}}, ajoute le marqueur exact {{TEXTE_SUPPORT_COPIE}} pour insérer un second exemplaire en police réduite (permet à l'enseignant de photocopier une seule feuille et distribuer deux exemplaires, économie de papier).`
+          : `Ce texte support fait environ ${motsTexteSupport} mots : trop long pour être dupliqué sur la même page. N'ajoute PAS de second exemplaire — utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois, sans {{TEXTE_SUPPORT_COPIE}}.`;
+      }
+      userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} à l'endroit où le texte doit apparaître dans le HTML. ${instructionMiseEnPage}\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
+    } else if (estFicheExpressionEcrite) {
+      userMessage += `\n\nAucun texte support n'a été fourni par l'enseignant : si tu dois toi-même rédiger un exemple de texte (lettre, etc.) à titre de modèle, reste sous les 250 mots afin qu'il tienne sur une seule page (mise en forme observable d'un coup d'œil par les élèves), et places-le dans une balise <div class="texte-support-page-unique">...</div> pour qu'il bénéficie du même traitement de mise en page qu'un texte support fourni par l'enseignant.`;
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -1907,7 +2055,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
       }
-      contenuHTML = injecterTexteSupport(contenuHTML, texteSupport);
+      contenuHTML = injecterTexteSupport(contenuHTML, texteSupport, { unePage: estFicheExpressionEcrite });
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
         discipline, classe, lecon, seance, duree, niveau,
