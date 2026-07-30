@@ -1225,46 +1225,331 @@ function planCoursEstSubstantiel(planCours) {
   return (planCours || '').toString().trim().length >= SEUIL_PLAN_COURS_SUBSTANTIEL_CARACTERES;
 }
 
+// --- Parseur déterministe du plan de l'enseignant (mode "plan fourni") ---
+//
+// Diagnostic (voir historique des échanges) : le tableau 5 colonnes n'est
+// construit NULLE PART côté serveur -- ni pour la génération automatique, ni
+// pour le mode plan-enseignant -- il est intégralement écrit en HTML libre par
+// le modèle, à partir d'un exemple donné dans le prompt. Confier aussi la
+// RÉPARTITION du plan de l'enseignant à ce mécanisme s'est révélé peu fiable en
+// pratique (texte du plan collé tel quel dans une seule cellule). Les fonctions
+// ci-dessous remplacent cette délégation par un découpage et une construction
+// HTML 100% déterministes, côté code, pour le mode plan-enseignant -- seule la
+// correction orthographique/grammaticale et la mise en page du reste de la
+// fiche (entête, situation, habiletés, supports) restent confiées au modèle.
+
+// Reconnaît un repère de section en tout début de ligne : "I", "II", "III",
+// "IV" (romains MAJUSCULES uniquement -- une casse minuscule serait trop
+// ambiguë avec de vrais mots comme "il" ou l'abréviation "iv") suivi d'un
+// séparateur OBLIGATOIRE parmi . ) : - – — (espaces optionnels avant/après :
+// "I.", "I )", "I -", "I:", "I.Présentation" sont tous acceptés). Reconnaît
+// aussi "Évaluation"/"Evaluation" (insensible à la casse, séparateur
+// optionnel). Le séparateur est OBLIGATOIRE pour les repères numérotés
+// précisément pour ne jamais confondre "I" avec un mot qui commence par I.
+const SEPARATEUR_REPERE_SRC = '[.):\\-–—]';
+
+function detecterRepereLigne(ligne) {
+  const mNumero = new RegExp(`^\\s*(IV|III|II|I)\\s*${SEPARATEUR_REPERE_SRC}\\s*(.*)$`).exec(ligne);
+  if (mNumero) return { type: 'numero', numero: mNumero[1], resteDeLigne: mNumero[2].trim() };
+  const mEval = new RegExp(`^\\s*[EÉ]valuation\\s*(?:${SEPARATEUR_REPERE_SRC})?\\s*(.*)$`, 'i').exec(ligne);
+  if (mEval) return { type: 'evaluation', resteDeLigne: mEval[1].trim() };
+  return null;
+}
+
+// Segmente le plan de l'enseignant en blocs I/II/III/IV/Évaluation. AUCUNE
+// tolérance de contenu inventé : si les 4 repères I/II/III/IV ne sont pas TOUS
+// trouvés, dans cet ordre, avec du contenu associé, le parsing échoue
+// EXPLICITEMENT ({ ok: false, raison }) -- jamais de fallback silencieux qui
+// ferait semblant d'avoir réussi (voir construireInstructionsLectureMethodiqueAvecPlanEnseignant
+// pour le comportement de repli, toujours signalé à l'enseignant).
+function parserPlanEnseignant(planCours) {
+  const lignes = (planCours || '').replace(/\r\n/g, '\n').split('\n');
+  const reperesAttendus = ['I', 'II', 'III', 'IV'];
+  const positions = {};
+  const resteDeLigneParRepere = {};
+
+  lignes.forEach((ligne, index) => {
+    const repere = detecterRepereLigne(ligne);
+    if (!repere) return;
+    if (repere.type === 'numero') {
+      if (positions[repere.numero] !== undefined) return; // 1ère occurrence gardée, pas d'écrasement ambigu
+      positions[repere.numero] = index;
+      resteDeLigneParRepere[repere.numero] = repere.resteDeLigne;
+    } else if (repere.type === 'evaluation' && positions.evaluation === undefined) {
+      positions.evaluation = index;
+      resteDeLigneParRepere.evaluation = repere.resteDeLigne;
+    }
+  });
+
+  const manquants = reperesAttendus.filter((r) => positions[r] === undefined);
+  if (manquants.length) {
+    return { ok: false, raison: `repère(s) manquant(s) : ${manquants.join(', ')}` };
+  }
+
+  const ordreAVerifier = [...reperesAttendus, ...(positions.evaluation !== undefined ? ['evaluation'] : [])];
+  for (let i = 1; i < ordreAVerifier.length; i++) {
+    if (positions[ordreAVerifier[i]] <= positions[ordreAVerifier[i - 1]]) {
+      return { ok: false, raison: `repères dans le désordre (${ordreAVerifier[i - 1]} après ${ordreAVerifier[i]})` };
+    }
+  }
+
+  const texteEntre = (indexDebut, indexFin, resteEnTete) =>
+    [resteEnTete, ...lignes.slice(indexDebut + 1, indexFin)].join('\n').trim();
+
+  const segments = {
+    presentation: texteEntre(positions.I, positions.II, resteDeLigneParRepere.I),
+    hypothese: texteEntre(positions.II, positions.III, resteDeLigneParRepere.II),
+    verification: texteEntre(positions.III, positions.IV, resteDeLigneParRepere.III),
+    bilan: texteEntre(positions.IV, positions.evaluation !== undefined ? positions.evaluation : lignes.length, resteDeLigneParRepere.IV),
+    evaluation: positions.evaluation !== undefined ? texteEntre(positions.evaluation, lignes.length, resteDeLigneParRepere.evaluation) : ''
+  };
+
+  if (!segments.presentation || !segments.hypothese || !segments.verification || !segments.bilan) {
+    return { ok: false, raison: 'repère(s) trouvé(s) mais sans contenu associé' };
+  }
+
+  return { ok: true, segments };
+}
+
+// À l'intérieur de la partie III (Vérification), détecte les sous-titres
+// "Axe 1"/"Axe 2" (tolérant : "Axe 1 :", "Axe 1)", "Axe 1 -"...), puis, pour
+// chaque axe, tente de repérer des puces structurées par les étiquettes
+// Entrée / Indices (ou Relevés) / Analyse / Interprétation. Si LES 4
+// étiquettes d'une puce sont trouvées, elle devient une ligne propre à 4
+// colonnes ; sinon son texte brut est conservé intégralement dans une ligne à
+// cellule fusionnée -- jamais perdu, jamais réinventé.
+const ETIQUETTES_ENTREE_AXE = [
+  { cle: 'entree', regex: /entr[ée]e?s?\s*:\s*/i },
+  { cle: 'indices', regex: /(?:indices?(?:\s+textuels?)?|relev[ée]s?)\s*:\s*/i },
+  { cle: 'analyse', regex: /analyses?\s*:\s*/i },
+  { cle: 'interpretation', regex: /interpr[ée]tations?\s*:\s*/i }
+];
+
+function decouperParEtiquettes(texte, etiquettes) {
+  const positions = [];
+  etiquettes.forEach(({ cle, regex }) => {
+    const m = regex.exec(texte);
+    if (m) positions.push({ cle, index: m.index, finEtiquette: m.index + m[0].length });
+  });
+  positions.sort((a, b) => a.index - b.index);
+  const resultat = {};
+  positions.forEach((pos, i) => {
+    const fin = i + 1 < positions.length ? positions[i + 1].index : texte.length;
+    resultat[pos.cle] = texte.slice(pos.finEtiquette, fin).trim().replace(/[\s.]+$/, '');
+  });
+  return resultat;
+}
+
+function parserEntreesAxe(texteAxe) {
+  const blocs = (texteAxe || '')
+    .split(/\n(?=\s*[-•])/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+  if (!blocs.length) return [];
+
+  return blocs.map((bloc) => {
+    const champs = decouperParEtiquettes(bloc, ETIQUETTES_ENTREE_AXE);
+    const complet = champs.entree && champs.indices && champs.analyse && champs.interpretation;
+    return complet
+      ? { structure: true, entree: champs.entree, indices: champs.indices, analyse: champs.analyse, interpretation: champs.interpretation }
+      : { structure: false, brut: bloc.replace(/^[-•]\s*/, '') };
+  });
+}
+
+function parserAxesDepuisVerification(texteVerification) {
+  const lignes = (texteVerification || '').split('\n');
+  const regexAxe = /^\s*Axe\s*(\d+)\s*[.):\-–—]?\s*(.*)$/i;
+
+  const blocs = [];
+  let courant = null;
+  lignes.forEach((ligne) => {
+    const m = regexAxe.exec(ligne);
+    if (m) {
+      if (courant) blocs.push(courant);
+      courant = { numero: m[1], titre: m[2].trim(), lignesBrutes: [] };
+    } else if (courant) {
+      courant.lignesBrutes.push(ligne);
+    }
+  });
+  if (courant) blocs.push(courant);
+
+  return blocs.map((axe) => ({
+    numero: axe.numero,
+    titre: axe.titre,
+    entrees: parserEntreesAxe(axe.lignesBrutes.join('\n'))
+  }));
+}
+
+// Construit UNE ligne <tr> du tableau déroulement 5 colonnes -- SEULE fonction
+// qui construit une ligne de ce tableau pour le mode plan-enseignant (mêmes
+// bordures/styles que le reste du gabarit, cf. construirePromptSecondaire).
+function construireLigneDeroulementHTML({ moment, strategie, activiteEnseignant, activiteEleves, tracesEcrites }) {
+  const cell = (contenu, extra = '') => `<td style="border:1px solid #000;padding:6px;vertical-align:top;${extra}">${contenu || ''}</td>`;
+  return `  <tr>
+${cell(moment, 'font-weight:bold;')}
+${cell(strategie)}
+${cell(activiteEnseignant)}
+${cell(activiteEleves)}
+${cell(tracesEcrites)}
+  </tr>`;
+}
+
+// Construit le tableau autonome à 4 colonnes d'un axe (ligne-titre fusionnée +
+// une ligne par entrée) -- SEULE fonction qui construit ce tableau pour le
+// mode plan-enseignant.
+function construireTableauAxeHTML(numero, titre, entrees) {
+  const lignesHTML = entrees.length
+    ? entrees.map((e) => e.structure
+        ? `  <tr><td style="border:1px solid #000;padding:6px;">${e.entree}</td><td style="border:1px solid #000;padding:6px;">${e.indices}</td><td style="border:1px solid #000;padding:6px;">${e.analyse}</td><td style="border:1px solid #000;padding:6px;">${e.interpretation}</td></tr>`
+        : `  <tr><td colspan="4" style="border:1px solid #000;padding:6px;">${e.brut}</td></tr>`
+      ).join('\n')
+    : '  <tr><td colspan="4" style="border:1px solid #000;padding:6px;"></td></tr>';
+
+  return `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+  <tr><td colspan="4" style="border:1px solid #000;padding:6px;background:#e4ede6;font-weight:bold;">Axe ${numero} : ${titre}</td></tr>
+  <tr><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Entrées</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Indices textuels</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Analyses</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Interprétations</th></tr>
+${lignesHTML}
+</table>`;
+}
+
+// Orchestre les 2 fonctions ci-dessus à partir des segments déjà découpés par
+// parserPlanEnseignant : construit les lignes I à IV (+ Évaluation) du
+// tableau déroulement, et les tableaux d'axes détectés dans la partie III.
+function construireDeroulementPlanEnseignantHTML(segments) {
+  const axes = parserAxesDepuisVerification(segments.verification);
+  const libelleAxes = axes.length
+    ? axes.map((a) => `Axe ${a.numero} : ${a.titre}`).join(' / ')
+    : texteSupportVersHtml(segments.verification).replace(/<\/?p>/g, ' ').trim();
+
+  const lignesHTML = [
+    construireLigneDeroulementHTML({
+      moment: 'I. PRÉSENTATION DU TEXTE',
+      strategie: 'Présentation du texte (paratexte)',
+      activiteEnseignant: 'Présente le texte et questionne sur son paratexte.',
+      activiteEleves: 'Relèvent les éléments du texte identifiés dans le plan.',
+      tracesEcrites: texteSupportVersHtml(segments.presentation)
+    }),
+    construireLigneDeroulementHTML({
+      moment: 'II. HYPOTHÈSE GÉNÉRALE',
+      strategie: 'Question de synthèse',
+      activiteEnseignant: "Invite les élèves à formuler une hypothèse de lecture.",
+      activiteEleves: "Formulent l'hypothèse.",
+      tracesEcrites: texteSupportVersHtml(segments.hypothese)
+    }),
+    construireLigneDeroulementHTML({
+      moment: 'III. VÉRIFICATION',
+      strategie: 'Annonce des axes de vérification',
+      activiteEnseignant: 'Annonce les axes retenus.',
+      activiteEleves: 'Notent les axes.',
+      tracesEcrites: libelleAxes
+    }),
+    construireLigneDeroulementHTML({
+      moment: 'IV. BILAN GÉNÉRAL',
+      strategie: 'Synthèse',
+      activiteEnseignant: 'Fait la synthèse avec les élèves.',
+      activiteEleves: "Confirment la vérification de l'hypothèse.",
+      tracesEcrites: texteSupportVersHtml(segments.bilan)
+    }),
+    construireLigneDeroulementHTML({
+      moment: 'ÉVALUATION',
+      strategie: segments.evaluation ? 'Travail individuel' : '',
+      activiteEnseignant: segments.evaluation ? 'Donne le sujet.' : '',
+      activiteEleves: segments.evaluation ? 'Travaillent seuls, à l\'écrit.' : '',
+      // Ligne laissée VIDE si l'enseignant n'a pas rédigé d'Évaluation --
+      // jamais d'exercice inventé pour la compléter.
+      tracesEcrites: segments.evaluation ? texteSupportVersHtml(segments.evaluation) : ''
+    })
+  ].join('\n');
+
+  const axesHTML = axes.length ? axes.map((a) => construireTableauAxeHTML(a.numero, a.titre, a.entrees)).join('\n\n') : '';
+
+  return { lignesHTML, axesHTML };
+}
+
 // Mode "plan fourni par l'enseignant" -- ALTERNATIF à construireInstructionsLectureMethodique
 // ci-dessus (qui reste utilisée telle quelle quand ce mode n'est pas déclenché,
-// cf. planCoursEstSubstantiel) : ici, l'enseignant a rédigé lui-même l'intégralité
+// cf. planCoursEstSubstantiel) : l'enseignant a rédigé lui-même l'intégralité
 // du contenu pédagogique (hypothèse, axes, analyses, interprétations) dans le
-// champ Plan du cours -- l'IA ne fait plus que le structurer, le corriger et le
-// mettre en forme, jamais l'inventer. Ajouté pour contourner les bugs récurrents
-// de la génération automatique (incohérence hypothèse/axes, texte support
-// dupliqué) sans attendre que cette génération soit parfaite : les enseignants
-// qui ont déjà un plan rédigé peuvent tester la mise en page dès maintenant.
+// champ Plan du cours. Le contenu est désormais découpé et mis en tableau de
+// façon 100% déterministe côté code (parserPlanEnseignant +
+// construireDeroulementPlanEnseignantHTML) -- le modèle ne fait plus que
+// placer 3 marqueurs ({{TEXTE_SUPPORT}}, {{DEROULEMENT_PLAN_ENSEIGNANT}},
+// {{AXES_PLAN_ENSEIGNANT}}) au bon endroit, il n'écrit plus lui-même le
+// contenu pédagogique ni ne décide de sa répartition en cellules.
+//
+// Retourne { instructions, injectionDeroulement, injectionAxes, avertissement } :
+// - injectionDeroulement/injectionAxes sont les blocs HTML déjà construits, à
+//   injecter après génération (cf. injecterDeroulementPlanEnseignant) --
+//   null si le parsing a échoué (voir bloc de repli ci-dessous).
+// - avertissement, non-null uniquement si le parsing a échoué : à afficher
+//   explicitement à l'enseignant (jamais un échec silencieux).
 function construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours) {
   const niveau = niveauLectureMethodique(classe);
+  const resultatParsing = parserPlanEnseignant(planCours);
 
-  return `
+  const enteteCommun = `
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE, MODE "PLAN FOURNI PAR L'ENSEIGNANT" (cette fiche est une lecture méthodique dont l'enseignant a rédigé lui-même l'intégralité du contenu pédagogique du développement -- hypothèse, axes, analyses, interprétations -- dans le "PLAN DE COURS FOURNI PAR L'ENSEIGNANT" reproduit à la fin de ce message. Les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut, ainsi que TOUTES les règles de génération de contenu pédagogique du mode automatique de Lecture méthodique décrit par ailleurs dans ce message -- aucune d'elles ne s'applique ici) :
 
-RÈGLE ABSOLUE — AUCUN CONTENU PÉDAGOGIQUE INVENTÉ : tu ne dois JAMAIS inventer, compléter ou reformuler substantiellement l'hypothèse générale, les axes de lecture, les entrées des tableaux de vérification, les analyses ou les interprétations. Tout ce contenu vient à 100% du texte de l'enseignant reproduit plus bas. Ton seul travail sur ce texte est : (a) corriger l'orthographe et la grammaire, sans changer le sens ni les idées ; (b) le répartir dans les bonnes cellules du tableau attendu ci-dessous ; (c) le mettre en forme HTML. N'ajoute AUCUNE phrase, idée, exemple ou relevé qui ne soit pas déjà présent, même reformulé, dans le texte de l'enseignant.
+RÈGLE ABSOLUE — AUCUN CONTENU PÉDAGOGIQUE INVENTÉ : tu ne dois JAMAIS inventer, compléter ou reformuler substantiellement l'hypothèse générale, les axes de lecture, les entrées des tableaux de vérification, les analyses ou les interprétations. Tout ce contenu vient à 100% du texte de l'enseignant.
 
 CONTRAINTE SUR LA LIGNE PRÉSENTATION RITUELLE (avant "I. Présentation du texte", début de séance) : inchangée par rapport au mode automatique -- cette phase d'accueil ne doit JAMAIS révéler le thème précis du texte étudié. Reste strictement générique (ex. « un texte que nous allons découvrir ensemble »). Ne la rédige toi-même que si l'enseignant ne l'a pas incluse dans son plan.
-
-TEXTE SUPPORT — UNE SEULE INSERTION DANS TOUT LE DOCUMENT : utilise le marqueur {{TEXTE_SUPPORT}} UNE SEULE FOIS, à un seul endroit de la fiche (par exemple avec la partie I. Présentation). Ne le recopie, ne le mentionne et ne le réinsère JAMAIS une deuxième fois ailleurs -- en particulier JAMAIS entre le tableau de vérification de l'Axe 1 et celui de l'Axe 2, ni entre aucun autre tableau. Une seule occurrence du marqueur, nulle part ailleurs dans le document.
 
 SUPPORTS DIDACTIQUES/BIBLIOGRAPHIE — structure en tableau à deux colonnes inchangée ; le contenu de la colonne Supports didactiques doit mentionner explicitement que le texte support est photocopié et distribué en un exemplaire par élève -- JAMAIS recopié au tableau ni affiché.
 
 TABLEAU HABILETÉS ET CONTENUS — formule FIXE ci-dessous, obligatoire pour toute lecture méthodique, NE JAMAIS la réinventer ni l'adapter au texte (élément mécanique, non concerné par le plan de l'enseignant) :
-${habiletesLectureMethodique(niveau)}
+${habiletesLectureMethodique(niveau)}`;
 
-DÉVELOPPEMENT — utilise OBLIGATOIREMENT 4 lignes numérotées I à IV dans le tableau DÉROULEMENT (jamais moins, jamais plus), chacune avec les 5 colonnes standard (Moments didactiques/Durée | Stratégies pédagogiques/Plan du cours | Activités de l'enseignant | Activités des élèves | Traces écrites), PLUS une ligne ÉVALUATION distincte si l'enseignant en a rédigé une.
+  if (!resultatParsing.ok) {
+    const instructions = enteteCommun + `
 
-DÉTECTION DES PARTIES DANS LE PLAN DE L'ENSEIGNANT : son texte utilise ses propres repères (« I. », « II. », « III. », « IV. », éventuellement « Évaluation ») pour indiquer les grandes parties de son déroulement. Identifie ces repères et range leur contenu textuel (une fois corrigé orthographiquement/grammaticalement) dans les lignes correspondantes, avec EXACTEMENT la même correspondance que le mode automatique :
-   I. Présentation du texte (peut inclure la situation d'apprentissage si l'enseignant l'y a intégrée) -- son texte réparti entre Activités de l'enseignant / Activités des élèves / Traces écrites, selon ce qu'il a écrit.
-   II. Hypothèse générale -- reprends l'hypothèse EXACTEMENT telle qu'écrite par l'enseignant (corrigée orthographiquement), en Traces écrites de la ligne II.
-   III. Vérification / axes de lecture -- le libellé des 2 axes tels qu'écrits par l'enseignant va en Traces écrites de la ligne III. Pour CHAQUE axe qu'il a rédigé, construis un tableau à 4 colonnes (Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations) reprenant FIDÈLEMENT (corrigé orthographiquement seulement) les entrées/indices/analyses/interprétations qu'il a lui-même écrites pour cet axe. Ce tableau COMMENCE par une ligne-titre fusionnée sur les 4 colonnes (<td colspan="4">) annonçant le nom de l'axe tel qu'écrit par l'enseignant. CES 2 TABLEAUX SONT DES ÉLÉMENTS AUTONOMES DU DOCUMENT HTML, PLACÉS APRÈS LE TABLEAU DÉROULEMENT COMPLET (donc en dehors de toute balise <td>/<th>) -- JAMAIS imbriqués à l'intérieur d'une cellule d'un autre tableau (rendu illisible en Word/PDF). Si l'enseignant n'a pas structuré un axe en lignes Entrées/Indices/Analyses/Interprétations mais a écrit un texte continu, répartis fidèlement ce texte entre les 4 colonnes sans en changer le contenu ni l'enrichir.
-   IV. Bilan général -- reprends la confrontation hypothèse/bilan telle qu'écrite par l'enseignant ; n'utilise la formule « Notre hypothèse générale est donc vérifiée. » que si l'enseignant confirme lui-même cette vérification dans son texte.
-   Évaluation -- UNIQUEMENT si l'enseignant a rédigé une partie Évaluation dans son plan ; reprends-la fidèlement. Si son plan n'en contient pas, laisse la ligne ÉVALUATION avec des cellules vides plutôt que d'en inventer une.
+ÉCHEC DE LA DÉTECTION AUTOMATIQUE DES PARTIES (${resultatParsing.raison}) : le plan fourni par l'enseignant ne suit pas le format attendu (repères "I.", "II.", "III.", "IV." -- chacun en tout début de ligne, suivi d'un point, d'une parenthèse fermante, de deux-points ou d'un tiret -- manquants, mal placés ou dans le désordre). MODE DE REPLI, obligatoire dans ce cas : place l'INTÉGRALITÉ du texte de l'enseignant (corrigé orthographiquement, jamais réécrit sur le fond) dans la ligne DÉVELOPPEMENT unique du tableau DÉROULEMENT, à l'intérieur d'un bloc commençant EXACTEMENT par : "<strong>⚠ Plan non structuré automatiquement (format des repères I./II./III./IV. non reconnu) :</strong>" suivi du texte de l'enseignant. N'essaie PAS de deviner ou de reconstituer la structure toi-même.
 
-Si un repère (I, II, III ou IV) est absent du texte de l'enseignant, laisse la ligne ou la cellule correspondante du tableau vide plutôt que d'inventer un contenu pour la compléter.
-
-PLAN DE COURS FOURNI PAR L'ENSEIGNANT (contenu pédagogique à structurer et corriger orthographiquement -- jamais à réinventer) :
+PLAN DE COURS FOURNI PAR L'ENSEIGNANT (contenu à corriger orthographiquement, jamais à réinventer) :
 ${planCours}`;
+
+    return {
+      instructions,
+      injectionDeroulement: null,
+      injectionAxes: null,
+      avertissement: `Le plan de cours fourni n'a pas pu être structuré automatiquement (${resultatParsing.raison}) : les repères "I.", "II.", "III.", "IV." sont attendus chacun en tout début de ligne. La fiche a été générée en mode de repli (texte non structuré, clairement signalé dans le document) -- corrigez le format des repères et régénérez pour obtenir un tableau correctement réparti.`
+    };
+  }
+
+  const { lignesHTML, axesHTML } = construireDeroulementPlanEnseignantHTML(resultatParsing.segments);
+
+  const instructions = enteteCommun + `
+
+DÉTECTION RÉUSSIE — le plan de l'enseignant a déjà été segmenté et mis en tableau AUTOMATIQUEMENT, côté serveur (pas par toi), selon ses repères I/II/III/IV${resultatParsing.segments.evaluation ? '/Évaluation' : ''}. Le tableau DÉROULEMENT (lignes I à IV${resultatParsing.segments.evaluation ? ' et Évaluation' : ''}) et le ou les tableaux d'axes sont DÉJÀ CONSTRUITS. Ta seule tâche sur ce contenu est de placer 3 marqueurs au bon endroit, SANS RIEN ÉCRIRE D'AUTRE à leur place :
+   1. Dans le tableau DÉROULEMENT (5 colonnes), juste après la ligne PRÉSENTATION rituelle (celle-ci, générique, reste à ta charge comme d'habitude), place EXACTEMENT le marqueur {{DEROULEMENT_PLAN_ENSEIGNANT}} comme SEUL contenu de cette position -- il sera remplacé par les lignes I à IV${resultatParsing.segments.evaluation ? ' et Évaluation' : ''} déjà construites. Referme normalement le tableau juste après (</table>).
+   2. Juste APRÈS ce tableau DÉROULEMENT (donc après son </table>, au même niveau que les autres tableaux de la fiche, JAMAIS à l'intérieur d'une cellule), place EXACTEMENT le marqueur {{TEXTE_SUPPORT}} sur sa propre ligne, UNE SEULE FOIS dans tout le document -- il sera remplacé par le texte support fourni par l'enseignant.
+   3. Juste après {{TEXTE_SUPPORT}}, place EXACTEMENT le marqueur {{AXES_PLAN_ENSEIGNANT}} sur sa propre ligne -- il sera remplacé par le ou les tableaux d'axes déjà construits.
+N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi-même : il est déjà entièrement construit ; ta seule tâche ici est de placer ces 3 marqueurs, chacun UNE SEULE FOIS, au bon endroit.
+
+PLAN DE COURS FOURNI PAR L'ENSEIGNANT (pour information seulement -- déjà structuré et injecté automatiquement, NE LE RECOPIE PAS) :
+${planCours}`;
+
+  return { instructions, injectionDeroulement: lignesHTML, injectionAxes: axesHTML, avertissement: null };
+}
+
+// Injecte, comme injecterTexteSupport ci-dessus, le contenu déjà construit
+// déterministiquement par construireDeroulementPlanEnseignantHTML à la place
+// des 2 marqueurs dédiés. Même logique anti-duplication : seule la 1ère
+// occurrence de chaque marqueur reçoit le contenu, les éventuelles occurrences
+// suivantes (erreur du modèle) sont retirées, jamais dupliquées.
+function injecterDeroulementPlanEnseignant(contenuHTML, injection) {
+  if (!injection || (injection.injectionDeroulement === null && injection.injectionAxes === null)) return contenuHTML;
+  let resultat = contenuHTML;
+
+  const injecterMarqueurUneFois = (html, marqueur, contenu) => {
+    if (contenu === null || !html.includes(marqueur)) return html;
+    const morceaux = html.split(marqueur);
+    return morceaux[0] + contenu + morceaux.slice(1).join('');
+  };
+
+  resultat = injecterMarqueurUneFois(resultat, '{{DEROULEMENT_PLAN_ENSEIGNANT}}', injection.injectionDeroulement);
+  resultat = injecterMarqueurUneFois(resultat, '{{AXES_PLAN_ENSEIGNANT}}', injection.injectionAxes);
+  return resultat;
 }
 
 function construireInstructionsExpressionEcriture(referentiel) {
@@ -1896,6 +2181,11 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
     let systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : construirePromptSecondaire(avecVerbesTaxonomiques);
 
     let avertissementRappel = null;
+    // Blocs HTML déjà construits par construireDeroulementPlanEnseignantHTML,
+    // à injecter après génération (cf. injecterDeroulementPlanEnseignant, appelé
+    // dans stream.on('finalMessage', ...) plus bas) -- null si le mode plan-
+    // enseignant n'est pas déclenché ou si son parsing a échoué.
+    let planFourniInjection = null;
 
     if (niveau !== 'primaire') {
       const estLM = estLectureMethodique({ discipline, lecon, theme, activite });
@@ -1912,7 +2202,12 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
         // remplacement : le mode génération automatique (construireInstructionsLectureMethodique)
         // reste inchangé et s'applique dès que le plan n'est pas substantiel.
         if (planCoursEstSubstantiel(planCours)) {
-          systemPrompt += construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours);
+          const resultatPlanFourni = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours);
+          systemPrompt += resultatPlanFourni.instructions;
+          planFourniInjection = resultatPlanFourni;
+          if (resultatPlanFourni.avertissement) {
+            avertissementRappel = avertissementRappel ? `${avertissementRappel} ${resultatPlanFourni.avertissement}` : resultatPlanFourni.avertissement;
+          }
         } else {
           const referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
           systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
@@ -2146,6 +2441,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     stream.on('finalMessage', async () => {
       clearInterval(heartbeat);
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
+      contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
       }
