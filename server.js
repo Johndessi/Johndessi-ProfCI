@@ -1415,8 +1415,31 @@ ${lignesHTML}
 // Orchestre les 2 fonctions ci-dessus à partir des segments déjà découpés par
 // parserPlanEnseignant : construit les lignes I à IV (+ Évaluation) du
 // tableau déroulement, et les tableaux d'axes détectés dans la partie III.
-function construireDeroulementPlanEnseignantHTML(segments) {
+// Méthodologie DPFC (6e à Terminale, sans exception) : chaque axe doit
+// contenir EXACTEMENT 2 entrées. Axe 1 justifie le type de texte de
+// l'hypothèse (+ la tonalité à partir de la 4e, la tonalité n'étant pas
+// étudiée en 6e/5e). Axe 2 justifie le thème de l'hypothèse (justification
+// thématique, jamais une énumération libre). En mode plan-enseignant, le
+// contenu vient à 100% de l'enseignant : on ne coupe ni ne complète jamais
+// ses entrées pour forcer ce compte à 2 -- on se contente de l'avertir
+// explicitement si son plan s'en écarte (option choisie explicitement,
+// plutôt que de tronquer ou d'inventer une entrée manquante).
+function verifierNombreEntreesParAxe(axes, niveau) {
+  const attenduAxe1 = (niveau === '6e' || niveau === '5e')
+    ? '1 entrée justifiant le type de texte (pas de tonalité à ce niveau)'
+    : '1 entrée justifiant le type de texte + 1 entrée justifiant la tonalité';
+
+  return axes
+    .filter((axe) => axe.entrees.length !== 2)
+    .map((axe) => {
+      const attendu = axe.numero === '1' ? attenduAxe1 : '2 entrées de justification thématique (jamais une énumération libre)';
+      return `Axe ${axe.numero} (« ${axe.titre} ») contient ${axe.entrees.length} entrée(s) au lieu des 2 attendues par la méthodologie (${attendu}) -- le contenu de l'enseignant a été conservé tel quel dans la fiche, sans rien couper ni ajouter ; vérifiez la conformité méthodologique de cet axe dans le plan fourni.`;
+    });
+}
+
+function construireDeroulementPlanEnseignantHTML(segments, niveau) {
   const axes = parserAxesDepuisVerification(segments.verification);
+  const avertissementsEntrees = verifierNombreEntreesParAxe(axes, niveau);
   const libelleAxes = axes.length
     ? axes.map((a) => `Axe ${a.numero} : ${a.titre}`).join(' / ')
     : texteSupportVersHtml(segments.verification).replace(/<\/?p>/g, ' ').trim();
@@ -1463,7 +1486,7 @@ function construireDeroulementPlanEnseignantHTML(segments) {
 
   const axesHTML = axes.length ? axes.map((a) => construireTableauAxeHTML(a.numero, a.titre, a.entrees)).join('\n\n') : '';
 
-  return { lignesHTML, axesHTML };
+  return { lignesHTML, axesHTML, avertissementsEntrees };
 }
 
 // Mode "plan fourni par l'enseignant" -- ALTERNATIF à construireInstructionsLectureMethodique
@@ -1527,7 +1550,7 @@ ${habiletesLectureMethodique(niveau)}`;
     };
   }
 
-  const { lignesHTML, axesHTML } = construireDeroulementPlanEnseignantHTML(resultatParsing.segments);
+  const { lignesHTML, axesHTML, avertissementsEntrees } = construireDeroulementPlanEnseignantHTML(resultatParsing.segments, niveau);
 
   const instructions = enteteCommun + `
 
@@ -1542,7 +1565,15 @@ N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi
   // ne pas l'inclure supprime à la fois le risque de dilution des
   // instructions suivantes (Leçon/Séance/Compétence) et toute tentation du
   // modèle de réécrire lui-même ce contenu.
-  return { instructions, injectionDeroulement: lignesHTML, injectionAxes: axesHTML, avertissement: null, planCoursPourPromptFinal: null };
+  return {
+    instructions,
+    injectionDeroulement: lignesHTML,
+    injectionAxes: axesHTML,
+    // Option B : avertissement explicite si un axe n'a pas exactement 2
+    // entrées -- jamais un échec silencieux, jamais un contenu tronqué/complété.
+    avertissement: avertissementsEntrees.length ? avertissementsEntrees.join(' ') : null,
+    planCoursPourPromptFinal: null
+  };
 }
 
 // Injecte, comme injecterTexteSupport ci-dessus, le contenu déjà construit
