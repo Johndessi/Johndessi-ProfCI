@@ -902,7 +902,12 @@ function injecterTexteSupport(contenuHTML, texteSupport, options = {}) {
 
   let resultat;
   if (contenuHTML.includes('{{TEXTE_SUPPORT}}')) {
-    resultat = contenuHTML.split('{{TEXTE_SUPPORT}}').join(texteAInserer);
+    // Une seule insertion réelle même si le modèle a répété le marqueur par
+    // erreur (ex. une deuxième fois entre les tableaux de vérification des 2
+    // axes en Lecture méthodique) : seule la 1ère occurrence reçoit le texte,
+    // les occurrences suivantes du marqueur sont simplement retirées.
+    const morceaux = contenuHTML.split('{{TEXTE_SUPPORT}}');
+    resultat = morceaux[0] + texteAInserer + morceaux.slice(1).join('');
   } else {
     // Le modèle a oublié le marqueur : insère une section dédiée juste avant le
     // tableau de déroulement (qui contient les questions), donc en fin de fiche
@@ -1000,14 +1005,23 @@ function niveauLectureMethodique(classe) {
 // restent cohérentes sur un même type de texte au lieu que chaque fiche
 // invente librement ses propres entrées. À compléter progressivement (seuls
 // 4 types couverts pour l'instant).
+// Catégories grammaticales officielles de "types de phrases" -- TOUJOURS les
+// 4 mêmes, partagées mot pour mot entre Lecture méthodique et Expression
+// écrite : aucune des deux activités ne doit générer sa propre terminologie
+// ou une liste partielle (ex. "phrases déclaratives" seules).
+const TYPES_PHRASES_OFFICIELS = 'déclarative, interrogative, exclamative, impérative';
+
 // Socle d'outils de base pour la Lecture méthodique en collège (6e/5e/4e/3e) :
-// des notions de langue simples, communes à tout type de texte, disponibles
-// AVANT les procédés stylistiques plus fins réservés au lycée dans
-// "caracteristiques" (liste complète, historique, par type de texte, ci-dessous).
+// des notions de langue simples, communes à tout type de texte. FUSIONNÉ (pas
+// substitué) aux catégories propres au genre -- voir fusionnerCaracteristiquesCollege
+// -- pour que Lecture méthodique et Expression écrite restent alignées sur les
+// mêmes catégories pour un même genre/niveau (jamais une liste générique qui
+// remplacerait silencieusement les catégories du genre, ex. "présentation
+// matérielle"/"registre de langue" pour une lettre personnelle).
 const OUTILS_BASE_LECTURE_COLLEGE = [
   { categorie: 'structure_texte', description: 'organisation du texte (introduction / développement / conclusion, ou parties selon le type de texte)' },
   { categorie: 'indices_personne', description: 'pronoms personnels et marques de la personne (je/tu/il/elle...)' },
-  { categorie: 'types_phrases', description: 'types de phrases (déclarative, interrogative, exclamative, impérative)' },
+  { categorie: 'types_phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS})` },
   { categorie: 'temps_verbaux', description: 'temps verbaux dominants et leur valeur' },
   { categorie: 'lexique', description: 'vocabulaire et champ lexical du thème' },
   { categorie: 'indices_spatiaux', description: 'indices de lieu (prépositions, adverbes de lieu)' },
@@ -1027,8 +1041,18 @@ function figureStyleParNiveauCollege(niveau) {
   return { categorie: 'figures_style', description: `${listes[niveau]} — UNIQUEMENT si réellement présentes dans le texte support, jamais de façon systématique` };
 }
 
-function entreesLectureCollege(niveau) {
-  return [...OUTILS_BASE_LECTURE_COLLEGE, figureStyleParNiveauCollege(niveau)];
+// Fusionne les catégories propres au genre (caracteristiquesGenre, celles
+// utilisées telles quelles par Expression écrite) avec le socle collège --
+// EN GARDANT en priorité celles du genre (ex. presentation_materielle,
+// registre_langue pour une lettre personnelle) et en n'AJOUTANT que les
+// catégories du socle collège absentes du genre (dédoublonnage par
+// "categorie"). Garantit que Lecture méthodique dispose d'assez d'entrées
+// pour ses 2 axes SANS jamais perdre ni contredire les catégories déjà
+// utilisées pour ce même genre/niveau en Expression écrite.
+function fusionnerCaracteristiquesCollege(caracteristiquesGenre, niveau) {
+  const categoriesGenre = new Set(caracteristiquesGenre.map((c) => c.categorie));
+  const baseCollegeManquante = OUTILS_BASE_LECTURE_COLLEGE.filter((c) => !categoriesGenre.has(c.categorie));
+  return [...caracteristiquesGenre, ...baseCollegeManquante, figureStyleParNiveauCollege(niveau)];
 }
 
 const REFERENTIEL_TYPES_TEXTE = {
@@ -1036,20 +1060,18 @@ const REFERENTIEL_TYPES_TEXTE = {
     caracteristiques: [
       { categorie: 'lexique', description: 'vocabulaire technique/scientifique, champ lexical du phénomène expliqué' },
       { categorie: 'temps_verbaux', description: 'présent de vérité générale (valeur de permanence)' },
-      { categorie: 'types_phrases', description: 'phrases déclaratives' },
+      { categorie: 'types_phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) — dominante déclarative pour ce type de texte` },
       { categorie: 'donnees_chiffrees', description: "statistiques, mesures, proportions appuyant l'explication" },
       { categorie: 'connecteurs_logiques', description: "d'abord, ensuite, en effet, au final — articulation causale/chronologique" }
-    ],
-    entreesParNiveau: { niveau_6e: entreesLectureCollege('6e'), niveau_5e: entreesLectureCollege('5e'), niveau_4e_3e: entreesLectureCollege('4e_3e') }
+    ]
   },
   'lettre personnelle': {
     caracteristiques: [
       { categorie: 'presentation_materielle', description: "en-tête (lieu, date), formule d'appel, corps (introductive/développement/finale), signature" },
       { categorie: 'indices_personne', description: 'pronoms personnels je/tu selon relation expéditeur-destinataire' },
       { categorie: 'registre_langue', description: 'standard ou familier selon la relation' },
-      { categorie: 'types_phrases', description: 'déclaratives pour exprimer une certitude/intention' }
-    ],
-    entreesParNiveau: { niveau_6e: entreesLectureCollege('6e'), niveau_5e: entreesLectureCollege('5e'), niveau_4e_3e: entreesLectureCollege('4e_3e') }
+      { categorie: 'types_phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) selon l'intention de l'auteur (ex. dominante déclarative pour donner des nouvelles)` }
+    ]
   },
   'portrait': {
     caracteristiques: [
@@ -1059,8 +1081,7 @@ const REFERENTIEL_TYPES_TEXTE = {
       { categorie: 'adjectifs', description: 'adjectifs qualificatifs' },
       { categorie: 'verbes', description: "verbes d'état" },
       { categorie: 'structure', description: 'introduction / développement / conclusion' }
-    ],
-    entreesParNiveau: { niveau_6e: entreesLectureCollege('6e'), niveau_5e: entreesLectureCollege('5e'), niveau_4e_3e: entreesLectureCollege('4e_3e') }
+    ]
   },
   'texte descriptif (objet)': {
     caracteristiques: [
@@ -1068,8 +1089,7 @@ const REFERENTIEL_TYPES_TEXTE = {
       { categorie: 'adjectifs', description: 'adjectifs qualificatifs valorisants' },
       { categorie: 'enumeration', description: 'énumération organisée (spatiale : extérieur→intérieur, haut→bas)' },
       { categorie: 'procedes_stylistiques', description: "exclamations, apostrophe, hyperbole selon l'effet recherché" }
-    ],
-    entreesParNiveau: { niveau_6e: entreesLectureCollege('6e'), niveau_5e: entreesLectureCollege('5e'), niveau_4e_3e: entreesLectureCollege('4e_3e') }
+    ]
   }
 };
 
@@ -1079,9 +1099,10 @@ const REFERENTIEL_TYPES_TEXTE = {
 // sans connaître la clé exacte du référentiel.
 // "classe" est optionnel : quand omis (cas Expression écrite), le comportement
 // est EXACTEMENT celui d'avant ce correctif -- liste "caracteristiques" complète,
-// non filtrée. Quand fourni (cas Lecture méthodique uniquement), la liste est
-// remplacée par le sous-ensemble adapté au palier (6e/5e/4e_3e), sauf au lycée
-// où "caracteristiques" (comportement historique, sans restriction) reste utilisée.
+// non filtrée. Quand fourni (cas Lecture méthodique uniquement), la liste du
+// genre est FUSIONNÉE avec le socle collège adapté au palier (6e/5e/4e_3e,
+// cf. fusionnerCaracteristiquesCollege), sauf au lycée où "caracteristiques"
+// (comportement historique, sans ajout) reste utilisée telle quelle.
 function trouverReferentielTypeTexte(typeTexteDemande, classe) {
   const cible = normaliserTexte(typeTexteDemande);
   if (!cible) return null;
@@ -1099,7 +1120,7 @@ function trouverReferentielTypeTexte(typeTexteDemande, classe) {
   const entree = REFERENTIEL_TYPES_TEXTE[cleTrouvee];
   if (classe) {
     const niveau = niveauLectureMethodique(classe);
-    const caracteristiquesNiveau = niveau === 'lycee' ? entree.caracteristiques : entree.entreesParNiveau[`niveau_${niveau}`];
+    const caracteristiquesNiveau = niveau === 'lycee' ? entree.caracteristiques : fusionnerCaracteristiquesCollege(entree.caracteristiques, niveau);
     return { typeTexte: cleTrouvee, caracteristiques: caracteristiquesNiveau };
   }
   return { typeTexte: cleTrouvee, caracteristiques: entree.caracteristiques };
@@ -1143,13 +1164,24 @@ function construireInstructionsLectureMethodique(referentiel, classe) {
   const questionTonalite = (niveau === '6e' || niveau === '5e') ? '' : ' Quelle est sa tonalité ?';
   const composantesHypothese = (niveau === '6e' || niveau === '5e') ? 'de la nature + le thème identifiés en I' : 'de la nature + la tonalité + le thème identifiés en I';
 
+  // 6e/5e : même exigence de vocabulaire concret que dans les fiches
+  // d'Expression écrite de ces niveaux -- pas de méta-langage dense
+  // (« procédés d'expression de... », « organisation spatiale de... »).
+  // Inchangé à partir de 4e (comportement historique, vocabulaire plus
+  // technique déjà maîtrisé).
+  const consigneNiveauLangage = (niveau === '6e' || niveau === '5e')
+    ? `\n\nNIVEAU DE LANGUE (6e/5e) : le vocabulaire de l'hypothèse générale, des libellés des 2 axes et des colonnes Analyses/Interprétations doit rester CONCRET et ACCESSIBLE à des élèves de début de collège — au même niveau de langue que celui déjà utilisé dans les fiches d'Expression écrite pour ce niveau. INTERDITS car trop abstraits/savants pour ce niveau : des formulations comme « procédés d'expression de l'admiration », « organisation spatiale de la description », ou toute expression méta-linguistique dense. Préfère des formulations simples et directement descriptives (ex. « les mots qui montrent que [le personnage] va bien » plutôt que « les marqueurs lexicaux de l'état de santé »).`
+    : '';
+
   return `
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE (cette fiche est une lecture méthodique : les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête et la Situation d'apprentissage restent inchangés. La ligne PRÉSENTATION rituelle du début de séance reste aussi inchangée dans sa structure, SAUF la contrainte suivante :) :
 
 CONTRAINTE SUR LA LIGNE PRÉSENTATION RITUELLE (avant "I. Présentation du texte") : cette phase d'accueil ne doit JAMAIS révéler le thème précis du texte étudié, ni aucune conclusion, idée ou information tirée de son contenu. Reste strictement générique (ex. « un texte que nous allons découvrir ensemble », « la leçon du jour »). En particulier, les étapes (h) Identification de la notion à partir de la situation et (i) Annonce du titre officiel de la leçon ne doivent mentionner QUE le titre officiel de la leçon/l'activité (ex. « La description »), jamais le sujet précis du texte qui sera étudié (ex. jamais « nous allons étudier un texte sur un avion »). La découverte du thème se fait UNIQUEMENT via le questionnement guidé de la phase I ci-dessous.
 
-RÈGLE ANTI-RÉPÉTITION (valable pour toute la fiche) : chaque moment (Présentation du texte, Hypothèse générale, Vérification, Bilan général) pose des questions propres à SON contenu précis. Ne reformule JAMAIS une question déjà posée à une étape antérieure à une étape suivante — chaque question doit faire progresser l'analyse, pas la répéter.
+RÈGLE ANTI-RÉPÉTITION (valable pour toute la fiche) : chaque moment (Présentation du texte, Hypothèse générale, Vérification, Bilan général) pose des questions propres à SON contenu précis. Ne reformule JAMAIS une question déjà posée à une étape antérieure à une étape suivante — chaque question doit faire progresser l'analyse, pas la répéter.${consigneNiveauLangage}
+
+TEXTE SUPPORT — UNE SEULE INSERTION DANS TOUT LE DOCUMENT : utilise le marqueur {{TEXTE_SUPPORT}} UNE SEULE FOIS, à un seul endroit de la fiche. Ne le recopie, ne le mentionne et ne le réinsère JAMAIS une deuxième fois ailleurs — en particulier JAMAIS entre le tableau de vérification de l'Axe 1 et celui de l'Axe 2, ni entre aucun autre tableau. Une seule occurrence du marqueur, nulle part ailleurs dans le document.
 
 SUPPORTS DIDACTIQUES/BIBLIOGRAPHIE — structure en tableau à deux colonnes inchangée, mais le contenu de la colonne Supports didactiques doit mentionner explicitement que le texte support est photocopié et distribué en un exemplaire par élève — JAMAIS recopié au tableau ni affiché.
 
@@ -1163,10 +1195,10 @@ I. PRÉSENTATION (du texte, distincte de la ligne PRÉSENTATION rituelle du déb
    - Lecture silencieuse : question ouverte « De quoi peut-il s'agir ? »
    - Lecture magistrale, puis questions : Quelle est la nature du texte ?${questionTonalite} Quel est son thème ?
 
-II. HYPOTHÈSE GÉNÉRALE — UNE SEULE phrase, dérivée EXPLICITEMENT ${composantesHypothese}. Ne la donne JAMAIS d'emblée : présente-la comme la synthèse/déduction des réponses précédentes (question du type « À partir de ce que nous venons d'identifier, quelle hypothèse pouvons-nous formuler sur ce texte ? »). Formule-la comme une COURTE PHRASE NOMINALE, jamais deux propositions accolées par « puis », « et exprime », « et décrit »... : patron « [Nature du texte] présentant/décrivant/exprimant [thème/idée]. » — une seule idée, jamais une double proposition.
+II. HYPOTHÈSE GÉNÉRALE — UNE SEULE phrase, dérivée EXPLICITEMENT ${composantesHypothese}. Ne la donne JAMAIS d'emblée : présente-la comme la synthèse/déduction des réponses précédentes (question du type « À partir de ce que nous venons d'identifier, quelle hypothèse pouvons-nous formuler sur ce texte ? »). Formule-la TOUJOURS en deux SEGMENTS explicites et juxtaposés, jamais fondus en une seule idée globale et jamais deux propositions accolées par « puis », « et exprime », « et décrit »... : SEGMENT 1 = caractérisation du texte/genre (ex. « Lettre familière », « Extrait de roman descriptif ») ; SEGMENT 2 = le contenu ou la fonction précise du texte (ex. « dans laquelle Konan Aurélie donne ses nouvelles à sa mère », « décrivant un objet merveilleux »). Patron : « [SEGMENT 1] [connecteur : dans laquelle / où / qui] [SEGMENT 2]. » Retiens ces deux segments tels quels : ce sont EXACTEMENT ce qui sera repris comme libellés des 2 axes en III ci-dessous.
 
 III. VÉRIFICATION DE L'HYPOTHÈSE GÉNÉRALE :
-   1. Détermination des axes de lecture : EXACTEMENT 2 axes (jamais 3, jamais 4), obtenus en décomposant l'hypothèse générale en ses deux composantes.
+   1. Détermination des axes de lecture : EXACTEMENT 2 axes (jamais 3, jamais 4). Axe 1 = SEGMENT 1 de l'hypothèse générale ci-dessus, repris QUASI MOT POUR MOT (ex. hypothèse « Lettre familière dans laquelle Konan Aurélie donne ses nouvelles à sa mère » → Axe 1 « Une lettre familière »). Axe 2 = SEGMENT 2, repris QUASI MOT POUR MOT (ex. Axe 2 « Les nouvelles d'Aurélie à sa mère »). INTERDICTION ABSOLUE d'introduire dans le libellé d'un axe une notion, un procédé ou une catégorie d'analyse ABSENTE des mots de l'hypothèse (interdits si l'hypothèse ne les mentionne pas, ex. : « organisation spatiale », « procédés d'expression de... ») : les axes ne sont JAMAIS le produit d'une analyse indépendante du texte, seulement une reformulation quasi identique des deux segments déjà écrits dans l'hypothèse.
    2. Dans la ligne III du tableau DÉROULEMENT, la colonne Traces écrites contient UNIQUEMENT du texte simple (jamais de tableau) : le libellé des 2 axes (ex. "Axe 1 : ... / Axe 2 : ..."). Les Activités de l'enseignant/des élèves de cette ligne portent le questionnement guidé qui permet de dégager ces axes.
    3. Pour CHAQUE axe, un tableau à 4 colonnes (Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations) rempli PAR QUESTIONNEMENT GUIDÉ (chaque ligne correspond à une « entrée » avec des relevés précis tirés du texte, l'analyse du procédé, et l'interprétation de son effet). Ce tableau COMMENCE par une ligne-titre fusionnée sur les 4 colonnes (<td colspan="4">) annonçant « Axe 1 : [libellé] » (ou « Axe 2 : ... »). Chaque cellule « Entrées » contient une question numérotée intégrée, reformulée SPÉCIFIQUEMENT pour ce que cette ligne observe dans CE texte — jamais un gabarit générique recopié tel quel d'une entrée à l'autre (style attendu : « 1- Relevez... », « 2- Nommez et justifiez... », « 4- Pourquoi/Que révèle... »). ${consigneEntrees} Dans tous les cas (référentiel disponible ou non), les entrées sont STRICTEMENT des catégories linguistiques/grammaticales/lexicales (temps verbaux, types et formes de phrase, indices spatiaux/temporels, lexique thématique/mélioratif/péjoratif, pronoms, comparaisons et autres figures de style, ponctuation...) — JAMAIS une entrée thématique ou psychologisante (interdits, ex. : « le regret », « l'attachement affectif », « les détails techniques », « l'irruption du sentiment »...). Si un tel aspect thématique/affectif apparaît dans le texte sans être couvert par les 2 axes, il devient la matière de l'extrait d'ÉVALUATION plus bas — jamais une entrée de ce tableau. CES 2 TABLEAUX SONT DES ÉLÉMENTS AUTONOMES DU DOCUMENT HTML, PLACÉS APRÈS LE TABLEAU DÉROULEMENT COMPLET (donc en dehors de toute balise <td>/<th>) — JAMAIS imbriqués à l'intérieur d'une cellule d'un autre tableau (rendu illisible en Word/PDF : colonnes écrasées, texte compressé). Un tableau HTML ne doit JAMAIS contenir un autre tableau HTML dans une de ses cellules, nulle part dans la fiche.
 
@@ -2017,7 +2049,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           ? `Ce texte support fait environ ${motsTexteSupport} mots : assez court pour tenir deux fois sur la même page. Immédiatement APRÈS le marqueur {{TEXTE_SUPPORT}}, ajoute le marqueur exact {{TEXTE_SUPPORT_COPIE}} pour insérer un second exemplaire en police réduite (permet à l'enseignant de photocopier une seule feuille et distribuer deux exemplaires, économie de papier).`
           : `Ce texte support fait environ ${motsTexteSupport} mots : trop long pour être dupliqué sur la même page. N'ajoute PAS de second exemplaire — utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois, sans {{TEXTE_SUPPORT_COPIE}}.`;
       }
-      userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} à l'endroit où le texte doit apparaître dans le HTML. ${instructionMiseEnPage}\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
+      userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} UNE SEULE FOIS, à l'endroit où le texte doit apparaître dans le HTML (jamais une deuxième fois ailleurs dans le document, par exemple jamais entre deux tableaux d'analyse). ${instructionMiseEnPage}\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
     } else if (estFicheExpressionEcrite) {
       userMessage += `\n\nAucun texte support n'a été fourni par l'enseignant : si tu dois toi-même rédiger un exemple de texte (lettre, etc.) à titre de modèle, reste sous les 250 mots afin qu'il tienne sur une seule page (mise en forme observable d'un coup d'œil par les élèves), et places-le dans une balise <div class="texte-support-page-unique">...</div> pour qu'il bénéficie du même traitement de mise en page qu'un texte support fourni par l'enseignant.`;
     }
