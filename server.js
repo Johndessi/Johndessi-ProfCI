@@ -1356,14 +1356,41 @@ function parserEntreesAxe(texteAxe) {
   });
 }
 
+// Repère un en-tête d'axe : "Axe 1", "Axe de lecture 1", "-Axe 2 :",
+// "•Axe 2)"... -- une puce de tête (tiret ou point) est tolérée, et
+// N'IMPORTE QUELS MOTS peuvent séparer "Axe" du chiffre (ex. "de lecture") :
+// seul le mot "Axe" en tout début de ligne (après puce/espaces éventuels) et
+// un chiffre plus loin sur la même ligne sont exigés.
+const REGEX_AXE = /^\s*[-•]?\s*Axe\b[^\d]*?(\d+)\s*[.):\-–—]?\s*(.*)$/i;
+
+// Frontière "Situation d'évaluation" (ou variantes : avec/sans puce de tête,
+// apostrophe droite/courbe, avec/sans accent) que certains enseignants
+// placent APRÈS les axes mais AVANT "IV." plutôt qu'après -- separe la fin
+// du contenu du dernier axe de cet extrait d'évaluation, fusionné ensuite
+// avec segments.evaluation (même case du tableau ÉVALUATION, quel que soit
+// l'endroit où l'enseignant l'a placé dans son plan).
+const REGEX_SITUATION_EVALUATION = /^\s*[-•]?\s*Situation\s+d[’']?\s*[ée]valuation\b\s*[.):\-–—]?\s*(.*)$/i;
+
 function parserAxesDepuisVerification(texteVerification) {
   const lignes = (texteVerification || '').split('\n');
-  const regexAxe = /^\s*Axe\s*(\d+)\s*[.):\-–—]?\s*(.*)$/i;
 
   const blocs = [];
   let courant = null;
+  const situationEvaluationLignes = [];
+  let dansSituationEvaluation = false;
+
   lignes.forEach((ligne) => {
-    const m = regexAxe.exec(ligne);
+    if (dansSituationEvaluation) {
+      situationEvaluationLignes.push(ligne);
+      return;
+    }
+    const mEval = REGEX_SITUATION_EVALUATION.exec(ligne);
+    if (mEval) {
+      dansSituationEvaluation = true;
+      if (mEval[1].trim()) situationEvaluationLignes.push(mEval[1].trim());
+      return;
+    }
+    const m = REGEX_AXE.exec(ligne);
     if (m) {
       if (courant) blocs.push(courant);
       courant = { numero: m[1], titre: m[2].trim(), lignesBrutes: [] };
@@ -1373,11 +1400,14 @@ function parserAxesDepuisVerification(texteVerification) {
   });
   if (courant) blocs.push(courant);
 
-  return blocs.map((axe) => ({
+  const axes = blocs.map((axe) => ({
     numero: axe.numero,
     titre: axe.titre,
     entrees: parserEntreesAxe(axe.lignesBrutes.join('\n'))
   }));
+
+  const situationEvaluation = situationEvaluationLignes.join('\n').trim();
+  return { axes, situationEvaluation: situationEvaluation || null };
 }
 
 // Construit UNE ligne <tr> du tableau déroulement 5 colonnes -- SEULE fonction
@@ -1470,11 +1500,19 @@ function extraireChampsPresentation(texteI) {
 const JETON_PRESENTATION_RECOMPOSEE = '@@PRESENTATION_RECOMPOSEE@@';
 
 function construireDeroulementPlanEnseignantHTML(segments, niveau) {
-  const axes = parserAxesDepuisVerification(segments.verification);
+  const { axes, situationEvaluation } = parserAxesDepuisVerification(segments.verification);
   const avertissementsEntrees = verifierNombreEntreesParAxe(axes, niveau);
   const libelleAxes = axes.length
     ? axes.map((a) => `Axe ${a.numero} : ${a.titre}`).join(' / ')
     : texteSupportVersHtml(segments.verification).replace(/<\/?p>/g, ' ').trim();
+
+  // "Situation d'évaluation" placée par l'enseignant APRÈS les axes mais
+  // AVANT "IV." (plutôt qu'après, comme le prévoit le format par défaut) :
+  // fusionnée ici avec segments.evaluation -- même case ÉVALUATION du
+  // tableau, quel que soit l'endroit où l'enseignant l'a écrite. Le repère
+  // "IV." explicite reste prioritaire s'il existe (cas où l'enseignant aurait
+  // rédigé les deux, peu probable mais on ne veut jamais en perdre un).
+  const evaluationEffective = segments.evaluation || situationEvaluation || '';
 
   // Exception étroite (à partir de la 4e SEULEMENT) : si l'enseignant a
   // fourni la présentation du texte sous forme de champs séparés, le
@@ -1519,12 +1557,13 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau) {
     }),
     construireLigneDeroulementHTML({
       moment: 'ÉVALUATION',
-      strategie: segments.evaluation ? 'Travail individuel' : '',
-      activiteEnseignant: segments.evaluation ? 'Donne le sujet.' : '',
-      activiteEleves: segments.evaluation ? 'Travaillent seuls, à l\'écrit.' : '',
-      // Ligne laissée VIDE si l'enseignant n'a pas rédigé d'Évaluation --
-      // jamais d'exercice inventé pour la compléter.
-      tracesEcrites: segments.evaluation ? texteSupportVersHtml(segments.evaluation) : ''
+      strategie: evaluationEffective ? 'Travail individuel' : '',
+      activiteEnseignant: evaluationEffective ? 'Donne le sujet.' : '',
+      activiteEleves: evaluationEffective ? 'Travaillent seuls, à l\'écrit.' : '',
+      // Ligne laissée VIDE si l'enseignant n'a rédigé aucune évaluation
+      // (ni après "IV.", ni via "Situation d'évaluation" dans la partie III)
+      // -- jamais d'exercice inventé pour la compléter.
+      tracesEcrites: evaluationEffective ? texteSupportVersHtml(evaluationEffective) : ''
     })
   ].join('\n');
 
@@ -1537,7 +1576,10 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau) {
     champsPresentationARecomposer: champsPresentation,
     // Repli sûr si le modèle ne produit pas la recomposition demandée --
     // jamais de jeton laissé visible dans le document final.
-    presentationVerbatimFallbackHTML: texteSupportVersHtml(segments.presentation)
+    presentationVerbatimFallbackHTML: texteSupportVersHtml(segments.presentation),
+    // Pour le texte du prompt (mention "/Évaluation" détectée) -- reflète la
+    // fusion ci-dessus, pas seulement le repère "IV." explicite.
+    evaluationDetectee: !!evaluationEffective
   };
 }
 
@@ -1602,7 +1644,7 @@ ${habiletesLectureMethodique(niveau)}`;
     };
   }
 
-  const { lignesHTML, axesHTML, avertissementsEntrees, champsPresentationARecomposer, presentationVerbatimFallbackHTML } =
+  const { lignesHTML, axesHTML, avertissementsEntrees, champsPresentationARecomposer, presentationVerbatimFallbackHTML, evaluationDetectee } =
     construireDeroulementPlanEnseignantHTML(resultatParsing.segments, niveau);
 
   // Exception étroite accordée pour la ligne I UNIQUEMENT (à partir de la 4e,
@@ -1620,8 +1662,8 @@ ${Object.entries(champsPresentationARecomposer).map(([cle, valeur]) => `- ${cle}
 
   const instructions = enteteCommun + `
 
-DÉTECTION RÉUSSIE — le plan de l'enseignant a déjà été segmenté et mis en tableau AUTOMATIQUEMENT, côté serveur (pas par toi), selon ses repères I/II/III/IV${resultatParsing.segments.evaluation ? '/Évaluation' : ''}. Le tableau DÉROULEMENT (lignes I à IV${resultatParsing.segments.evaluation ? ' et Évaluation' : ''}) et le ou les tableaux d'axes sont DÉJÀ CONSTRUITS. Concernant UNIQUEMENT cette partie développement/vérification (pas le reste de la fiche), ta tâche est de placer 3 marqueurs au bon endroit, sans rien écrire d'autre à leur place :
-   1. Dans le tableau DÉROULEMENT (5 colonnes), juste après la ligne PRÉSENTATION rituelle (celle-ci, générique, reste à ta charge comme d'habitude), place EXACTEMENT le marqueur {{DEROULEMENT_PLAN_ENSEIGNANT}} comme SEUL contenu de cette position -- il sera remplacé par les lignes I à IV${resultatParsing.segments.evaluation ? ' et Évaluation' : ''} déjà construites. Referme normalement le tableau juste après (</table>).
+DÉTECTION RÉUSSIE — le plan de l'enseignant a déjà été segmenté et mis en tableau AUTOMATIQUEMENT, côté serveur (pas par toi), selon ses repères I/II/III/IV${evaluationDetectee ? '/Évaluation' : ''}. Le tableau DÉROULEMENT (lignes I à IV${evaluationDetectee ? ' et Évaluation' : ''}) et le ou les tableaux d'axes sont DÉJÀ CONSTRUITS. Concernant UNIQUEMENT cette partie développement/vérification (pas le reste de la fiche), ta tâche est de placer 3 marqueurs au bon endroit, sans rien écrire d'autre à leur place :
+   1. Dans le tableau DÉROULEMENT (5 colonnes), juste après la ligne PRÉSENTATION rituelle (celle-ci, générique, reste à ta charge comme d'habitude), place EXACTEMENT le marqueur {{DEROULEMENT_PLAN_ENSEIGNANT}} comme SEUL contenu de cette position -- il sera remplacé par les lignes I à IV${evaluationDetectee ? ' et Évaluation' : ''} déjà construites. Referme normalement le tableau juste après (</table>).
    2. Juste APRÈS ce tableau DÉROULEMENT (donc après son </table>, au même niveau que les autres tableaux de la fiche, JAMAIS à l'intérieur d'une cellule), place EXACTEMENT le marqueur {{TEXTE_SUPPORT}} sur sa propre ligne, UNE SEULE FOIS dans tout le document -- il sera remplacé par le texte support fourni par l'enseignant.
    3. Juste après {{TEXTE_SUPPORT}}, place EXACTEMENT le marqueur {{AXES_PLAN_ENSEIGNANT}} sur sa propre ligne -- il sera remplacé par le ou les tableaux d'axes déjà construits.
 N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi-même pour cette partie : il est déjà entièrement construit. Le reste de la fiche (entête, Compétence, Situation d'apprentissage, Supports/Bibliographie...) n'est PAS concerné par cette restriction et se rédige normalement.${consigneRecompositionPresentation}`;
