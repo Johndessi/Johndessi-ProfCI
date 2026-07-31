@@ -1686,6 +1686,31 @@ N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi
   };
 }
 
+// Vérifie, dans le HTML brut renvoyé par le modèle (AVANT toute injection),
+// que les 3 marqueurs attendus du mode plan-enseignant sont bien présents.
+// Sans ce contrôle, un marqueur omis par le modèle (réponse tronquée, ou
+// modèle "estimant avoir fini" après avoir mentionné les axes en texte libre
+// dans la ligne III) provoque soit une perte de contenu totalement
+// silencieuse (tableau d'axes, via injecterMarqueurUneFois qui ne fait rien
+// si le marqueur est absent), soit un repli mal positionné (texte support,
+// dont le repli dans injecterTexteSupport suppose un autre tableau de
+// référence qui peut ne pas exister) -- jamais sans avertissement explicite
+// à l'enseignant.
+function verifierMarqueursPlanEnseignant(contenuHTMLBrut, injection) {
+  if (!injection || injection.injectionDeroulement === null) return [];
+  const avertissements = [];
+  if (!contenuHTMLBrut.includes('{{DEROULEMENT_PLAN_ENSEIGNANT}}')) {
+    avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le tableau déroulement (lignes I à IV) : ce tableau n'a pas pu être inséré automatiquement à l'emplacement prévu. Vérifiez la fiche générée.");
+  }
+  if (!contenuHTMLBrut.includes('{{TEXTE_SUPPORT}}')) {
+    avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le texte support : il a été réinséré automatiquement à un emplacement par défaut, qui peut ne pas correspondre à l'emplacement prévu (juste après le tableau déroulement). Vérifiez son positionnement dans la fiche générée.");
+  }
+  if (!contenuHTMLBrut.includes('{{AXES_PLAN_ENSEIGNANT}}')) {
+    avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le tableau détaillé des axes (Entrées/Indices textuels/Analyses/Interprétations) : ce tableau n'a pas pu être inséré automatiquement. Vérifiez la fiche générée.");
+  }
+  return avertissements;
+}
+
 // Injecte, comme injecterTexteSupport ci-dessus, le contenu déjà construit
 // déterministiquement par construireDeroulementPlanEnseignantHTML à la place
 // des 2 marqueurs dédiés. Même logique anti-duplication : seule la 1ère
@@ -2394,14 +2419,6 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
           if (resultatPlanFourni.avertissement) {
             avertissementRappel = avertissementRappel ? `${avertissementRappel} ${resultatPlanFourni.avertissement}` : resultatPlanFourni.avertissement;
           }
-          // LOG TEMPORAIRE DE DIAGNOSTIC (à retirer une fois le bug du
-          // tableau de vérification "fracturé" identifié) : imprime le HTML
-          // déjà construit déterministiquement AVANT toute génération par le
-          // modèle, pour distinguer un bug de construction (visible ici) d'un
-          // bug de placement/mélange par le modèle (invisible ici, mais alors
-          // absent du HTML final malgré sa présence ci-dessous).
-          console.log('🔍 [DEBUG plan-enseignant] injectionDeroulement construit :\n' + resultatPlanFourni.injectionDeroulement);
-          console.log('🔍 [DEBUG plan-enseignant] injectionAxes construit :\n' + resultatPlanFourni.injectionAxes);
         } else {
           const referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
           systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
@@ -2645,13 +2662,13 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     stream.on('finalMessage', async () => {
       clearInterval(heartbeat);
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
-      // LOG TEMPORAIRE DE DIAGNOSTIC (à retirer avec les logs ci-dessus) :
-      // le HTML BRUT renvoyé par le modèle, AVANT toute injection -- permet
-      // de voir si le modèle a bien placé les 3 marqueurs seuls, ou s'il a
-      // écrit son propre contenu en plus (ce qui expliquerait un tableau
-      // "fracturé"/mélangé après injection).
+      // Contrôle des 3 marqueurs attendus du mode plan-enseignant, AVANT toute
+      // injection -- un marqueur omis par le modèle ne doit jamais provoquer
+      // une perte de contenu silencieuse (cf. verifierMarqueursPlanEnseignant).
       if (planFourniInjection) {
-        console.log('🔍 [DEBUG plan-enseignant] HTML brut du modèle AVANT injection :\n' + contenuHTML);
+        for (const avertissementMarqueur of verifierMarqueursPlanEnseignant(contenuHTML, planFourniInjection)) {
+          res.write(`data: ${JSON.stringify({ avertissement: avertissementMarqueur })}\n\n`);
+        }
       }
       // Exception étroite ligne I (recomposition en phrase, à partir de la
       // 4e) : extrait la phrase rédigée par le modèle AVANT l'injection des
@@ -2667,9 +2684,6 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         }
       }
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
-      if (planFourniInjection) {
-        console.log('🔍 [DEBUG plan-enseignant] HTML APRÈS injection déroulement/axes :\n' + contenuHTML);
-      }
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
       }
