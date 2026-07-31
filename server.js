@@ -1356,14 +1356,41 @@ function parserEntreesAxe(texteAxe) {
   });
 }
 
+// Repère un en-tête d'axe : "Axe 1", "Axe de lecture 1", "-Axe 2 :",
+// "•Axe 2)"... -- une puce de tête (tiret ou point) est tolérée, et
+// N'IMPORTE QUELS MOTS peuvent séparer "Axe" du chiffre (ex. "de lecture") :
+// seul le mot "Axe" en tout début de ligne (après puce/espaces éventuels) et
+// un chiffre plus loin sur la même ligne sont exigés.
+const REGEX_AXE = /^\s*[-•]?\s*Axe\b[^\d]*?(\d+)\s*[.):\-–—]?\s*(.*)$/i;
+
+// Frontière "Situation d'évaluation" (ou variantes : avec/sans puce de tête,
+// apostrophe droite/courbe, avec/sans accent) que certains enseignants
+// placent APRÈS les axes mais AVANT "IV." plutôt qu'après -- separe la fin
+// du contenu du dernier axe de cet extrait d'évaluation, fusionné ensuite
+// avec segments.evaluation (même case du tableau ÉVALUATION, quel que soit
+// l'endroit où l'enseignant l'a placé dans son plan).
+const REGEX_SITUATION_EVALUATION = /^\s*[-•]?\s*Situation\s+d[’']?\s*[ée]valuation\b\s*[.):\-–—]?\s*(.*)$/i;
+
 function parserAxesDepuisVerification(texteVerification) {
   const lignes = (texteVerification || '').split('\n');
-  const regexAxe = /^\s*Axe\s*(\d+)\s*[.):\-–—]?\s*(.*)$/i;
 
   const blocs = [];
   let courant = null;
+  const situationEvaluationLignes = [];
+  let dansSituationEvaluation = false;
+
   lignes.forEach((ligne) => {
-    const m = regexAxe.exec(ligne);
+    if (dansSituationEvaluation) {
+      situationEvaluationLignes.push(ligne);
+      return;
+    }
+    const mEval = REGEX_SITUATION_EVALUATION.exec(ligne);
+    if (mEval) {
+      dansSituationEvaluation = true;
+      if (mEval[1].trim()) situationEvaluationLignes.push(mEval[1].trim());
+      return;
+    }
+    const m = REGEX_AXE.exec(ligne);
     if (m) {
       if (courant) blocs.push(courant);
       courant = { numero: m[1], titre: m[2].trim(), lignesBrutes: [] };
@@ -1373,11 +1400,14 @@ function parserAxesDepuisVerification(texteVerification) {
   });
   if (courant) blocs.push(courant);
 
-  return blocs.map((axe) => ({
+  const axes = blocs.map((axe) => ({
     numero: axe.numero,
     titre: axe.titre,
     entrees: parserEntreesAxe(axe.lignesBrutes.join('\n'))
   }));
+
+  const situationEvaluation = situationEvaluationLignes.join('\n').trim();
+  return { axes, situationEvaluation: situationEvaluation || null };
 }
 
 // Construit UNE ligne <tr> du tableau déroulement 5 colonnes -- SEULE fonction
@@ -1415,11 +1445,86 @@ ${lignesHTML}
 // Orchestre les 2 fonctions ci-dessus à partir des segments déjà découpés par
 // parserPlanEnseignant : construit les lignes I à IV (+ Évaluation) du
 // tableau déroulement, et les tableaux d'axes détectés dans la partie III.
-function construireDeroulementPlanEnseignantHTML(segments) {
-  const axes = parserAxesDepuisVerification(segments.verification);
+// Méthodologie DPFC (6e à Terminale, sans exception) : chaque axe doit
+// contenir EXACTEMENT 2 entrées. Axe 1 justifie le type de texte de
+// l'hypothèse (+ la tonalité à partir de la 4e, la tonalité n'étant pas
+// étudiée en 6e/5e). Axe 2 justifie le thème de l'hypothèse (justification
+// thématique, jamais une énumération libre). En mode plan-enseignant, le
+// contenu vient à 100% de l'enseignant : on ne coupe ni ne complète jamais
+// ses entrées pour forcer ce compte à 2 -- on se contente de l'avertir
+// explicitement si son plan s'en écarte (option choisie explicitement,
+// plutôt que de tronquer ou d'inventer une entrée manquante).
+function verifierNombreEntreesParAxe(axes, niveau) {
+  const attenduAxe1 = (niveau === '6e' || niveau === '5e')
+    ? '1 entrée justifiant le type de texte (pas de tonalité à ce niveau)'
+    : '1 entrée justifiant le type de texte + 1 entrée justifiant la tonalité';
+
+  return axes
+    .filter((axe) => axe.entrees.length !== 2)
+    .map((axe) => {
+      const attendu = axe.numero === '1' ? attenduAxe1 : '2 entrées de justification thématique (jamais une énumération libre)';
+      return `Axe ${axe.numero} (« ${axe.titre} ») contient ${axe.entrees.length} entrée(s) au lieu des 2 attendues par la méthodologie (${attendu}) -- le contenu de l'enseignant a été conservé tel quel dans la fiche, sans rien couper ni ajouter ; vérifiez la conformité méthodologique de cet axe dans le plan fourni.`;
+    });
+}
+
+// "I. Présentation du texte" -- l'enseignant fournit généralement ces
+// informations sous forme de champs séparés (comme avant). Réutilise
+// decouperParEtiquettes (même mécanique que pour les entrées d'axe) pour les
+// détecter, en vue d'une recomposition en phrase(s) -- exception étroite
+// décrite plus bas, à partir de la 4e uniquement.
+const ETIQUETTES_PRESENTATION_TEXTE = [
+  { cle: 'titre', regex: /titre\s*:\s*/i },
+  { cle: 'auteur', regex: /auteur\s*:\s*/i },
+  { cle: 'source', regex: /(?:source|[ée]dition)\s*:\s*/i },
+  { cle: 'nature', regex: /nature\s*:\s*/i },
+  { cle: 'tonalite', regex: /tonalit[ée]\s*:\s*/i },
+  { cle: 'theme', regex: /th[èe]me\s*:\s*/i }
+];
+
+// En dessous de ce nombre de champs reconnus, le texte de l'enseignant n'a
+// probablement pas été écrit comme une liste de champs (déjà de la prose,
+// ou format non reconnu) : rien à recomposer, reproduction verbatim comme
+// pour tout le reste du plan.
+const SEUIL_CHAMPS_PRESENTATION_POUR_RECOMPOSITION = 2;
+
+function extraireChampsPresentation(texteI) {
+  const champs = decouperParEtiquettes(texteI, ETIQUETTES_PRESENTATION_TEXTE);
+  return Object.keys(champs).length >= SEUIL_CHAMPS_PRESENTATION_POUR_RECOMPOSITION ? champs : null;
+}
+
+// Jeton interne (jamais montré au modèle, jamais visible dans le document
+// final) utilisé UNIQUEMENT pour réserver, à l'intérieur du HTML déjà
+// construit de la ligne I, la place où la phrase recomposée par le modèle
+// viendra s'insérer après génération -- cf. extraireEtRetirerRecompositionPresentation
+// et son utilisation dans stream.on('finalMessage', ...).
+const JETON_PRESENTATION_RECOMPOSEE = '@@PRESENTATION_RECOMPOSEE@@';
+
+function construireDeroulementPlanEnseignantHTML(segments, niveau) {
+  const { axes, situationEvaluation } = parserAxesDepuisVerification(segments.verification);
+  const avertissementsEntrees = verifierNombreEntreesParAxe(axes, niveau);
   const libelleAxes = axes.length
     ? axes.map((a) => `Axe ${a.numero} : ${a.titre}`).join(' / ')
     : texteSupportVersHtml(segments.verification).replace(/<\/?p>/g, ' ').trim();
+
+  // "Situation d'évaluation" placée par l'enseignant APRÈS les axes mais
+  // AVANT "IV." (plutôt qu'après, comme le prévoit le format par défaut) :
+  // fusionnée ici avec segments.evaluation -- même case ÉVALUATION du
+  // tableau, quel que soit l'endroit où l'enseignant l'a écrite. Le repère
+  // "IV." explicite reste prioritaire s'il existe (cas où l'enseignant aurait
+  // rédigé les deux, peu probable mais on ne veut jamais en perdre un).
+  const evaluationEffective = segments.evaluation || situationEvaluation || '';
+
+  // Exception étroite (à partir de la 4e SEULEMENT) : si l'enseignant a
+  // fourni la présentation du texte sous forme de champs séparés, le
+  // modèle est autorisé à les recomposer en phrase(s) correcte(s) -- pure
+  // recomposition syntaxique des informations déjà données, jamais un ajout
+  // ni une correction de fond. En 6e/5e, ou si le texte ne ressemble pas à
+  // une liste de champs (moins de 2 champs reconnus), AUCUN changement :
+  // reproduction verbatim, exactement comme pour tout le reste du plan.
+  const niveauAutoriseRecomposition = niveau !== '6e' && niveau !== '5e';
+  const champsPresentation = niveauAutoriseRecomposition ? extraireChampsPresentation(segments.presentation) : null;
+
+  const tracesEcritesLigneI = champsPresentation ? JETON_PRESENTATION_RECOMPOSEE : texteSupportVersHtml(segments.presentation);
 
   const lignesHTML = [
     construireLigneDeroulementHTML({
@@ -1427,7 +1532,7 @@ function construireDeroulementPlanEnseignantHTML(segments) {
       strategie: 'Présentation du texte (paratexte)',
       activiteEnseignant: 'Présente le texte et questionne sur son paratexte.',
       activiteEleves: 'Relèvent les éléments du texte identifiés dans le plan.',
-      tracesEcrites: texteSupportVersHtml(segments.presentation)
+      tracesEcrites: tracesEcritesLigneI
     }),
     construireLigneDeroulementHTML({
       moment: 'II. HYPOTHÈSE GÉNÉRALE',
@@ -1452,18 +1557,30 @@ function construireDeroulementPlanEnseignantHTML(segments) {
     }),
     construireLigneDeroulementHTML({
       moment: 'ÉVALUATION',
-      strategie: segments.evaluation ? 'Travail individuel' : '',
-      activiteEnseignant: segments.evaluation ? 'Donne le sujet.' : '',
-      activiteEleves: segments.evaluation ? 'Travaillent seuls, à l\'écrit.' : '',
-      // Ligne laissée VIDE si l'enseignant n'a pas rédigé d'Évaluation --
-      // jamais d'exercice inventé pour la compléter.
-      tracesEcrites: segments.evaluation ? texteSupportVersHtml(segments.evaluation) : ''
+      strategie: evaluationEffective ? 'Travail individuel' : '',
+      activiteEnseignant: evaluationEffective ? 'Donne le sujet.' : '',
+      activiteEleves: evaluationEffective ? 'Travaillent seuls, à l\'écrit.' : '',
+      // Ligne laissée VIDE si l'enseignant n'a rédigé aucune évaluation
+      // (ni après "IV.", ni via "Situation d'évaluation" dans la partie III)
+      // -- jamais d'exercice inventé pour la compléter.
+      tracesEcrites: evaluationEffective ? texteSupportVersHtml(evaluationEffective) : ''
     })
   ].join('\n');
 
   const axesHTML = axes.length ? axes.map((a) => construireTableauAxeHTML(a.numero, a.titre, a.entrees)).join('\n\n') : '';
 
-  return { lignesHTML, axesHTML };
+  return {
+    lignesHTML,
+    axesHTML,
+    avertissementsEntrees,
+    champsPresentationARecomposer: champsPresentation,
+    // Repli sûr si le modèle ne produit pas la recomposition demandée --
+    // jamais de jeton laissé visible dans le document final.
+    presentationVerbatimFallbackHTML: texteSupportVersHtml(segments.presentation),
+    // Pour le texte du prompt (mention "/Évaluation" détectée) -- reflète la
+    // fusion ci-dessus, pas seulement le repère "IV." explicite.
+    evaluationDetectee: !!evaluationEffective
+  };
 }
 
 // Mode "plan fourni par l'enseignant" -- ALTERNATIF à construireInstructionsLectureMethodique
@@ -1527,22 +1644,71 @@ ${habiletesLectureMethodique(niveau)}`;
     };
   }
 
-  const { lignesHTML, axesHTML } = construireDeroulementPlanEnseignantHTML(resultatParsing.segments);
+  const { lignesHTML, axesHTML, avertissementsEntrees, champsPresentationARecomposer, presentationVerbatimFallbackHTML, evaluationDetectee } =
+    construireDeroulementPlanEnseignantHTML(resultatParsing.segments, niveau);
+
+  // Exception étroite accordée pour la ligne I UNIQUEMENT (à partir de la 4e,
+  // quand l'enseignant a fourni Titre/Auteur/Source/Nature/Tonalité/Thème en
+  // champs séparés) : consigne de recomposition SYNTAXIQUE seulement, jamais
+  // un ajout/retrait d'information. Absente (chaîne vide) si non applicable
+  // (6e/5e, ou texte déjà en prose) -- la ligne I reste alors verbatim,
+  // aucun changement par rapport au comportement précédent.
+  const consigneRecompositionPresentation = champsPresentationARecomposer ? `
+
+CONTENU DE LA LIGNE "I. PRÉSENTATION DU TEXTE" (exception étroite, niveau ${niveau === '4e_3e' ? '4e/3e' : 'lycée'} uniquement) : cette ligne est déjà entièrement construite par le code, comme les autres -- SAUF le texte de sa colonne Traces écrites, qui te revient. L'enseignant a fourni ces informations séparément :
+${Object.entries(champsPresentationARecomposer).map(([cle, valeur]) => `- ${cle} : ${valeur}`).join('\n')}
+(UNIQUEMENT les champs listés ci-dessus -- n'en ajoute, n'en devine et n'en invente AUCUN autre.) Rédige 1 à 2 phrases SYNTAXIQUEMENT CORRECTES qui recomposent EXACTEMENT ces informations -- aucune information nouvelle, aucune supprimée, aucun changement de sens : seule la syntaxe est reformulée pour en faire des phrases, jamais le fond. Place CE TEXTE, et UNIQUEMENT ce texte, entre les marqueurs {{PRESENTATION_RECOMPOSEE}} et {{FIN_PRESENTATION_RECOMPOSEE}}, N'IMPORTE OÙ dans ta réponse (par exemple juste avant {{DEROULEMENT_PLAN_ENSEIGNANT}}) -- ces 2 marqueurs et le texte entre eux seront extraits puis retirés du document final, ils ne doivent apparaître nulle part ailleurs. N'écris PAS toi-même la ligne I du tableau (moment, stratégies, activités) : elle est déjà construite, seule sa colonne Traces écrites attend ce texte, via ces 2 marqueurs.`
+    : '';
 
   const instructions = enteteCommun + `
 
-DÉTECTION RÉUSSIE — le plan de l'enseignant a déjà été segmenté et mis en tableau AUTOMATIQUEMENT, côté serveur (pas par toi), selon ses repères I/II/III/IV${resultatParsing.segments.evaluation ? '/Évaluation' : ''}. Le tableau DÉROULEMENT (lignes I à IV${resultatParsing.segments.evaluation ? ' et Évaluation' : ''}) et le ou les tableaux d'axes sont DÉJÀ CONSTRUITS. Concernant UNIQUEMENT cette partie développement/vérification (pas le reste de la fiche), ta tâche est de placer 3 marqueurs au bon endroit, sans rien écrire d'autre à leur place :
-   1. Dans le tableau DÉROULEMENT (5 colonnes), juste après la ligne PRÉSENTATION rituelle (celle-ci, générique, reste à ta charge comme d'habitude), place EXACTEMENT le marqueur {{DEROULEMENT_PLAN_ENSEIGNANT}} comme SEUL contenu de cette position -- il sera remplacé par les lignes I à IV${resultatParsing.segments.evaluation ? ' et Évaluation' : ''} déjà construites. Referme normalement le tableau juste après (</table>).
+DÉTECTION RÉUSSIE — le plan de l'enseignant a déjà été segmenté et mis en tableau AUTOMATIQUEMENT, côté serveur (pas par toi), selon ses repères I/II/III/IV${evaluationDetectee ? '/Évaluation' : ''}. Le tableau DÉROULEMENT (lignes I à IV${evaluationDetectee ? ' et Évaluation' : ''}) et le ou les tableaux d'axes sont DÉJÀ CONSTRUITS. Concernant UNIQUEMENT cette partie développement/vérification (pas le reste de la fiche), ta tâche est de placer 3 marqueurs au bon endroit, sans rien écrire d'autre à leur place :
+   1. Dans le tableau DÉROULEMENT (5 colonnes), juste après la ligne PRÉSENTATION rituelle (celle-ci, générique, reste à ta charge comme d'habitude), place EXACTEMENT le marqueur {{DEROULEMENT_PLAN_ENSEIGNANT}} comme SEUL contenu de cette position -- il sera remplacé par les lignes I à IV${evaluationDetectee ? ' et Évaluation' : ''} déjà construites. Referme normalement le tableau juste après (</table>).
    2. Juste APRÈS ce tableau DÉROULEMENT (donc après son </table>, au même niveau que les autres tableaux de la fiche, JAMAIS à l'intérieur d'une cellule), place EXACTEMENT le marqueur {{TEXTE_SUPPORT}} sur sa propre ligne, UNE SEULE FOIS dans tout le document -- il sera remplacé par le texte support fourni par l'enseignant.
    3. Juste après {{TEXTE_SUPPORT}}, place EXACTEMENT le marqueur {{AXES_PLAN_ENSEIGNANT}} sur sa propre ligne -- il sera remplacé par le ou les tableaux d'axes déjà construits.
-N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi-même pour cette partie : il est déjà entièrement construit. Le reste de la fiche (entête, Compétence, Situation d'apprentissage, Supports/Bibliographie...) n'est PAS concerné par cette restriction et se rédige normalement.`;
+N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi-même pour cette partie : il est déjà entièrement construit. Le reste de la fiche (entête, Compétence, Situation d'apprentissage, Supports/Bibliographie...) n'est PAS concerné par cette restriction et se rédige normalement.${consigneRecompositionPresentation}`;
 
   // Le texte brut du plan n'a plus besoin d'être montré au modèle dans le cas
   // réussi : il ne sert plus qu'à la structuration, déjà faite côté code --
   // ne pas l'inclure supprime à la fois le risque de dilution des
   // instructions suivantes (Leçon/Séance/Compétence) et toute tentation du
   // modèle de réécrire lui-même ce contenu.
-  return { instructions, injectionDeroulement: lignesHTML, injectionAxes: axesHTML, avertissement: null, planCoursPourPromptFinal: null };
+  return {
+    instructions,
+    injectionDeroulement: lignesHTML,
+    injectionAxes: axesHTML,
+    // Option B : avertissement explicite si un axe n'a pas exactement 2
+    // entrées -- jamais un échec silencieux, jamais un contenu tronqué/complété.
+    avertissement: avertissementsEntrees.length ? avertissementsEntrees.join(' ') : null,
+    planCoursPourPromptFinal: null,
+    presentationARecomposer: !!champsPresentationARecomposer,
+    presentationVerbatimFallbackHTML
+  };
+}
+
+// Vérifie, dans le HTML brut renvoyé par le modèle (AVANT toute injection),
+// que les 3 marqueurs attendus du mode plan-enseignant sont bien présents.
+// Sans ce contrôle, un marqueur omis par le modèle (réponse tronquée, ou
+// modèle "estimant avoir fini" après avoir mentionné les axes en texte libre
+// dans la ligne III) provoque soit une perte de contenu totalement
+// silencieuse (tableau d'axes, via injecterMarqueurUneFois qui ne fait rien
+// si le marqueur est absent), soit un repli mal positionné (texte support,
+// dont le repli dans injecterTexteSupport suppose un autre tableau de
+// référence qui peut ne pas exister) -- jamais sans avertissement explicite
+// à l'enseignant.
+function verifierMarqueursPlanEnseignant(contenuHTMLBrut, injection) {
+  if (!injection || injection.injectionDeroulement === null) return [];
+  const avertissements = [];
+  if (!contenuHTMLBrut.includes('{{DEROULEMENT_PLAN_ENSEIGNANT}}')) {
+    avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le tableau déroulement (lignes I à IV) : ce tableau n'a pas pu être inséré automatiquement à l'emplacement prévu. Vérifiez la fiche générée.");
+  }
+  if (!contenuHTMLBrut.includes('{{TEXTE_SUPPORT}}')) {
+    avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le texte support : il a été réinséré automatiquement à un emplacement par défaut, qui peut ne pas correspondre à l'emplacement prévu (juste après le tableau déroulement). Vérifiez son positionnement dans la fiche générée.");
+  }
+  if (!contenuHTMLBrut.includes('{{AXES_PLAN_ENSEIGNANT}}')) {
+    avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le tableau détaillé des axes (Entrées/Indices textuels/Analyses/Interprétations) : ce tableau n'a pas pu être inséré automatiquement. Vérifiez la fiche générée.");
+  }
+  return avertissements;
 }
 
 // Injecte, comme injecterTexteSupport ci-dessus, le contenu déjà construit
@@ -1563,6 +1729,38 @@ function injecterDeroulementPlanEnseignant(contenuHTML, injection) {
   resultat = injecterMarqueurUneFois(resultat, '{{DEROULEMENT_PLAN_ENSEIGNANT}}', injection.injectionDeroulement);
   resultat = injecterMarqueurUneFois(resultat, '{{AXES_PLAN_ENSEIGNANT}}', injection.injectionAxes);
   return resultat;
+}
+
+// Extrait la phrase recomposée par le modèle pour la ligne I (exception
+// étroite, cf. construireInstructionsLectureMethodiqueAvecPlanEnseignant),
+// placée par le modèle entre 2 marqueurs dédiés QUELQUE PART dans sa
+// réponse -- puis retire ce bloc du HTML : il ne doit JAMAIS apparaître tel
+// quel dans le document final, seul le texte extrait doit s'y retrouver (à
+// la place du jeton interne réservé dans injectionDeroulement).
+function extraireEtRetirerRecompositionPresentation(contenuHTML) {
+  const m = /\{\{PRESENTATION_RECOMPOSEE\}\}([\s\S]*?)\{\{FIN_PRESENTATION_RECOMPOSEE\}\}/.exec(contenuHTML);
+  if (!m) return { texte: null, contenuHTML };
+  const texte = m[1].trim();
+  const nettoye = contenuHTML.slice(0, m.index) + contenuHTML.slice(m.index + m[0].length);
+  return { texte: texte || null, contenuHTML: nettoye };
+}
+
+// Résout, dans le HTML déjà construit de la ligne I, le jeton interne
+// réservé à la phrase recomposée par le modèle. Repli sûr si le modèle ne
+// l'a pas fournie (texte de l'enseignant reproduit tel quel, jamais un
+// jeton laissé visible dans le document final) -- jamais un échec silencieux :
+// le champ repliUtilise signale à l'appelant qu'un avertissement est dû.
+function resoudrePresentationRecomposee(injection, texteRecompose) {
+  if (!injection || !injection.presentationARecomposer) return { injection, repliUtilise: false };
+  const repliUtilise = !texteRecompose;
+  const remplacement = repliUtilise ? injection.presentationVerbatimFallbackHTML : texteSupportVersHtml(texteRecompose);
+  return {
+    injection: {
+      ...injection,
+      injectionDeroulement: injection.injectionDeroulement.split(JETON_PRESENTATION_RECOMPOSEE).join(remplacement)
+    },
+    repliUtilise
+  };
 }
 
 function construireInstructionsExpressionEcriture(referentiel) {
@@ -2221,14 +2419,6 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
           if (resultatPlanFourni.avertissement) {
             avertissementRappel = avertissementRappel ? `${avertissementRappel} ${resultatPlanFourni.avertissement}` : resultatPlanFourni.avertissement;
           }
-          // LOG TEMPORAIRE DE DIAGNOSTIC (à retirer une fois le bug du
-          // tableau de vérification "fracturé" identifié) : imprime le HTML
-          // déjà construit déterministiquement AVANT toute génération par le
-          // modèle, pour distinguer un bug de construction (visible ici) d'un
-          // bug de placement/mélange par le modèle (invisible ici, mais alors
-          // absent du HTML final malgré sa présence ci-dessous).
-          console.log('🔍 [DEBUG plan-enseignant] injectionDeroulement construit :\n' + resultatPlanFourni.injectionDeroulement);
-          console.log('🔍 [DEBUG plan-enseignant] injectionAxes construit :\n' + resultatPlanFourni.injectionAxes);
         } else {
           const referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
           systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
@@ -2472,18 +2662,28 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     stream.on('finalMessage', async () => {
       clearInterval(heartbeat);
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
-      // LOG TEMPORAIRE DE DIAGNOSTIC (à retirer avec les logs ci-dessus) :
-      // le HTML BRUT renvoyé par le modèle, AVANT toute injection -- permet
-      // de voir si le modèle a bien placé les 3 marqueurs seuls, ou s'il a
-      // écrit son propre contenu en plus (ce qui expliquerait un tableau
-      // "fracturé"/mélangé après injection).
+      // Contrôle des 3 marqueurs attendus du mode plan-enseignant, AVANT toute
+      // injection -- un marqueur omis par le modèle ne doit jamais provoquer
+      // une perte de contenu silencieuse (cf. verifierMarqueursPlanEnseignant).
       if (planFourniInjection) {
-        console.log('🔍 [DEBUG plan-enseignant] HTML brut du modèle AVANT injection :\n' + contenuHTML);
+        for (const avertissementMarqueur of verifierMarqueursPlanEnseignant(contenuHTML, planFourniInjection)) {
+          res.write(`data: ${JSON.stringify({ avertissement: avertissementMarqueur })}\n\n`);
+        }
+      }
+      // Exception étroite ligne I (recomposition en phrase, à partir de la
+      // 4e) : extrait la phrase rédigée par le modèle AVANT l'injection des
+      // marqueurs déterministes, avec repli sûr (texte verbatim) si absente
+      // -- jamais un jeton laissé visible, jamais un échec silencieux.
+      if (planFourniInjection && planFourniInjection.presentationARecomposer) {
+        const { texte: texteRecompose, contenuHTML: contenuNettoye } = extraireEtRetirerRecompositionPresentation(contenuHTML);
+        contenuHTML = contenuNettoye;
+        const { injection, repliUtilise } = resoudrePresentationRecomposee(planFourniInjection, texteRecompose);
+        planFourniInjection = injection;
+        if (repliUtilise) {
+          res.write(`data: ${JSON.stringify({ avertissement: "La recomposition en phrase(s) de la présentation du texte (ligne I) n'a pas pu être appliquée -- les informations fournies (Titre/Auteur/Source/Nature/Tonalité/Thème) sont affichées telles quelles, sous forme de champs." })}\n\n`);
+        }
       }
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
-      if (planFourniInjection) {
-        console.log('🔍 [DEBUG plan-enseignant] HTML APRÈS injection déroulement/axes :\n' + contenuHTML);
-      }
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
       }
