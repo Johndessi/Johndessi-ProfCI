@@ -1340,20 +1340,62 @@ function decouperParEtiquettes(texte, etiquettes) {
   return resultat;
 }
 
-function parserEntreesAxe(texteAxe) {
-  const blocs = (texteAxe || '')
-    .split(/\n(?=\s*[-•])/)
-    .map((b) => b.trim())
-    .filter(Boolean);
-  if (!blocs.length) return [];
+// Frontière fiable entre 2 entrées : la réapparition de l'étiquette "Entrée"
+// elle-même (1ère des 4 dans l'ordre méthodologique Entrées/Indices/Analyses/
+// Interprétations), plutôt qu'une puce "-"/"•" par entrée -- certains
+// enseignants regroupent plusieurs entrées complètes sous UNE SEULE puce (ou
+// les numérotent "1.", "2." sans tiret du tout). Avec un découpage par puce
+// uniquement, ces entrées surnuméraires étaient absorbées silencieusement
+// dans le champ Interprétation de l'entrée précédente : le nombre d'entrées
+// calculé pouvait alors coïncider avec 2 par pur hasard, masquant à la fois
+// le contenu réel (entrées suivantes invisibles, fondues en prose dans une
+// seule cellule) ET l'avertissement de verifierNombreEntreesParAxe (qui se
+// fie à ce même compte). Se rabat sur l'ancien découpage par puce UNIQUEMENT
+// si aucune étiquette "Entrée" n'est trouvée du tout (axe non structuré selon
+// la méthodologie -- contenu conservé intégralement, jamais perdu).
+const REGEX_ENTREE_GLOBAL = /entr[ée]e?s?\s*:\s*/ig;
 
-  return blocs.map((bloc) => {
-    const champs = decouperParEtiquettes(bloc, ETIQUETTES_ENTREE_AXE);
+function parserEntreesAxe(texteAxe) {
+  const texte = texteAxe || '';
+  const positionsEntree = [];
+  REGEX_ENTREE_GLOBAL.lastIndex = 0;
+  let m;
+  while ((m = REGEX_ENTREE_GLOBAL.exec(texte))) {
+    positionsEntree.push(m.index);
+  }
+
+  if (!positionsEntree.length) {
+    const blocs = texte.split(/\n(?=\s*[-•])/).map((b) => b.trim()).filter(Boolean);
+    return blocs.map((bloc) => ({ structure: false, brut: bloc.replace(/^[-•]\s*/, '') }));
+  }
+
+  // Marqueur de tête d'entrée toléré avant l'étiquette "Entrée" elle-même :
+  // puce ("-"/"•") OU numérotation ("1.", "2)"...).
+  const MARQUEUR_PUCE = '(?:[-•]|\\d+\\s*[.)])';
+
+  const segments = [];
+  // Le texte avant la 1ère étiquette "Entrée" n'est en pratique qu'une puce de
+  // tête sans contenu réel avant elle -- on la retire avant de juger s'il
+  // reste un vrai préambule à conserver (jamais perdu s'il y en a un).
+  const preambule = texte.slice(0, positionsEntree[0]).replace(new RegExp('^\\s*' + MARQUEUR_PUCE + '?\\s*'), '').trim();
+  if (preambule) segments.push({ structure: false, brut: preambule });
+
+  const regexPuceFinale = new RegExp('\\n\\s*' + MARQUEUR_PUCE + '\\s*$');
+  positionsEntree.forEach((debut, i) => {
+    const fin = i + 1 < positionsEntree.length ? positionsEntree[i + 1] : texte.length;
+    // Retire, en fin de segment, la puce de tête de l'entrée SUIVANTE (elle
+    // se retrouve incluse ici puisque la frontière est la position de son
+    // étiquette "Entrée", pas le début de sa ligne/puce) -- sinon elle
+    // pollue le dernier champ trouvé (Interprétation) d'un résidu ("-" ou "2.").
+    const segment = texte.slice(debut, fin).trim().replace(regexPuceFinale, '').trim();
+    const champs = decouperParEtiquettes(segment, ETIQUETTES_ENTREE_AXE);
     const complet = champs.entree && champs.indices && champs.analyse && champs.interpretation;
-    return complet
+    segments.push(complet
       ? { structure: true, entree: champs.entree, indices: champs.indices, analyse: champs.analyse, interpretation: champs.interpretation }
-      : { structure: false, brut: bloc.replace(/^[-•]\s*/, '') };
+      : { structure: false, brut: segment.replace(new RegExp('^' + MARQUEUR_PUCE + '\\s*'), '') });
   });
+
+  return segments;
 }
 
 // Repère un en-tête d'axe : "Axe 1", "Axe de lecture 1", "-Axe 2 :",
