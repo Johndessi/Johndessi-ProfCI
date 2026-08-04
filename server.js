@@ -1318,8 +1318,11 @@ function parserPlanEnseignant(planCours) {
 // étiquettes d'une puce sont trouvées, elle devient une ligne propre à 4
 // colonnes ; sinon son texte brut est conservé intégralement dans une ligne à
 // cellule fusionnée -- jamais perdu, jamais réinventé.
+// Le numéro d'entrée est toléré COLLÉ à l'étiquette elle-même (ex. "Entrée 1:",
+// "Entrée n°2 :"), en plus de la puce/numérotation en tête de ligne déjà gérée
+// par ailleurs -- certains enseignants numérotent ainsi sans aucune puce.
 const ETIQUETTES_ENTREE_AXE = [
-  { cle: 'entree', regex: /entr[ée]e?s?\s*:\s*/i },
+  { cle: 'entree', regex: /entr[ée]e?s?\s*(?:n°\s*)?\d*\s*:\s*/i },
   { cle: 'indices', regex: /(?:indices?(?:\s+textuels?)?|relev[ée]s?)\s*:\s*/i },
   { cle: 'analyse', regex: /analyses?\s*:\s*/i },
   { cle: 'interpretation', regex: /interpr[ée]tations?\s*:\s*/i }
@@ -1353,7 +1356,7 @@ function decouperParEtiquettes(texte, etiquettes) {
 // fie à ce même compte). Se rabat sur l'ancien découpage par puce UNIQUEMENT
 // si aucune étiquette "Entrée" n'est trouvée du tout (axe non structuré selon
 // la méthodologie -- contenu conservé intégralement, jamais perdu).
-const REGEX_ENTREE_GLOBAL = /entr[ée]e?s?\s*:\s*/ig;
+const REGEX_ENTREE_GLOBAL = /entr[ée]e?s?\s*(?:n°\s*)?\d*\s*:\s*/ig;
 
 function parserEntreesAxe(texteAxe) {
   const texte = texteAxe || '';
@@ -1392,7 +1395,10 @@ function parserEntreesAxe(texteAxe) {
     const complet = champs.entree && champs.indices && champs.analyse && champs.interpretation;
     segments.push(complet
       ? { structure: true, entree: champs.entree, indices: champs.indices, analyse: champs.analyse, interpretation: champs.interpretation }
-      : { structure: false, brut: segment.replace(new RegExp('^' + MARQUEUR_PUCE + '\\s*'), '') });
+      // champsPartiels conservé (jamais juste "brut") -- permet de signaler
+      // précisément à l'enseignant QUELLES colonnes manquent quand le nom de
+      // l'entrée est fourni mais pas son détail (cf. verifierEntreesCompletude).
+      : { structure: false, brut: segment.replace(new RegExp('^' + MARQUEUR_PUCE + '\\s*'), ''), champsPartiels: champs });
   });
 
   return segments;
@@ -1509,6 +1515,39 @@ function verifierNombreEntreesParAxe(axes, niveau) {
     });
 }
 
+const LIBELLES_COLONNES_ENTREE = {
+  indices: 'Indices textuels',
+  analyse: 'Analyses',
+  interpretation: 'Interprétations'
+};
+
+// Vérifie, indépendamment du COMPTE d'entrées ci-dessus, que chaque entrée
+// individuellement fournit les 4 colonnes. Cas réel qui a motivé cet ajout :
+// un plan qui ne donne QUE le nom de chaque entrée ("Entrée 1: La structure
+// du texte") sans citations/analyse/interprétation -- le compte peut alors
+// être conforme (2/axe) tout en laissant les colonnes Indices
+// textuels/Analyses/Interprétations vides, sans que rien ne le signale.
+// Jamais d'invention pour compléter : uniquement un avertissement explicite
+// (cf. skill lecture méthodique, section 7 -- "colonne vide alors que les
+// autres colonnes de la même ligne sont remplies").
+function verifierEntreesCompletude(axes) {
+  const avertissements = [];
+  axes.forEach((axe) => {
+    axe.entrees.forEach((entree, i) => {
+      if (entree.structure) return;
+      const champs = entree.champsPartiels || {};
+      if (!champs.entree) return;
+      const manquantes = ['indices', 'analyse', 'interpretation']
+        .filter((cle) => !champs[cle])
+        .map((cle) => LIBELLES_COLONNES_ENTREE[cle]);
+      if (manquantes.length) {
+        avertissements.push(`Axe ${axe.numero} (« ${axe.titre} »), entrée ${i + 1} (« ${champs.entree} ») : colonne(s) ${manquantes.join(', ')} vide(s) -- seul le nom de l'entrée est fourni dans le plan, rien n'a été inventé pour compléter le tableau ; complétez le plan si vous voulez ce détail dans la fiche.`);
+      }
+    });
+  });
+  return avertissements;
+}
+
 // "I. Présentation du texte" -- l'enseignant fournit généralement ces
 // informations sous forme de champs séparés (comme avant). Réutilise
 // decouperParEtiquettes (même mécanique que pour les entrées d'axe) pour les
@@ -1543,7 +1582,7 @@ const JETON_PRESENTATION_RECOMPOSEE = '@@PRESENTATION_RECOMPOSEE@@';
 
 function construireDeroulementPlanEnseignantHTML(segments, niveau) {
   const { axes, situationEvaluation } = parserAxesDepuisVerification(segments.verification);
-  const avertissementsEntrees = verifierNombreEntreesParAxe(axes, niveau);
+  const avertissementsEntrees = verifierNombreEntreesParAxe(axes, niveau).concat(verifierEntreesCompletude(axes));
   const libelleAxes = axes.length
     ? axes.map((a) => `Axe ${a.numero} : ${a.titre}`).join(' / ')
     : texteSupportVersHtml(segments.verification).replace(/<\/?p>/g, ' ').trim();
