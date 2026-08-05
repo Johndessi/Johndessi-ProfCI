@@ -1497,20 +1497,57 @@ ${cell(tracesEcrites)}
 
 // Construit le tableau autonome à 4 colonnes d'un axe (ligne-titre fusionnée +
 // une ligne par entrée) -- SEULE fonction qui construit ce tableau pour le
-// mode plan-enseignant.
-function construireTableauAxeHTML(numero, titre, entrees) {
-  const lignesHTML = entrees.length
-    ? entrees.map((e) => e.structure
-        ? `  <tr><td style="border:1px solid #000;padding:6px;">${e.entree}</td><td style="border:1px solid #000;padding:6px;">${e.indices}</td><td style="border:1px solid #000;padding:6px;">${e.analyse}</td><td style="border:1px solid #000;padding:6px;">${e.interpretation}</td></tr>`
-        : `  <tr><td colspan="4" style="border:1px solid #000;padding:6px;">${e.brut}</td></tr>`
-      ).join('\n')
-    : '  <tr><td colspan="4" style="border:1px solid #000;padding:6px;"></td></tr>';
+// mode plan-enseignant. Complète automatiquement (via des jetons internes
+// destinés au modèle, cf. construireLigneEntreeAvecCompletion) :
+// - toute entrée dont seul le nom est fourni (Indices/Analyse/Interprétation
+//   manquants) ;
+// - toute entrée manquante si l'axe en compte moins de 2 (nom ET 3 colonnes
+//   à déterminer par le modèle).
+// N'invente/ne touche RIEN d'autre : une entrée déjà complète (structure:true)
+// reste 100% déterministe, et une entrée totalement non structurée (aucun nom
+// reconnu -- structure:false sans champsPartiels.entree) reste une cellule
+// fusionnée brute inchangée, jamais promue en complétion (aucune ancre sûre
+// pour deviner ce qu'elle représente). Retourne { html, taches } : taches
+// liste ce que le modèle doit générer pour ce tableau (vide si l'axe était
+// déjà complet).
+function construireTableauAxeHTML(numero, titre, entrees, niveau) {
+  const taches = [];
+  const lignes = [];
 
-  return `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+  entrees.forEach((e, i) => {
+    if (e.structure) {
+      lignes.push(`  <tr><td style="border:1px solid #000;padding:6px;">${e.entree}</td><td style="border:1px solid #000;padding:6px;">${e.indices}</td><td style="border:1px solid #000;padding:6px;">${e.analyse}</td><td style="border:1px solid #000;padding:6px;">${e.interpretation}</td></tr>`);
+      return;
+    }
+    const champs = e.champsPartiels || {};
+    if (!champs.entree) {
+      lignes.push(`  <tr><td colspan="4" style="border:1px solid #000;padding:6px;">${e.brut}</td></tr>`);
+      return;
+    }
+    const { html, tache } = construireLigneEntreeAvecCompletion(`A${numero}E${i + 1}`, champs.entree, ['indices', 'analyse', 'interpretation']);
+    lignes.push(html);
+    taches.push({ ...tache, axeNumero: numero, axeTitre: titre, niveau });
+  });
+
+  // Complète jusqu'à 2 entrées si l'axe en fournit moins (nom ET 3 colonnes
+  // à déterminer par le modèle, en respectant le rôle de l'axe) -- jamais si
+  // l'enseignant en a fourni AUTANT OU PLUS de 2 (cas "trop d'entrées",
+  // signalé séparément par verifierNombreEntreesParAxe, jamais tronqué).
+  for (let slot = entrees.length + 1; slot <= 2; slot++) {
+    const { html, tache } = construireLigneEntreeAvecCompletion(`A${numero}E${slot}`, null, ['nom', 'indices', 'analyse', 'interpretation']);
+    lignes.push(html);
+    taches.push({ ...tache, axeNumero: numero, axeTitre: titre, niveau });
+  }
+
+  const lignesHTML = lignes.length ? lignes.join('\n') : '  <tr><td colspan="4" style="border:1px solid #000;padding:6px;"></td></tr>';
+
+  const html = `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
   <tr><td colspan="4" style="border:1px solid #000;padding:6px;background:#e4ede6;font-weight:bold;">Axe ${numero} : ${titre}</td></tr>
   <tr><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Entrées</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Indices textuels</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Analyses</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Interprétations</th></tr>
 ${lignesHTML}
 </table>`;
+
+  return { html, taches };
 }
 
 // Orchestre les 2 fonctions ci-dessus à partir des segments déjà découpés par
@@ -1550,9 +1587,12 @@ const LIBELLES_COLONNES_ENTREE = {
 // du texte") sans citations/analyse/interprétation -- le compte peut alors
 // être conforme (2/axe) tout en laissant les colonnes Indices
 // textuels/Analyses/Interprétations vides, sans que rien ne le signale.
-// Jamais d'invention pour compléter : uniquement un avertissement explicite
-// (cf. skill lecture méthodique, section 7 -- "colonne vide alors que les
-// autres colonnes de la même ligne sont remplies").
+// SUPERSEDÉE depuis l'auto-complétion (cf. preparerLigneAxeAvecCompletion
+// ci-dessous) pour le pipeline principal : ce cas précis n'est plus
+// seulement signalé, il est activement complété par le modèle -- la fonction
+// reste définie (comportement inchangé, toujours testée) pour un usage
+// éventuel hors de ce pipeline, mais n'est plus appelée par
+// construireDeroulementPlanEnseignantHTML.
 function verifierEntreesCompletude(axes) {
   const avertissements = [];
   axes.forEach((axe) => {
@@ -1569,6 +1609,55 @@ function verifierEntreesCompletude(axes) {
     });
   });
   return avertissements;
+}
+
+// --- Auto-complétion des entrées du tableau de vérification ---
+//
+// Décision de conception explicite (04/08) : en mode plan-enseignant,
+// l'enseignant ne doit JAMAIS avoir à taper lui-même les Indices
+// textuels/Analyses/Interprétations -- il fournit seulement la structure
+// (axes + noms d'entrées, partiellement ou totalement), voire rien de plus
+// que le squelette I/II/III/IV. Tout ce qu'il n'a pas détaillé est généré
+// par le modèle, exactement comme le mode automatique le fait déjà --
+// SEULE différence entre les 2 modes : qui choisit les axes/noms d'entrées
+// (le modèle en mode automatique, l'enseignant partiellement ou totalement
+// ici). Génération strictement bornée à 3 éléments : le texte support (seule
+// source des citations), le nom de l'entrée (fixé par l'enseignant, ou à
+// déterminer par le modèle en respectant le rôle de l'axe), et le rôle de
+// l'axe + le niveau (cf. skill lecture méthodique, section 3) -- jamais
+// autre chose, pour ne jamais halluciner de contenu hors-sujet.
+const ABREV_CHAMP_ENTREE = { nom: 'NOM', indices: 'IND', analyse: 'ANA', interpretation: 'INT' };
+const LIBELLES_CHAMP_ENTREE_LONG = {
+  nom: "le nom de l'entrée",
+  indices: 'les indices textuels',
+  analyse: "l'analyse",
+  interpretation: "l'interprétation"
+};
+
+// Texte du rôle méthodologique d'un axe (cf. skill section 3) : Axe 1
+// justifie le type de texte (+ tonalité à partir de la 4e), Axe 2 justifie
+// toujours le thème -- jamais une énumération libre de contenu.
+function roleAxeTexte(axeNumero, niveau) {
+  if (axeNumero === '1') {
+    return (niveau === '6e' || niveau === '5e')
+      ? 'doit justifier le TYPE DE TEXTE de l\'hypothèse générale (pas de tonalité à ce niveau)'
+      : 'doit justifier le TYPE DE TEXTE ET LA TONALITÉ de l\'hypothèse générale';
+  }
+  return 'doit justifier le THÈME de l\'hypothèse générale par une catégorie linguistique précise (jamais une énumération libre d\'arguments ou d\'éléments de contenu)';
+}
+
+// Construit la ligne <tr> d'UNE entrée d'axe, en insérant des jetons internes
+// (@@ID_CHAMP@@, jamais montrés au modèle ni visibles dans le document final)
+// pour chaque champ que le modèle doit compléter -- même mécanique que
+// JETON_PRESENTATION_RECOMPOSEE, généralisée à une liste de champs variable.
+// Enregistre une "tâche" par entrée à compléter (nomFixe = null si le modèle
+// doit aussi déterminer le nom lui-même), utilisée ensuite pour construire la
+// consigne de prompt et pour l'extraction post-génération.
+function construireLigneEntreeAvecCompletion(id, nomFixe, champsAGenerer) {
+  const cell = (contenu) => `<td style="border:1px solid #000;padding:6px;">${contenu}</td>`;
+  const jeton = (champ) => `@@${id}_${ABREV_CHAMP_ENTREE[champ]}@@`;
+  const html = `  <tr>${cell(nomFixe !== null ? nomFixe : jeton('nom'))}${cell(jeton('indices'))}${cell(jeton('analyse'))}${cell(jeton('interpretation'))}</tr>`;
+  return { html, tache: { id, nomFixe, champsAGenerer } };
 }
 
 // "I. Présentation du texte" -- l'enseignant fournit généralement ces
@@ -1605,7 +1694,11 @@ const JETON_PRESENTATION_RECOMPOSEE = '@@PRESENTATION_RECOMPOSEE@@';
 
 function construireDeroulementPlanEnseignantHTML(segments, niveau) {
   const { axes, situationEvaluation } = parserAxesDepuisVerification(segments.verification);
-  const avertissementsEntrees = verifierNombreEntreesParAxe(axes, niveau).concat(verifierEntreesCompletude(axes));
+  // verifierEntreesCompletude n'est plus appelée ici : le cas qu'elle
+  // signalait (nom fourni, colonnes manquantes) est désormais activement
+  // complété par le modèle (cf. construireTableauAxeHTML / tachesCompletion
+  // ci-dessous) plutôt que simplement signalé.
+  const avertissementsEntrees = verifierNombreEntreesParAxe(axes, niveau);
   const libelleAxes = axes.length
     ? axes.map((a) => `Axe ${a.numero} : ${a.titre}`).join(' / ')
     : texteSupportVersHtml(segments.verification).replace(/<\/?p>/g, ' ').trim();
@@ -1671,7 +1764,14 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau) {
     })
   ].join('\n');
 
-  const axesHTML = axes.length ? axes.map((a) => construireTableauAxeHTML(a.numero, a.titre, a.entrees)).join('\n\n') : '';
+  let tachesCompletion = [];
+  const axesHTML = axes.length
+    ? axes.map((a) => {
+        const { html, taches } = construireTableauAxeHTML(a.numero, a.titre, a.entrees, niveau);
+        tachesCompletion = tachesCompletion.concat(taches);
+        return html;
+      }).join('\n\n')
+    : '';
 
   return {
     lignesHTML,
@@ -1683,7 +1783,11 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau) {
     presentationVerbatimFallbackHTML: texteSupportVersHtml(segments.presentation),
     // Pour le texte du prompt (mention "/Évaluation" détectée) -- reflète la
     // fusion ci-dessus, pas seulement le repère "IV." explicite.
-    evaluationDetectee: !!evaluationEffective
+    evaluationDetectee: !!evaluationEffective,
+    // Entrées à compléter automatiquement par le modèle (nom fixé ou à
+    // déterminer + colonnes manquantes) -- cf. construireConsigneCompletionEntrees
+    // et extraireCompletionsEntrees/resoudreCompletionsEntrees plus bas.
+    tachesCompletion
   };
 }
 
@@ -1704,6 +1808,42 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau) {
 //   null si le parsing a échoué (voir bloc de repli ci-dessous).
 // - avertissement, non-null uniquement si le parsing a échoué : à afficher
 //   explicitement à l'enseignant (jamais un échec silencieux).
+
+// Construit la consigne de prompt pour les entrées à compléter (cf.
+// construireLigneEntreeAvecCompletion) -- absente (chaîne vide) si aucune
+// tâche, jamais de génération demandée hors de ce cadre strict : texte
+// support + nom de l'entrée (fixé ou à déterminer) + rôle de l'axe/niveau,
+// rien d'autre.
+function construireConsigneCompletionEntrees(taches) {
+  if (!taches.length) return '';
+
+  const rolesParAxe = {};
+  taches.forEach((t) => { rolesParAxe[t.axeNumero] = { titre: t.axeTitre, role: roleAxeTexte(t.axeNumero, t.niveau) }; });
+  const consigneNiveauLangage = (taches[0].niveau === '6e' || taches[0].niveau === '5e')
+    ? ' Niveau 6e/5e : vocabulaire CONCRET et accessible, jamais de méta-langage dense (interdits : « procédés d\'expression de... », « organisation spatiale de... »).'
+    : '';
+
+  const rolesTexte = Object.entries(rolesParAxe)
+    .map(([numero, { titre, role }]) => `Axe ${numero} (« ${titre} ») ${role}.`)
+    .join(' ');
+
+  const consignesEntrees = taches.map((t) => {
+    const marqueur = (champ) => {
+      const id = `${t.id}_${ABREV_CHAMP_ENTREE[champ]}`;
+      return `{{${id}}}...{{FIN_${id}}}`;
+    };
+    const partieNom = t.nomFixe === null
+      ? `nom à déterminer toi-même (une SEULE catégorie linguistique/grammaticale/lexicale précise, cohérente avec le rôle de l'axe ci-dessus -- JAMAIS une entrée thématique ou psychologisante), à placer entre ${marqueur('nom')}, puis `
+      : `entrée « ${t.nomFixe} » (nom fixé, ne le modifie pas) : `;
+    return `   - Axe ${t.axeNumero}, ${partieNom}Indices textuels (citations EXACTES du texte support, entre guillemets, jamais inventées) entre ${marqueur('indices')} ; Analyses (nomme et justifie le procédé) entre ${marqueur('analyse')} ; Interprétations (l'effet produit sur le lecteur/le sens dégagé) entre ${marqueur('interpretation')}.`;
+  }).join('\n');
+
+  return `
+
+COMPLÉTION AUTOMATIQUE D'ENTRÉES DU TABLEAU DE VÉRIFICATION (exception étroite à la règle "jamais inventer" ci-dessus, limitée STRICTEMENT à ce qui suit) : l'enseignant n'a pas détaillé certaines entrées de son plan. Pour CHACUNE listées ci-dessous, génère UNIQUEMENT à partir du texte support fourni (jamais d'autre source, jamais de connaissance générale sur le genre, jamais de fait inventé) le contenu demandé. ${rolesTexte}${consigneNiveauLangage}
+${consignesEntrees}
+Place chaque élément, et UNIQUEMENT lui, entre ses 2 marqueurs dédiés, N'IMPORTE OÙ dans ta réponse (par exemple juste avant {{AXES_PLAN_ENSEIGNANT}}) -- ces marqueurs et leur contenu seront extraits puis retirés du document final, ils ne doivent apparaître nulle part ailleurs. N'écris PAS toi-même les lignes du tableau d'axes concernées : elles sont déjà construites, seuls ces éléments précis sont attendus de toi, un élément par marqueur, jamais une énumération libre ni un tableau complet.`;
+}
 function construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours) {
   const niveau = niveauLectureMethodique(classe);
   const resultatParsing = parserPlanEnseignant(planCours);
@@ -1721,7 +1861,7 @@ function construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planC
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE, MODE "PLAN FOURNI PAR L'ENSEIGNANT" (cette fiche est une lecture méthodique dont l'enseignant a rédigé lui-même l'intégralité du contenu pédagogique du développement -- hypothèse, axes, analyses, interprétations. Les instructions ci-dessous concernent UNIQUEMENT le tableau Habiletés/Contenus, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION : elles REMPLACENT, pour ces 3 éléments SEULEMENT, les règles du mode automatique de Lecture méthodique décrites par ailleurs dans ce message. TOUT LE RESTE DE LA FICHE N'EST PAS CONCERNÉ et reste à rédiger NORMALEMENT à partir des instructions générales données ailleurs dans ce message : entête (y compris le champ Compétence, à résoudre exactement comme d'habitude), Situation d'apprentissage, Supports didactiques/Bibliographie ci-dessous.) :
 
-RÈGLE ABSOLUE, UNIQUEMENT POUR LE CONTENU PÉDAGOGIQUE DU DÉVELOPPEMENT (hypothèse, axes de lecture, entrées des tableaux de vérification, analyses, interprétations) : tu ne dois JAMAIS l'inventer, le compléter ou le reformuler substantiellement. Il vient à 100% du texte de l'enseignant. Cette règle ne concerne QUE ce contenu précis -- elle ne restreint rien d'autre dans la fiche.
+RÈGLE ABSOLUE, UNIQUEMENT POUR LE CONTENU PÉDAGOGIQUE DU DÉVELOPPEMENT (hypothèse, axes de lecture, entrées des tableaux de vérification, analyses, interprétations) : tu ne dois JAMAIS l'inventer, le compléter ou le reformuler substantiellement -- SAUF pour les entrées explicitement listées plus bas dans une section dédiée "COMPLÉTION AUTOMATIQUE D'ENTRÉES", SI ELLE EST PRÉSENTE dans ce message (absente si l'enseignant a déjà tout détaillé), où tu es exceptionnellement autorisé à générer le détail manquant, dans le cadre strict qui y est décrit. En dehors de cette section précise, tout le reste vient à 100% du texte de l'enseignant.
 
 CONTRAINTE SUR LA LIGNE PRÉSENTATION RITUELLE (avant "I. Présentation du texte", début de séance) : inchangée par rapport au mode automatique -- cette phase d'accueil ne doit JAMAIS révéler le thème précis du texte étudié. Reste strictement générique (ex. « un texte que nous allons découvrir ensemble »). Ne la rédige toi-même que si l'enseignant ne l'a pas incluse dans son plan.
 
@@ -1744,11 +1884,12 @@ ${habiletesLectureMethodique(niveau)}`;
       // noyer ces instructions sous un pavé de texte brut potentiellement
       // long (cause probable du champ Compétence disparu constaté en test).
       planCoursPourPromptFinal: `\n\nPLAN DE COURS FOURNI PAR L'ENSEIGNANT (contenu à corriger orthographiquement, jamais à réinventer, pour la ligne DÉVELOPPEMENT UNIQUEMENT -- ne concerne aucun autre champ de la fiche) :\n${planCours}`,
-      avertissement: `Le plan de cours fourni n'a pas pu être structuré automatiquement (${resultatParsing.raison}) : les repères "I.", "II.", "III.", "IV." sont attendus chacun en tout début de ligne. La fiche a été générée en mode de repli (texte non structuré, clairement signalé dans le document) -- corrigez le format des repères et régénérez pour obtenir un tableau correctement réparti.`
+      avertissement: `Le plan de cours fourni n'a pas pu être structuré automatiquement (${resultatParsing.raison}) : les repères "I.", "II.", "III.", "IV." sont attendus chacun en tout début de ligne. La fiche a été générée en mode de repli (texte non structuré, clairement signalé dans le document) -- corrigez le format des repères et régénérez pour obtenir un tableau correctement réparti.`,
+      tachesCompletion: []
     };
   }
 
-  const { lignesHTML, axesHTML, avertissementsEntrees, champsPresentationARecomposer, presentationVerbatimFallbackHTML, evaluationDetectee } =
+  const { lignesHTML, axesHTML, avertissementsEntrees, champsPresentationARecomposer, presentationVerbatimFallbackHTML, evaluationDetectee, tachesCompletion } =
     construireDeroulementPlanEnseignantHTML(resultatParsing.segments, niveau);
 
   // Exception étroite accordée pour la ligne I UNIQUEMENT (à partir de la 4e,
@@ -1770,7 +1911,7 @@ DÉTECTION RÉUSSIE — le plan de l'enseignant a déjà été segmenté et mis 
    1. Dans le tableau DÉROULEMENT (5 colonnes), juste après la ligne PRÉSENTATION rituelle (celle-ci, générique, reste à ta charge comme d'habitude), place EXACTEMENT le marqueur {{DEROULEMENT_PLAN_ENSEIGNANT}} comme SEUL contenu de cette position -- il sera remplacé par les lignes I à IV${evaluationDetectee ? ' et Évaluation' : ''} déjà construites. Referme normalement le tableau juste après (</table>).
    2. Juste APRÈS ce tableau DÉROULEMENT (donc après son </table>, au même niveau que les autres tableaux de la fiche, JAMAIS à l'intérieur d'une cellule), place EXACTEMENT le marqueur {{TEXTE_SUPPORT}} sur sa propre ligne, UNE SEULE FOIS dans tout le document -- il sera remplacé par le texte support fourni par l'enseignant.
    3. Juste après {{TEXTE_SUPPORT}}, place EXACTEMENT le marqueur {{AXES_PLAN_ENSEIGNANT}} sur sa propre ligne -- il sera remplacé par le ou les tableaux d'axes déjà construits.
-N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi-même pour cette partie : il est déjà entièrement construit. Le reste de la fiche (entête, Compétence, Situation d'apprentissage, Supports/Bibliographie...) n'est PAS concerné par cette restriction et se rédige normalement.${consigneRecompositionPresentation}`;
+N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi-même pour cette partie : il est déjà entièrement construit. Le reste de la fiche (entête, Compétence, Situation d'apprentissage, Supports/Bibliographie...) n'est PAS concerné par cette restriction et se rédige normalement.${consigneRecompositionPresentation}${construireConsigneCompletionEntrees(tachesCompletion)}`;
 
   // Le texte brut du plan n'a plus besoin d'être montré au modèle dans le cas
   // réussi : il ne sert plus qu'à la structuration, déjà faite côté code --
@@ -1786,7 +1927,8 @@ N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi
     avertissement: avertissementsEntrees.length ? avertissementsEntrees.join(' ') : null,
     planCoursPourPromptFinal: null,
     presentationARecomposer: !!champsPresentationARecomposer,
-    presentationVerbatimFallbackHTML
+    presentationVerbatimFallbackHTML,
+    tachesCompletion
   };
 }
 
@@ -1865,6 +2007,52 @@ function resoudrePresentationRecomposee(injection, texteRecompose) {
     },
     repliUtilise
   };
+}
+
+// Extrait, pour CHAQUE tâche de complétion (cf. construireLigneEntreeAvecCompletion),
+// le contenu que le modèle a placé entre ses marqueurs dédiés {{ID_CHAMP}}...
+// {{FIN_ID_CHAMP}} -- puis retire ces marqueurs du HTML, même mécanique que
+// extraireEtRetirerRecompositionPresentation, généralisée à une liste
+// variable de champs. Ne modifie QUE ce qui est extrait ici -- le reste du
+// document (y compris tout marqueur non concerné) reste intact.
+function extraireCompletionsEntrees(contenuHTML, taches) {
+  let html = contenuHTML;
+  const valeurs = {};
+  taches.forEach((t) => {
+    t.champsAGenerer.forEach((champ) => {
+      const id = `${t.id}_${ABREV_CHAMP_ENTREE[champ]}`;
+      const regex = new RegExp(`\\{\\{${id}\\}\\}([\\s\\S]*?)\\{\\{FIN_${id}\\}\\}`);
+      const m = regex.exec(html);
+      if (!m) { valeurs[`${t.id}_${champ}`] = null; return; }
+      valeurs[`${t.id}_${champ}`] = m[1].trim() || null;
+      html = html.slice(0, m.index) + html.slice(m.index + m[0].length);
+    });
+  });
+  return { contenuHTML: html, valeurs };
+}
+
+// Résout, dans le HTML des tableaux d'axes déjà construit, les jetons internes
+// réservés à chaque champ à compléter -- repli sûr et avertissement explicite
+// si le modèle n'a pas fourni un élément (jamais un jeton laissé visible,
+// jamais un échec silencieux) : le nom manquant devient un libellé générique,
+// les 3 autres colonnes une mention explicite d'absence, jamais une case
+// vide sans explication ni un contenu inventé pour la combler.
+function resoudreCompletionsEntrees(injectionAxes, taches, valeurs) {
+  let html = injectionAxes;
+  const avertissements = [];
+  taches.forEach((t) => {
+    t.champsAGenerer.forEach((champ) => {
+      const jeton = `@@${t.id}_${ABREV_CHAMP_ENTREE[champ]}@@`;
+      if (!html.includes(jeton)) return;
+      const valeur = valeurs[`${t.id}_${champ}`];
+      const repli = champ === 'nom' ? 'Entrée à préciser' : '(non complété automatiquement -- vérifiez le plan ou régénérez la fiche)';
+      html = html.split(jeton).join(valeur || repli);
+      if (!valeur) {
+        avertissements.push(`Axe ${t.axeNumero} (« ${t.axeTitre} ») : le modèle n'a pas fourni ${LIBELLES_CHAMP_ENTREE_LONG[champ]} pour une entrée à compléter automatiquement -- vérifiez cette entrée dans la fiche générée.`);
+      }
+    });
+  });
+  return { injectionAxes: html, avertissements };
 }
 
 function construireInstructionsExpressionEcriture(referentiel) {
@@ -2785,6 +2973,20 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         planFourniInjection = injection;
         if (repliUtilise) {
           res.write(`data: ${JSON.stringify({ avertissement: "La recomposition en phrase(s) de la présentation du texte (ligne I) n'a pas pu être appliquée -- les informations fournies (Titre/Auteur/Source/Nature/Tonalité/Thème) sont affichées telles quelles, sous forme de champs." })}\n\n`);
+        }
+      }
+      // Auto-complétion des entrées du tableau de vérification (axes/entrées
+      // non détaillés par l'enseignant) : extrait ce que le modèle a rédigé
+      // entre les marqueurs dédiés, AVANT l'injection des tableaux déjà
+      // construits -- repli sûr + avertissement explicite si le modèle n'a
+      // pas fourni un élément (jamais un jeton laissé visible).
+      if (planFourniInjection && planFourniInjection.tachesCompletion && planFourniInjection.tachesCompletion.length) {
+        const { contenuHTML: contenuNettoyeCompletion, valeurs } = extraireCompletionsEntrees(contenuHTML, planFourniInjection.tachesCompletion);
+        contenuHTML = contenuNettoyeCompletion;
+        const { injectionAxes, avertissements: avertissementsCompletion } = resoudreCompletionsEntrees(planFourniInjection.injectionAxes, planFourniInjection.tachesCompletion, valeurs);
+        planFourniInjection = { ...planFourniInjection, injectionAxes };
+        for (const avertissementCompletion of avertissementsCompletion) {
+          res.write(`data: ${JSON.stringify({ avertissement: avertissementCompletion })}\n\n`);
         }
       }
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
