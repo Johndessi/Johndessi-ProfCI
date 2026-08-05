@@ -1267,12 +1267,18 @@ function parserPlanEnseignant(planCours) {
   const reperesAttendus = ['I', 'II', 'III', 'IV'];
   const positions = {};
   const resteDeLigneParRepere = {};
+  // Occurrences d'un repère déjà utilisé (doublon), conservées pour le repli
+  // ciblé ci-dessous -- jamais silencieusement ignorées.
+  const doublonsParRepere = {};
 
   lignes.forEach((ligne, index) => {
     const repere = detecterRepereLigne(ligne);
     if (!repere) return;
     if (repere.type === 'numero') {
-      if (positions[repere.numero] !== undefined) return; // 1ère occurrence gardée, pas d'écrasement ambigu
+      if (positions[repere.numero] !== undefined) {
+        (doublonsParRepere[repere.numero] = doublonsParRepere[repere.numero] || []).push({ index, resteDeLigne: repere.resteDeLigne });
+        return;
+      }
       positions[repere.numero] = index;
       resteDeLigneParRepere[repere.numero] = repere.resteDeLigne;
     } else if (repere.type === 'evaluation' && positions.evaluation === undefined) {
@@ -1280,6 +1286,23 @@ function parserPlanEnseignant(planCours) {
       resteDeLigneParRepere.evaluation = repere.resteDeLigne;
     }
   });
+
+  // Repli ciblé, UNIQUEMENT si "IV" est introuvable : coquille fréquente où
+  // l'enseignant recopie par erreur le chiffre romain d'un repère déjà
+  // utilisé (typiquement "I.") devant "BILAN" au lieu de "IV." -- un tel
+  // doublon, s'il mentionne "bilan" dans le reste de sa ligne, est traité
+  // comme le repère IV plutôt que de faire échouer toute la structuration
+  // pour une simple coquille de frappe.
+  if (positions.IV === undefined) {
+    for (const numeroDuplique of Object.keys(doublonsParRepere)) {
+      const candidat = doublonsParRepere[numeroDuplique].find((occ) => /bilan/i.test(occ.resteDeLigne));
+      if (candidat) {
+        positions.IV = candidat.index;
+        resteDeLigneParRepere.IV = candidat.resteDeLigne;
+        break;
+      }
+    }
+  }
 
   const manquants = reperesAttendus.filter((r) => positions[r] === undefined);
   if (manquants.length) {
