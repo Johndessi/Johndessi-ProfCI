@@ -1258,6 +1258,7 @@ function construireInstructionsLectureMethodique(referentiel, classe) {
       instructions: '',
       injectionDeroulement: null,
       injectionAxes: null,
+      injectionEvaluation: null,
       avertissement: null,
       tachesCompletion: [],
       bloque: true,
@@ -1293,13 +1294,32 @@ function construireInstructionsLectureMethodique(referentiel, classe) {
       instructions: '',
       injectionDeroulement: null,
       injectionAxes: null,
+      injectionEvaluation: null,
       avertissement: null,
       tachesCompletion: [],
       bloque: true,
       messageBlocage: resultatAxes.messageBlocage
     };
   }
-  const { axesHTML, tachesCompletion } = resultatAxes;
+  const { axesHTML, tachesCompletion, entreeReservee } = resultatAxes;
+
+  // Corrige un bug réel (07/08→08/08) : le paragraphe ÉVALUATION ci-dessous
+  // affirmait que la ligne est "déjà construite côté serveur", mais RIEN ne
+  // la construisait ni ne l'injectait en Mode 1 -- entreeReservee était
+  // calculée puis silencieusement jetée. Le modèle, suivant l'instruction
+  // "ne rédige rien toi-même", ne produisait donc RIEN pour cette ligne, et
+  // le contenu réservé (indices/analyse/interprétation de l'entrée A2E2,
+  // pourtant extrait) n'était jamais imprimé nulle part -- une entrée sur 4
+  // disparaissait purement et simplement. injectionEvaluation reproduit,
+  // pour le Mode 1, exactement ce que construireDeroulementPlanEnseignantHTML
+  // fait déjà pour le Mode 2 (même fonction construireConsigneEvaluationReservee) :
+  // un petit bloc HTML autonome, portant le jeton @@A2E2_IND@@, à injecter
+  // au marqueur dédié {{EVALUATION_RESERVEE}} que le modèle doit placer dans
+  // sa propre ligne ÉVALUATION (cf. instructions ci-dessous et
+  // injecterDeroulementPlanEnseignant).
+  const injectionEvaluation = entreeReservee
+    ? construireConsigneEvaluationReservee(entreeReservee.indicesTexteOuJeton)
+    : null;
 
   const instructions = `
 
@@ -1337,12 +1357,13 @@ IV. BILAN GÉNÉRAL :
    - Confrontation EXPLICITE hypothèse/bilan, avec la formule EXACTE : « Notre hypothèse générale est donc vérifiée. »
    - Optionnel : une question d'ouverture ou d'avis personnel.
 
-ÉVALUATION (ligne distincte du tableau DÉROULEMENT, différente et SÉPARÉE du Bilan général — ne jamais fusionner les deux) : cette ligne est ELLE AUSSI déjà construite côté serveur, à partir de la 2e entrée de l'Axe 2 (déjà décrite plus haut parmi les entrées à compléter -- jamais travaillée dans le tableau de l'Axe 2, qui n'affiche que sa 1ère entrée). Ne rédige RIEN toi-même pour cette ligne, ni relevé neuf ni consigne : contente-toi de fournir, pour cette entrée, ce qui est demandé plus haut via ses marqueurs dédiés.`;
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT, différente et SÉPARÉE du Bilan général — ne jamais fusionner les deux) : tu écris TOI-MÊME cette ligne (Moments didactiques/Stratégies/Activités de l'enseignant/Activités des élèves), EXACTEMENT comme les lignes I à IV -- SAUF sa colonne Traces écrites, qui repose sur la 2e entrée de l'Axe 2 (déjà décrite plus haut parmi les entrées à compléter -- jamais travaillée dans le tableau de l'Axe 2, qui n'affiche que sa 1ère entrée) et qui est, elle, déjà construite côté serveur : n'y rédige RIEN toi-même (ni relevé, ni consigne) -- place EXACTEMENT le marqueur {{EVALUATION_RESERVEE}} comme SEUL contenu de cette colonne Traces écrites, sur sa propre ligne, UNE SEULE FOIS dans tout le document -- il sera remplacé automatiquement par la consigne déjà rédigée pour cette entrée.`;
 
   return {
     instructions,
     injectionDeroulement: null,
     injectionAxes: axesHTML,
+    injectionEvaluation,
     avertissement: null,
     tachesCompletion,
     bloque: false,
@@ -2100,12 +2121,35 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau, referentiel) 
 // tâche, jamais de génération demandée hors de ce cadre strict : texte
 // support + nom de l'entrée (fixé ou à déterminer) + rôle de l'axe/niveau,
 // rien d'autre.
+// Libellés utilisés pour décrire, dans la consigne, ce qu'attend CHAQUE
+// marqueur -- un par champ RÉELLEMENT présent dans t.champsAGenerer (jamais
+// les 4 en bloc pour toute tâche, cf. bug ci-dessous).
+const LIBELLES_CONSIGNE_CHAMP_COMPLETION = {
+  indices: 'les Indices textuels (citations EXACTES du texte support, entre guillemets, jamais inventées)',
+  analyse: "l'Analyse (nomme et justifie le procédé)",
+  interpretation: "l'Interprétation (l'effet produit sur le lecteur/le sens dégagé)"
+};
+
 function construireConsigneCompletionEntrees(taches) {
-  if (!taches.length) return '';
+  // Les tâches de TITRE d'axe (id AXE1/AXE2, champsAGenerer: ['titre']) sont
+  // déjà couvertes par une instruction dédiée et explicite ailleurs dans le
+  // prompt ({{AXE1_TITRE}}/{{AXE2_TITRE}}, cf.
+  // construireInstructionsLectureMethodique) -- les inclure ici PRODUISAIT un
+  // bug réel (corrigé le 08/08) : cette fonction générait pour CHAQUE tâche,
+  // sans jamais regarder champsAGenerer, une instruction fixe mentionnant
+  // nom/indices/analyse/interprétation -- soit, pour une tâche de titre,
+  // "à placer entre {{AXE1_NOM}}...{{FIN_AXE1_NOM}}" alors que rien
+  // n'extrait jamais ce marqueur (seul {{AXE1_TITRE}} est attendu pour cette
+  // tâche). Le modèle suivait cette instruction fantôme et le résultat
+  // ({{AXE1_NOM}}...{{FIN_AXE1_NOM}}) restait imprimé tel quel dans la
+  // fiche finale. Filtré ici, et chaque champ traité selon ce qu'il demande
+  // RÉELLEMENT (champsAGenerer), plus jamais une liste fixe supposée.
+  const tachesEntrees = taches.filter((t) => !t.champsAGenerer.includes('titre'));
+  if (!tachesEntrees.length) return '';
 
   const rolesParAxe = {};
-  taches.forEach((t) => { rolesParAxe[t.axeNumero] = { titre: t.axeTitre, role: roleAxeTexte(t.axeNumero, t.niveau) }; });
-  const consigneNiveauLangage = (taches[0].niveau === '6e' || taches[0].niveau === '5e')
+  tachesEntrees.forEach((t) => { rolesParAxe[t.axeNumero] = { titre: t.axeTitre, role: roleAxeTexte(t.axeNumero, t.niveau) }; });
+  const consigneNiveauLangage = (tachesEntrees[0].niveau === '6e' || tachesEntrees[0].niveau === '5e')
     ? ' Niveau 6e/5e : vocabulaire CONCRET et accessible, jamais de méta-langage dense (interdits : « procédés d\'expression de... », « organisation spatiale de... »).'
     : '';
 
@@ -2113,15 +2157,19 @@ function construireConsigneCompletionEntrees(taches) {
     .map(([numero, { titre, role }]) => `Axe ${numero} (« ${titre} ») ${role}.`)
     .join(' ');
 
-  const consignesEntrees = taches.map((t) => {
+  const consignesEntrees = tachesEntrees.map((t) => {
     const marqueur = (champ) => {
       const id = `${t.id}_${ABREV_CHAMP_ENTREE[champ]}`;
       return `{{${id}}}...{{FIN_${id}}}`;
     };
-    const partieNom = t.nomFixe === null
-      ? `nom à déterminer toi-même (une SEULE catégorie linguistique/grammaticale/lexicale précise, cohérente avec le rôle de l'axe ci-dessus -- JAMAIS une entrée thématique ou psychologisante), à placer entre ${marqueur('nom')}, puis `
-      : `entrée « ${t.nomFixe} » (nom fixé, ne le modifie pas) : `;
-    return `   - Axe ${t.axeNumero}, ${partieNom}Indices textuels (citations EXACTES du texte support, entre guillemets, jamais inventées) entre ${marqueur('indices')} ; Analyses (nomme et justifie le procédé) entre ${marqueur('analyse')} ; Interprétations (l'effet produit sur le lecteur/le sens dégagé) entre ${marqueur('interpretation')}.`;
+    // Depuis le 07/08, le nom d'une entrée à compléter est TOUJOURS fixé
+    // (par l'enseignant ou, à défaut, choisi de façon déterministe dans le
+    // référentiel, cf. determinerSlotsAxe) -- nomFixe === null n'est plus
+    // jamais atteignable ici (seules les tâches de titre l'avaient, filtrées
+    // ci-dessus), donc plus de branche "nom à déterminer toi-même".
+    const introductionNom = `entrée « ${t.nomFixe} » (nom fixé, ne le modifie pas) : `;
+    const champsTexte = t.champsAGenerer.map((champ) => `${LIBELLES_CONSIGNE_CHAMP_COMPLETION[champ]} entre ${marqueur(champ)}`).join(' ; ');
+    return `   - Axe ${t.axeNumero}, ${introductionNom}${champsTexte}.`;
   }).join('\n');
 
   return `
@@ -2165,6 +2213,7 @@ ${habiletesLectureMethodique(niveau)}`;
       instructions,
       injectionDeroulement: null,
       injectionAxes: null,
+      injectionEvaluation: null,
       // Reproduit APRÈS toutes les autres instructions du message (Leçon/
       // Séance/Compétence officielles...), jamais juste avant -- pour ne pas
       // noyer ces instructions sous un pavé de texte brut potentiellement
@@ -2183,6 +2232,7 @@ ${habiletesLectureMethodique(niveau)}`;
       instructions: '',
       injectionDeroulement: null,
       injectionAxes: null,
+      injectionEvaluation: null,
       avertissement: null,
       planCoursPourPromptFinal: null,
       tachesCompletion: [],
@@ -2223,6 +2273,13 @@ N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi
     instructions,
     injectionDeroulement: lignesHTML,
     injectionAxes: axesHTML,
+    // Mode plan-enseignant : la consigne réservée est déjà embarquée
+    // directement dans lignesHTML/injectionDeroulement (cf.
+    // construireDeroulementPlanEnseignantHTML, evaluationEffective) --
+    // aucun marqueur séparé n'est nécessaire ici, contrairement au Mode 1
+    // (cf. construireInstructionsLectureMethodique). Champ présent quand
+    // même, à null, pour une forme de retour identique entre les 2 modes.
+    injectionEvaluation: null,
     // Option B : avertissement explicite si un axe n'a pas exactement 2
     // entrées -- jamais un échec silencieux, jamais un contenu tronqué/complété.
     avertissement: avertissementsEntrees.length ? avertissementsEntrees.join(' ') : null,
@@ -2261,25 +2318,37 @@ function verifierMarqueursPlanEnseignant(contenuHTMLBrut, injection) {
   if (injection.injectionAxes !== null && !contenuHTMLBrut.includes('{{AXES_PLAN_ENSEIGNANT}}')) {
     avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le tableau détaillé des axes (Entrées/Indices textuels/Analyses/Interprétations) : ce tableau n'a pas pu être inséré automatiquement. Vérifiez la fiche générée.");
   }
+  // Mode 1 uniquement (injectionEvaluation non-null) : la consigne réservée
+  // à l'entrée Axe 2/Entrée 2 (règle D) n'est imprimée QUE via ce marqueur --
+  // bug corrigé le 08/08, cf. construireInstructionsLectureMethodique. Sans
+  // ce contrôle, un marqueur omis par le modèle ferait disparaître cette
+  // entrée sans aucun signal (contenu extrait mais jamais réinjecté nulle
+  // part -- perte totalement silencieuse).
+  if (injection.injectionEvaluation !== null && injection.injectionEvaluation !== undefined && !contenuHTMLBrut.includes('{{EVALUATION_RESERVEE}}')) {
+    avertissements.push("Le modèle n'a pas placé le marqueur attendu pour la consigne d'Évaluation (entrée réservée Axe 2/Entrée 2) : cette consigne n'a pas pu être insérée automatiquement, la ligne ÉVALUATION peut apparaître incomplète. Vérifiez la fiche générée.");
+  }
   return avertissements;
 }
 
 // Injecte, comme injecterTexteSupport ci-dessus, le contenu déjà construit
-// déterministiquement par construireDeroulementPlanEnseignantHTML à la place
-// des 2 marqueurs dédiés. Même logique anti-duplication : seule la 1ère
-// occurrence de chaque marqueur reçoit le contenu, les éventuelles occurrences
-// suivantes (erreur du modèle) sont retirées, jamais dupliquées.
+// déterministiquement par construireDeroulementPlanEnseignantHTML (Mode 2)
+// ou construireInstructionsLectureMethodique (Mode 1, injectionEvaluation
+// uniquement) à la place des marqueurs dédiés. Même logique anti-duplication :
+// seule la 1ère occurrence de chaque marqueur reçoit le contenu, les
+// éventuelles occurrences suivantes (erreur du modèle) sont retirées, jamais
+// dupliquées.
 function injecterDeroulementPlanEnseignant(contenuHTML, injection) {
   if (!injection || (injection.injectionDeroulement === null && injection.injectionAxes === null)) return contenuHTML;
   let resultat = contenuHTML;
 
   const injecterMarqueurUneFois = (html, marqueur, contenu) => {
-    if (contenu === null || !html.includes(marqueur)) return html;
+    if (contenu === null || contenu === undefined || !html.includes(marqueur)) return html;
     const morceaux = html.split(marqueur);
     return morceaux[0] + contenu + morceaux.slice(1).join('');
   };
 
   resultat = injecterMarqueurUneFois(resultat, '{{DEROULEMENT_PLAN_ENSEIGNANT}}', injection.injectionDeroulement);
+  resultat = injecterMarqueurUneFois(resultat, '{{EVALUATION_RESERVEE}}', injection.injectionEvaluation);
   resultat = injecterMarqueurUneFois(resultat, '{{AXES_PLAN_ENSEIGNANT}}', injection.injectionAxes);
   return resultat;
 }
@@ -2298,19 +2367,36 @@ function extraireEtRetirerRecompositionPresentation(contenuHTML) {
   return { texte: texte || null, contenuHTML: nettoye };
 }
 
-// Même mécanique qu'extraireEtRetirerRecompositionPresentation ci-dessus,
-// pour le texte support rédigé par le modèle en Mode 1 (Lecture méthodique
-// automatique) quand l'enseignant n'en a fourni aucun (cf. userMessage plus
-// bas). Le texte extrait devient ensuite la valeur de `texteSupport`,
-// injectée par injecterTexteSupport EXACTEMENT comme un texte fourni par
-// l'enseignant -- imprimée en entier dans la fiche, et seule source des
-// citations pour le tableau de vérification ET pour l'entrée réservée à
-// l'Évaluation (jamais un extrait différent, règle verrouillée du 04/08).
-function extraireEtRetirerTexteSupportGenere(contenuHTML) {
-  const m = /\{\{TEXTE_SUPPORT_GENERE\}\}([\s\S]*?)\{\{FIN_TEXTE_SUPPORT_GENERE\}\}/.exec(contenuHTML);
+// Extrait le texte support rédigé par le modèle en Mode 1 (Lecture
+// méthodique automatique) quand l'enseignant n'en a fourni aucun (cf.
+// userMessage plus bas). Le texte extrait devient ensuite la valeur de
+// `texteSupport`, injectée par injecterTexteSupport EXACTEMENT comme un
+// texte fourni par l'enseignant -- imprimée en entier dans la fiche, et
+// seule source des citations pour le tableau de vérification ET pour
+// l'entrée réservée à l'Évaluation (jamais un extrait différent, règle
+// verrouillée du 04/08).
+//
+// À LA DIFFÉRENCE d'extraireEtRetirerRecompositionPresentation (qui retire
+// les 2 marqueurs), celle-ci ne retire QUE le texte et le marqueur de
+// FERMETURE {{FIN_TEXTE_SUPPORT}} -- le marqueur d'OUVERTURE {{TEXTE_SUPPORT}}
+// reste intact, exactement là où le modèle l'a placé, pour qu'injecterTexteSupport
+// (déjà utilisé sans modification pour le cas "texte fourni par
+// l'enseignant") le retrouve et y insère le texte final. Choix délibéré
+// (corrige un bug réel du 08/08) : une 1ère version demandait un marqueur
+// SÉPARÉ ({{TEXTE_SUPPORT_GENERE}}) en plus du {{TEXTE_SUPPORT}} déjà exigé
+// par les instructions de base -- 2 marqueurs distincts à retenir, dont le
+// modèle en oubliait un (le {{TEXTE_SUPPORT}} nu), laissant échouer le
+// contrôle de placement (cf. verifierMarqueursPlanEnseignant) alors même que
+// le texte finissait par s'imprimer via le repli positionnel
+// d'injecterTexteSupport. En ne réutilisant plus qu'UN SEUL marqueur (celui
+// déjà exigé partout ailleurs), il n'y a plus qu'une seule consigne à
+// suivre pour le modèle.
+function extraireTexteSupportGenereEnPlace(contenuHTML) {
+  const m = /\{\{TEXTE_SUPPORT\}\}([\s\S]*?)\{\{FIN_TEXTE_SUPPORT\}\}/.exec(contenuHTML);
   if (!m) return { texte: null, contenuHTML };
   const texte = m[1].trim();
-  const nettoye = contenuHTML.slice(0, m.index) + contenuHTML.slice(m.index + m[0].length);
+  const finMarqueurOuverture = m.index + '{{TEXTE_SUPPORT}}'.length;
+  const nettoye = contenuHTML.slice(0, finMarqueurOuverture) + contenuHTML.slice(m.index + m[0].length);
   return { texte: texte || null, contenuHTML: nettoye };
 }
 
@@ -3298,16 +3384,18 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       userMessage += `\n\nAucun texte support n'a été fourni par l'enseignant : si tu dois toi-même rédiger un exemple de texte (lettre, etc.) à titre de modèle, reste sous les 250 mots afin qu'il tienne sur une seule page (mise en forme observable d'un coup d'œil par les élèves), et places-le dans une balise <div class="texte-support-page-unique">...</div> pour qu'il bénéficie du même traitement de mise en page qu'un texte support fourni par l'enseignant.`;
     } else if (modeAutoLM) {
       // Mode 1 (Lecture méthodique automatique) sans texte support fourni :
-      // le modèle doit en rédiger un lui-même, mais ne le recopie JAMAIS
-      // directement à l'endroit du marqueur {{TEXTE_SUPPORT}} (déjà demandé
-      // plus haut, résolu automatiquement côté serveur comme pour un texte
-      // fourni par l'enseignant) -- il le place dans un bloc d'extraction
-      // dédié, pour que la fiche ÉVALUATION (construireConsigneEvaluationReservee,
-      // toujours "sur le même texte support") s'appuie garantie sur EXACTEMENT
-      // ce même texte, jamais un extrait différent (règle verrouillée du
-      // 04/08). referentielTypeTexteLM est non-null ici : bloqué en amont sinon
-      // (cf. construireInstructionsLectureMethodique).
-      userMessage += `\n\nAucun texte support n'a été fourni par l'enseignant : tu dois toi-même rédiger un texte support ORIGINAL, adapté au niveau ${niveau}, dont la NATURE correspond EXACTEMENT au type de texte « ${referentielTypeTexteLM.typeTexte} » demandé par la leçon (structure et caractéristiques conformes au référentiel déjà utilisé plus haut pour construire les entrées du tableau de vérification -- jamais un autre type de texte). Longueur raisonnable pour occuper une bonne partie d'une page (environ 100 à 220 mots selon le niveau). Place ce texte, et UNIQUEMENT lui (sans titre répété ni commentaire), entre les marqueurs {{TEXTE_SUPPORT_GENERE}} et {{FIN_TEXTE_SUPPORT_GENERE}}, N'IMPORTE OÙ dans ta réponse -- ce bloc sera extrait puis retiré du document final, il ne doit apparaître nulle part ailleurs. NE RECOPIE PAS ce texte à l'endroit du marqueur {{TEXTE_SUPPORT}} (déjà demandé plus haut) : le serveur l'y insérera automatiquement, intégralement, à partir de ce que tu places entre {{TEXTE_SUPPORT_GENERE}} et {{FIN_TEXTE_SUPPORT_GENERE}}.`;
+      // le modèle doit en rédiger un lui-même. Un SEUL marqueur à suivre --
+      // celui déjà exigé par les instructions de base ({{TEXTE_SUPPORT}}) --
+      // désormais utilisé comme une PAIRE ({{TEXTE_SUPPORT}}...{{FIN_TEXTE_SUPPORT}})
+      // UNIQUEMENT dans ce cas précis, au lieu d'un 2e marqueur séparé (ancien
+      // {{TEXTE_SUPPORT_GENERE}}, abandonné le 08/08 -- 2 marqueurs distincts
+      // était plus facile à mal suivre, cf. extraireTexteSupportGenereEnPlace).
+      // Garantit aussi que la fiche ÉVALUATION (construireConsigneEvaluationReservee,
+      // toujours "sur le même texte support") s'appuie sur EXACTEMENT ce même
+      // texte, jamais un extrait différent (règle verrouillée du 04/08).
+      // referentielTypeTexteLM est non-null ici : bloqué en amont sinon (cf.
+      // construireInstructionsLectureMethodique).
+      userMessage += `\n\nAucun texte support n'a été fourni par l'enseignant : tu dois toi-même rédiger un texte support ORIGINAL, adapté au niveau ${niveau}, dont la NATURE correspond EXACTEMENT au type de texte « ${referentielTypeTexteLM.typeTexte} » demandé par la leçon (structure et caractéristiques conformes au référentiel déjà utilisé plus haut pour construire les entrées du tableau de vérification -- jamais un autre type de texte). Longueur raisonnable pour occuper une bonne partie d'une page (environ 100 à 220 mots selon le niveau). RÈGLE SPÉCIALE POUR CE CAS PRÉCIS (aucun texte fourni) : le marqueur {{TEXTE_SUPPORT}} déjà demandé plus haut doit ici être utilisé comme une PAIRE -- écris directement ton texte ENTRE {{TEXTE_SUPPORT}} et un second marqueur {{FIN_TEXTE_SUPPORT}} que tu ajoutes juste après (rien d'autre entre les deux, pas de titre répété ni de commentaire). N'utilise PAS de marqueur différent : c'est le même {{TEXTE_SUPPORT}} que celui déjà exigé, simplement complété par {{FIN_TEXTE_SUPPORT}} dans ce cas précis. Ce texte sera extrait automatiquement puis réinséré au même endroit par le serveur.`;
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -3375,8 +3463,15 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenuHTML = contenuNettoyeCompletion;
         const resDeroulement = resoudreCompletionsEntrees(planFourniInjection.injectionDeroulement, planFourniInjection.tachesCompletion, valeurs);
         const resAxes = resoudreCompletionsEntrees(planFourniInjection.injectionAxes, planFourniInjection.tachesCompletion, valeurs);
-        planFourniInjection = { ...planFourniInjection, injectionDeroulement: resDeroulement.html, injectionAxes: resAxes.html };
-        for (const avertissementCompletion of resDeroulement.avertissements.concat(resAxes.avertissements)) {
+        // Mode 1 uniquement (injectionEvaluation non-null) : le jeton
+        // @@A2E2_IND@@ de l'entrée réservée vit dans CE bloc-là (jamais dans
+        // injectionDeroulement/injectionAxes en Mode 1) -- résolu séparément
+        // pour la même raison qu'eux (no-op sûr sur null, cf.
+        // resoudreCompletionsEntrees). En Mode 2, injectionEvaluation reste
+        // toujours null : no-op, le jeton y vit déjà dans injectionDeroulement.
+        const resEvaluation = resoudreCompletionsEntrees(planFourniInjection.injectionEvaluation, planFourniInjection.tachesCompletion, valeurs);
+        planFourniInjection = { ...planFourniInjection, injectionDeroulement: resDeroulement.html, injectionAxes: resAxes.html, injectionEvaluation: resEvaluation.html };
+        for (const avertissementCompletion of resDeroulement.avertissements.concat(resAxes.avertissements, resEvaluation.avertissements)) {
           res.write(`data: ${JSON.stringify({ avertissement: avertissementCompletion })}\n\n`);
         }
       }
@@ -3391,13 +3486,22 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       // l'enseignant -- jamais absent (bug corrigé le 07/08 : auparavant,
       // {{TEXTE_SUPPORT}} n'était résolu par RIEN dans ce cas, cf. `if
       // (!texteSupport) return contenuHTML;` dans injecterTexteSupport).
+      // extraireTexteSupportGenereEnPlace laisse le marqueur {{TEXTE_SUPPORT}}
+      // intact à sa place (seul son contenu + {{FIN_TEXTE_SUPPORT}} sont
+      // retirés) -- injecterTexteSupport, juste après, le retrouve et y
+      // insère le texte final normalement, sans traitement spécial.
       if (modeAutoLM && !texteSupport) {
-        const { texte: texteSupportGenere, contenuHTML: contenuNettoyeTexteSupport } = extraireEtRetirerTexteSupportGenere(contenuHTML);
+        const { texte: texteSupportGenere, contenuHTML: contenuNettoyeTexteSupport } = extraireTexteSupportGenereEnPlace(contenuHTML);
         contenuHTML = contenuNettoyeTexteSupport;
         if (texteSupportGenere) {
           texteSupport = texteSupportGenere;
         } else {
-          res.write(`data: ${JSON.stringify({ avertissement: "Le modèle n'a pas fourni de texte support généré automatiquement (marqueur {{TEXTE_SUPPORT_GENERE}} absent ou vide) -- aucun texte support n'a pu être imprimé dans la fiche. Régénérez la fiche, ou fournissez vous-même un texte support." })}\n\n`);
+          // Rien à imprimer : retire le marqueur {{TEXTE_SUPPORT}} resté nu
+          // (jamais un jeton visible tel quel dans la fiche finale -- le 1er
+          // test d'injecterTexteSupport, `if (!texteSupport) return
+          // contenuHTML;`, ne le retire pas puisque texteSupport reste vide).
+          contenuHTML = contenuHTML.split('{{TEXTE_SUPPORT}}').join('');
+          res.write(`data: ${JSON.stringify({ avertissement: "Le modèle n'a pas fourni de texte support généré automatiquement (marqueurs {{TEXTE_SUPPORT}}...{{FIN_TEXTE_SUPPORT}} absents ou vides) -- aucun texte support n'a pu être imprimé dans la fiche. Régénérez la fiche, ou fournissez vous-même un texte support." })}\n\n`);
         }
       }
       contenuHTML = injecterTexteSupport(contenuHTML, texteSupport, { unePage: estFicheExpressionEcrite });
