@@ -1055,43 +1055,112 @@ function fusionnerCaracteristiquesCollege(caracteristiquesGenre, niveau) {
   return [...caracteristiquesGenre, ...baseCollegeManquante, figureStyleParNiveauCollege(niveau)];
 }
 
+// Depuis le changement d'architecture du 07/08 : CHAQUE catégorie porte
+// désormais, en plus de "categorie" (slug interne) et "description" (texte
+// long d'appui pour le prompt), 2 champs supplémentaires :
+// - "axe" (1 ou 2) -- classe la catégorie selon son rôle méthodologique
+//   (cf. skill lecture méthodique section 3) : axe 1 = catégories qui
+//   justifient la NATURE/le TYPE de texte (ex. présentation matérielle
+//   d'une lettre, structure narrative d'un récit), axe 2 = catégories qui
+//   justifient le THÈME précis traité par CE texte (ex. lexique du sujet,
+//   types de phrases selon l'intention). Seule source utilisée par
+//   caracteristiquesParAxe/determinerSlotsAxe pour choisir, de façon
+//   déterministe, le nom d'une entrée que ni l'enseignant ni le modèle ne
+//   fournissent -- jamais une invention libre du modèle.
+// - "libelle" -- nom court et présentable de l'entrée (ex. "Le lexique du
+//   thème"), tel qu'il doit apparaître dans la colonne "Entrées" du
+//   tableau -- distinct du slug interne "categorie" et de la description
+//   longue.
+// Chaque type ci-dessous garantit AU MOINS 2 catégories taguées axe 1 et
+// AU MOINS 2 taguées axe 2 (jamais moins), pour que determinerSlotsAxe
+// puisse toujours nommer les 2 entrées de chaque axe sans jamais retomber
+// sur une invention libre par le modèle. 8 types couverts (validés contre
+// le corpus Anicet du 04/08, 6e à 3e) -- tout type de texte demandé en
+// dehors de cette liste (ex. "résumé", absent du corpus comme du
+// programme DPFC consulté) doit être BLOQUÉ, jamais généré en mode libre
+// (cf. construireMessageBlocageTypeTexteNonCouvert).
 const REFERENTIEL_TYPES_TEXTE = {
   'texte explicatif': {
     caracteristiques: [
-      { categorie: 'lexique', description: 'vocabulaire technique/scientifique, champ lexical du phénomène expliqué' },
-      { categorie: 'temps_verbaux', description: 'présent de vérité générale (valeur de permanence)' },
-      { categorie: 'types_phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) — dominante déclarative pour ce type de texte` },
-      { categorie: 'donnees_chiffrees', description: "statistiques, mesures, proportions appuyant l'explication" },
-      { categorie: 'connecteurs_logiques', description: "d'abord, ensuite, en effet, au final — articulation causale/chronologique" }
+      { categorie: 'temps_verbaux', axe: 1, libelle: 'Les temps verbaux', description: 'présent de vérité générale (valeur de permanence)' },
+      { categorie: 'types_phrases', axe: 1, libelle: 'Les types de phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) — dominante déclarative pour ce type de texte` },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique thématique', description: 'vocabulaire technique/scientifique, champ lexical du phénomène expliqué' },
+      { categorie: 'connecteurs_logiques', axe: 2, libelle: 'Les connecteurs logiques', description: "d'abord, ensuite, en effet, au final — articulation causale/chronologique" },
+      { categorie: 'donnees_chiffrees', axe: 2, libelle: 'Les données chiffrées', description: "statistiques, mesures, proportions appuyant l'explication" }
     ]
   },
   'lettre personnelle': {
     caracteristiques: [
-      { categorie: 'presentation_materielle', description: "en-tête (lieu, date), formule d'appel, corps (introductive/développement/finale), signature" },
-      { categorie: 'indices_personne', description: 'pronoms personnels je/tu selon relation expéditeur-destinataire' },
-      { categorie: 'registre_langue', description: 'standard ou familier selon la relation' },
-      { categorie: 'types_phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) selon l'intention de l'auteur (ex. dominante déclarative pour donner des nouvelles)` }
+      { categorie: 'presentation_materielle', axe: 1, libelle: 'La présentation matérielle', description: "en-tête (lieu, date), formule d'appel, corps (introductive/développement/finale), signature" },
+      { categorie: 'indices_personne', axe: 1, libelle: 'Les indices de personne', description: 'pronoms personnels je/tu selon relation expéditeur-destinataire' },
+      { categorie: 'registre_langue', axe: 1, libelle: 'Le registre de langue', description: 'standard ou familier selon la relation' },
+      { categorie: 'types_phrases', axe: 2, libelle: 'Les types de phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) selon l'intention de l'auteur (ex. dominante déclarative pour donner des nouvelles)` },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique', description: 'vocabulaire du thème précis abordé dans la lettre (nouvelles données, salutations, motif du courrier)' }
     ]
   },
   'portrait': {
     caracteristiques: [
-      { categorie: 'lexique', description: 'vocabulaire évaluatif (appréciatif/dépréciatif), champs lexicaux physiques/moraux' },
-      { categorie: 'images', description: 'comparaisons' },
-      { categorie: 'temps_verbaux', description: "imparfait et présent de l'indicatif (effet de réalisme)" },
-      { categorie: 'adjectifs', description: 'adjectifs qualificatifs' },
-      { categorie: 'verbes', description: "verbes d'état" },
-      { categorie: 'structure', description: 'introduction / développement / conclusion' }
+      { categorie: 'structure', axe: 1, libelle: 'La structure du texte', description: 'introduction / développement / conclusion' },
+      { categorie: 'verbes', axe: 1, libelle: "Les verbes d'état", description: "verbes d'état" },
+      { categorie: 'temps_verbaux', axe: 1, libelle: 'Les temps verbaux', description: "imparfait et présent de l'indicatif (effet de réalisme)" },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique évaluatif', description: 'vocabulaire évaluatif (appréciatif/dépréciatif), champs lexicaux physiques/moraux' },
+      { categorie: 'adjectifs', axe: 2, libelle: 'Les adjectifs qualificatifs', description: 'adjectifs qualificatifs' },
+      { categorie: 'images', axe: 2, libelle: 'Les comparaisons', description: 'comparaisons' }
     ]
   },
   'texte descriptif (objet)': {
     caracteristiques: [
-      { categorie: 'lexique', description: 'champ lexical du luxe/de la richesse ou du thème valorisé selon l\'objet' },
-      { categorie: 'adjectifs', description: 'adjectifs qualificatifs valorisants' },
-      { categorie: 'enumeration', description: 'énumération organisée (spatiale : extérieur→intérieur, haut→bas)' },
-      { categorie: 'procedes_stylistiques', description: "exclamations, apostrophe, hyperbole selon l'effet recherché" }
+      { categorie: 'enumeration', axe: 1, libelle: "L'énumération", description: 'énumération organisée (spatiale : extérieur→intérieur, haut→bas)' },
+      { categorie: 'procedes_stylistiques', axe: 1, libelle: 'Les procédés stylistiques', description: "exclamations, apostrophe, hyperbole selon l'effet recherché" },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique valorisant', description: 'champ lexical du luxe/de la richesse ou du thème valorisé selon l\'objet' },
+      { categorie: 'adjectifs', axe: 2, libelle: 'Les adjectifs qualificatifs', description: 'adjectifs qualificatifs valorisants' }
+    ]
+  },
+  'récit': {
+    caracteristiques: [
+      { categorie: 'structure', axe: 1, libelle: 'La structure du récit', description: 'schéma narratif (situation initiale, élément perturbateur, péripéties, dénouement)' },
+      { categorie: 'temps_verbaux', axe: 1, libelle: 'Les temps verbaux', description: 'passé simple/imparfait (premier plan/arrière-plan) ou présent de narration selon le texte' },
+      { categorie: 'indices_personne', axe: 1, libelle: 'Les indices de personne', description: 'marques du narrateur (1re personne, récit à la 3e personne...)' },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique thématique', description: "vocabulaire lié à l'action et au thème précis du récit" },
+      { categorie: 'types_phrases', axe: 2, libelle: 'Les types de phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) selon les moments du récit (ex. exclamative dans un passage vif)` }
+    ]
+  },
+  'poème': {
+    caracteristiques: [
+      { categorie: 'structure_poeme', axe: 1, libelle: 'La structure du poème', description: 'organisation en vers/strophes, disposition, éventuelle rime ou vers libres' },
+      { categorie: 'indices_personne', axe: 1, libelle: 'Les indices de personne', description: 'marques du "je" poétique ou du destinataire ("tu")' },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique thématique', description: 'champ lexical du thème chanté par le poème' },
+      { categorie: 'figures_style', axe: 2, libelle: 'Les figures de style', description: 'comparaison, métaphore, personnification, énumération/gradation — UNIQUEMENT celles réellement présentes' },
+      { categorie: 'types_phrases', axe: 2, libelle: 'Les types de phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) selon l'intention (ex. exclamative pour l'émotion)` }
+    ]
+  },
+  'dialogue argumentatif': {
+    caracteristiques: [
+      { categorie: 'ponctuation', axe: 1, libelle: 'La ponctuation du dialogue', description: 'marques du dialogue (tirets, guillemets, verbes introducteurs de parole)' },
+      { categorie: 'indices_personne', axe: 1, libelle: 'Les indices de personne', description: 'alternance je/tu entre les 2 interlocuteurs' },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique du débat', description: 'vocabulaire du sujet débattu par les 2 interlocuteurs' },
+      { categorie: 'types_phrases', axe: 2, libelle: 'Les types de phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) — interrogatives/exclamatives fréquentes dans l'échange argumentatif` }
+    ]
+  },
+  'texte argumentatif': {
+    caracteristiques: [
+      { categorie: 'connecteurs_logiques', axe: 1, libelle: 'Les connecteurs logiques', description: "liens d'articulation (d'abord, cependant, en effet, donc...) organisant l'argumentation" },
+      { categorie: 'types_phrases', axe: 1, libelle: 'Les types de phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) — dominante déclarative/interrogative selon la stratégie argumentative` },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique thématique', description: 'vocabulaire du sujet précis débattu' },
+      { categorie: 'temps_verbaux', axe: 2, libelle: 'Les temps verbaux', description: 'présent de vérité générale, valeurs modales (devoir, falloir...)' }
     ]
   }
 };
+
+// Message explicite (jamais un échec silencieux ni une génération libre en
+// repli) affiché à l'enseignant quand le type de texte demandé n'est
+// couvert par AUCUNE entrée de REFERENTIEL_TYPES_TEXTE ci-dessus (ex.
+// "résumé", absent du corpus consulté) -- cf. construireInstructionsLectureMethodique,
+// construireDeroulementPlanEnseignantHTML (via determinerSlotsAxe) et le
+// branchement Expression écrite dans la route /api/generer-fiche.
+function construireMessageBlocageTypeTexteNonCouvert() {
+  return `Ce type de texte n'est pas encore couvert par le référentiel structurel — génération suspendue. Types actuellement disponibles : ${Object.keys(REFERENTIEL_TYPES_TEXTE).join(', ')}. Complétez le référentiel ou reformulez la leçon/le thème pour qu'il corresponde clairement à l'un de ces types avant de régénérer.`;
+}
 
 // Recherche insensible à la casse/accents : correspondance exacte d'abord,
 // puis correspondance partielle (l'un des deux textes contient l'autre) —
@@ -1130,6 +1199,22 @@ function formaterCaracteristiquesReferentiel(caracteristiques) {
   return caracteristiques.map((c) => `- ${c.categorie} : ${c.description}`).join('\n');
 }
 
+// Filtre les catégories du référentiel appartenant à UN axe précis (1 =
+// justifie le TYPE de texte, 2 = justifie le THÈME précis, cf. commentaire
+// sur REFERENTIEL_TYPES_TEXTE) -- seule source utilisée par determinerSlotsAxe
+// pour choisir, de façon déterministe, le nom d'une entrée que ni
+// l'enseignant ni le modèle ne fournissent : jamais une catégorie hors
+// référentiel, jamais une invention du modèle. Les catégories ajoutées par
+// fusionnerCaracteristiquesCollege (socle collège, figures de style par
+// palier) n'ont pas de champ "axe" : elles sont donc naturellement
+// exclues ici (undefined !== 1/2) -- seules les catégories propres au
+// genre, taguées à la main dans REFERENTIEL_TYPES_TEXTE, peuvent nommer une
+// entrée par ce mécanisme.
+function caracteristiquesParAxe(referentiel, axeNumero) {
+  if (!referentiel) return [];
+  return referentiel.caracteristiques.filter((c) => c.axe === Number(axeNumero));
+}
+
 // Figures citées dans la ligne "Analyser" du tableau Habiletés : même
 // progression par palier que figureStyleParNiveauCollege ci-dessus, mais en
 // une seule chaîne (pas un objet {categorie, description}) puisqu'elle
@@ -1149,11 +1234,40 @@ function habiletesLectureMethodique(niveau) {
   <tr><td style="border:1px solid #000;padding:6px;">Appliquer</td><td style="border:1px solid #000;padding:6px;">la démarche de la lecture méthodique</td></tr>`;
 }
 
+// Mode automatique (Mode 1) -- même niveau de garantie que le mode
+// plan-enseignant (règles A/B/C/D), via construireAxesAInventerHTML qui
+// réutilise EXACTEMENT le même mécanisme (determinerSlotsAxe,
+// construireTableauAxeHTML, construireEntreeReserveeEvaluation,
+// construireConsigneCompletionEntrees). Retourne désormais
+// { instructions, injectionDeroulement: null, injectionAxes, tachesCompletion,
+// avertissement: null } -- même forme que construireInstructionsLectureMethodiqueAvecPlanEnseignant,
+// pour que le reste du pipeline (verifierMarqueursPlanEnseignant,
+// extraireCompletionsEntrees, resoudreCompletionsEntrees,
+// injecterDeroulementPlanEnseignant) fonctionne à l'identique sans
+// modification, quel que soit le mode.
 function construireInstructionsLectureMethodique(referentiel, classe) {
   const niveau = niveauLectureMethodique(classe);
+
+  // Mode 1 (automatique) : AUCUNE entrée n'est fournie par un enseignant --
+  // les 4 entrées des 2 tableaux de vérification doivent TOUTES être
+  // choisies dans le référentiel (cf. determinerSlotsAxe). Un référentiel
+  // manquant bloque donc systématiquement ce mode, avant même d'appeler le
+  // modèle -- jamais une génération libre en repli (cf. verdict du 07/08).
+  if (!referentiel) {
+    return {
+      instructions: '',
+      injectionDeroulement: null,
+      injectionAxes: null,
+      avertissement: null,
+      tachesCompletion: [],
+      bloque: true,
+      messageBlocage: construireMessageBlocageTypeTexteNonCouvert()
+    };
+  }
+
   const reglesFiguresReelles = ' Les figures de style éventuellement listées ci-dessus ne sont que des possibilités : n\'utilise QUE celles réellement présentes dans le texte support fourni, jamais de façon systématique — si aucune de ces figures n\'apparaît dans le texte, n\'en invente aucune et appuie-toi sur les autres catégories.';
   const consigneEntrees = referentiel
-    ? `Les « entrées » possibles pour les 2 tableaux d'axes sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » ci-dessous — pioche EXCLUSIVEMENT dans ces catégories (tu peux n'en utiliser qu'une partie selon les 2 axes retenus, mais n'en invente AUCUNE en dehors de cette liste) :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}\n\nLes relevés précis (citations, exemples tirés du texte) restent bien sûr propres à CE texte : seules les catégories/étiquettes des « entrées » sont fixées par le référentiel.${reglesFiguresReelles}`
+    ? `Les « entrées » possibles pour les 2 tableaux d'axes sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » ci-dessous — pioche EXCLUSIVEMENT dans ces catégories (tu peux n'en utiliser qu'une partie selon les axes retenus, mais n'en invente AUCUNE en dehors de cette liste) :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}\n\nLes relevés précis (citations, exemples tirés du texte) restent bien sûr propres à CE texte : seules les catégories/étiquettes des « entrées » sont fixées par le référentiel.${reglesFiguresReelles}`
     : `Aucun référentiel de caractéristiques n'est disponible pour ce type de texte précis : détermine les « entrées » les plus pertinentes toi-même, à partir d'une analyse rigoureuse du texte, en respectant STRICTEMENT la contrainte ci-dessous sur la nature des entrées.${reglesFiguresReelles}`;
 
   // 6e/5e : les élèves de début de collège n'ont pas encore la notion de
@@ -1173,7 +1287,21 @@ function construireInstructionsLectureMethodique(referentiel, classe) {
     ? `\n\nNIVEAU DE LANGUE (6e/5e) : le vocabulaire de l'hypothèse générale, des libellés des 2 axes et des colonnes Analyses/Interprétations doit rester CONCRET et ACCESSIBLE à des élèves de début de collège — au même niveau de langue que celui déjà utilisé dans les fiches d'Expression écrite pour ce niveau. INTERDITS car trop abstraits/savants pour ce niveau : des formulations comme « procédés d'expression de l'admiration », « organisation spatiale de la description », ou toute expression méta-linguistique dense. Préfère des formulations simples et directement descriptives (ex. « les mots qui montrent que [le personnage] va bien » plutôt que « les marqueurs lexicaux de l'état de santé »).`
     : '';
 
-  return `
+  const resultatAxes = construireAxesAInventerHTML(niveau, referentiel);
+  if (resultatAxes.bloque) {
+    return {
+      instructions: '',
+      injectionDeroulement: null,
+      injectionAxes: null,
+      avertissement: null,
+      tachesCompletion: [],
+      bloque: true,
+      messageBlocage: resultatAxes.messageBlocage
+    };
+  }
+  const { axesHTML, tachesCompletion } = resultatAxes;
+
+  const instructions = `
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE (cette fiche est une lecture méthodique : les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête et la Situation d'apprentissage restent inchangés. La ligne PRÉSENTATION rituelle du début de séance reste aussi inchangée dans sa structure, SAUF la contrainte suivante :) :
 
@@ -1199,19 +1327,27 @@ II. HYPOTHÈSE GÉNÉRALE — UNE SEULE phrase, dérivée EXPLICITEMENT ${compos
 
 III. VÉRIFICATION DE L'HYPOTHÈSE GÉNÉRALE :
    1. Détermination des axes de lecture : EXACTEMENT 2 axes (jamais 3, jamais 4). Axe 1 = SEGMENT 1 de l'hypothèse générale ci-dessus, repris QUASI MOT POUR MOT (ex. hypothèse « Lettre familière dans laquelle Konan Aurélie donne ses nouvelles à sa mère » → Axe 1 « Une lettre familière »). Axe 2 = SEGMENT 2, repris QUASI MOT POUR MOT (ex. Axe 2 « Les nouvelles d'Aurélie à sa mère »). INTERDICTION ABSOLUE d'introduire dans le libellé d'un axe une notion, un procédé ou une catégorie d'analyse ABSENTE des mots de l'hypothèse (interdits si l'hypothèse ne les mentionne pas, ex. : « organisation spatiale », « procédés d'expression de... ») : les axes ne sont JAMAIS le produit d'une analyse indépendante du texte, seulement une reformulation quasi identique des deux segments déjà écrits dans l'hypothèse.
-   2. Dans la ligne III du tableau DÉROULEMENT, la colonne Traces écrites contient UNIQUEMENT du texte simple (jamais de tableau) : le libellé des 2 axes (ex. "Axe 1 : ... / Axe 2 : ..."). Les Activités de l'enseignant/des élèves de cette ligne portent le questionnement guidé qui permet de dégager ces axes.
-   3. Pour CHAQUE axe, un tableau à 4 colonnes (Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations) rempli PAR QUESTIONNEMENT GUIDÉ (chaque ligne correspond à une « entrée » avec des relevés précis tirés du texte, l'analyse du procédé, et l'interprétation de son effet). Ce tableau COMMENCE par une ligne-titre fusionnée sur les 4 colonnes (<td colspan="4">) annonçant « Axe 1 : [libellé] » (ou « Axe 2 : ... »). Chaque cellule « Entrées » contient une question numérotée intégrée, reformulée SPÉCIFIQUEMENT pour ce que cette ligne observe dans CE texte — jamais un gabarit générique recopié tel quel d'une entrée à l'autre (style attendu : « 1- Relevez... », « 2- Nommez et justifiez... », « 4- Pourquoi/Que révèle... »). ${consigneEntrees} Dans tous les cas (référentiel disponible ou non), les entrées sont STRICTEMENT des catégories linguistiques/grammaticales/lexicales (temps verbaux, types et formes de phrase, indices spatiaux/temporels, lexique thématique/mélioratif/péjoratif, pronoms, comparaisons et autres figures de style, ponctuation...) — JAMAIS une entrée thématique ou psychologisante (interdits, ex. : « le regret », « l'attachement affectif », « les détails techniques », « l'irruption du sentiment »...). Si un tel aspect thématique/affectif apparaît dans le texte sans être couvert par les 2 axes, il devient la matière de l'extrait d'ÉVALUATION plus bas — jamais une entrée de ce tableau. CES 2 TABLEAUX SONT DES ÉLÉMENTS AUTONOMES DU DOCUMENT HTML, PLACÉS APRÈS LE TABLEAU DÉROULEMENT COMPLET (donc en dehors de toute balise <td>/<th>) — JAMAIS imbriqués à l'intérieur d'une cellule d'un autre tableau (rendu illisible en Word/PDF : colonnes écrasées, texte compressé). Un tableau HTML ne doit JAMAIS contenir un autre tableau HTML dans une de ses cellules, nulle part dans la fiche.
+   2. Dans la ligne III du tableau DÉROULEMENT, la colonne Traces écrites contient UNIQUEMENT du texte simple (jamais de tableau) : le libellé des 2 axes (ex. "Axe 1 : ... / Axe 2 : ..."), avec le MÊME texte que celui placé entre les marqueurs de titre d'axe décrits ci-dessous. Les Activités de l'enseignant/des élèves de cette ligne portent le questionnement guidé qui permet de dégager ces axes.
+   3. Les 2 tableaux détaillés des axes (4 colonnes : Entrées | Indices textuels | Analyses | Interprétations) sont DÉJÀ CONSTRUITS côté serveur (structure, en-têtes et bordures fixes) -- tu ne les écris PLUS toi-même. Juste APRÈS le tableau DÉROULEMENT complet (donc après son </table>, jamais à l'intérieur d'une cellule), place EXACTEMENT le marqueur {{AXES_PLAN_ENSEIGNANT}} sur sa propre ligne, UNE SEULE FOIS -- il sera remplacé par les 2 tableaux déjà construits. Pour CHAQUE axe, place aussi le titre déterminé au point 1 ci-dessus entre ses 2 marqueurs dédiés, N'IMPORTE OÙ dans ta réponse : {{AXE1_TITRE}}...{{FIN_AXE1_TITRE}} pour l'Axe 1, {{AXE2_TITRE}}...{{FIN_AXE2_TITRE}} pour l'Axe 2 (texte IDENTIQUE à celui écrit dans la ligne III du tableau déroulement, point 2 ci-dessus) -- ces marqueurs seront extraits puis retirés du document final, ils ne doivent apparaître nulle part ailleurs.${construireConsigneCompletionEntrees(tachesCompletion)}
+
+${consigneEntrees} Dans tous les cas (référentiel disponible ou non), les entrées des 2 tableaux d'axes sont STRICTEMENT des catégories linguistiques/grammaticales/lexicales (temps verbaux, types et formes de phrase, indices spatiaux/temporels, lexique thématique/mélioratif/péjoratif, pronoms, comparaisons et autres figures de style, ponctuation...) — JAMAIS une entrée thématique ou psychologisante (interdits, ex. : « le regret », « l'attachement affectif », « les détails techniques », « l'irruption du sentiment »...).
 
 IV. BILAN GÉNÉRAL :
    - Question de synthèse : « Quels éléments de la langue/du texte ont permis d'étudier ce texte ? »
    - Confrontation EXPLICITE hypothèse/bilan, avec la formule EXACTE : « Notre hypothèse générale est donc vérifiée. »
    - Optionnel : une question d'ouverture ou d'avis personnel.
 
-ÉVALUATION (ligne distincte du tableau DÉROULEMENT, différente et SÉPARÉE du Bilan général — ne jamais fusionner les deux) :
-   - Fournis un relevé NEUF, non exploité dans le corps de la fiche (nouvelles citations du MÊME texte, non analysées plus haut dans les axes).
-   - Demande à l'élève, SEUL : 1) d'identifier l'entrée correspondante, 2) d'analyser, 3) d'interpréter. Ce sont les SEULS moments de toute la fiche où ce registre de verbes taxonomiques (Identifier, Analyser, Interpréter, Appliquer) s'adresse directement à l'élève dans une consigne — partout ailleurs dans la fiche, langage naturel de classe.
-   - Si un aspect thématique/affectif du texte n'a pas été traité dans les 2 axes (ex. un revirement de sentiment en fin de texte), c'est CET extrait d'évaluation qui doit le faire travailler.
-   - INTERDICTION ABSOLUE de remplacer ceci par des questions de compréhension du texte (ex. « qui est le narrateur ? », « que ressent-il ? ») : l'évaluation teste la maîtrise de la MÉTHODE de lecture méthodique, pas la compréhension du contenu.`;
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT, différente et SÉPARÉE du Bilan général — ne jamais fusionner les deux) : cette ligne est ELLE AUSSI déjà construite côté serveur, à partir de la 2e entrée de l'Axe 2 (déjà décrite plus haut parmi les entrées à compléter -- jamais travaillée dans le tableau de l'Axe 2, qui n'affiche que sa 1ère entrée). Ne rédige RIEN toi-même pour cette ligne, ni relevé neuf ni consigne : contente-toi de fournir, pour cette entrée, ce qui est demandé plus haut via ses marqueurs dédiés.`;
+
+  return {
+    instructions,
+    injectionDeroulement: null,
+    injectionAxes: axesHTML,
+    avertissement: null,
+    tachesCompletion,
+    bloque: false,
+    messageBlocage: null
+  };
 }
 
 // Seuil arbitraire mais raisonnable pour distinguer un vrai plan de cours rédigé
@@ -1267,12 +1403,18 @@ function parserPlanEnseignant(planCours) {
   const reperesAttendus = ['I', 'II', 'III', 'IV'];
   const positions = {};
   const resteDeLigneParRepere = {};
+  // Occurrences d'un repère déjà utilisé (doublon), conservées pour le repli
+  // ciblé ci-dessous -- jamais silencieusement ignorées.
+  const doublonsParRepere = {};
 
   lignes.forEach((ligne, index) => {
     const repere = detecterRepereLigne(ligne);
     if (!repere) return;
     if (repere.type === 'numero') {
-      if (positions[repere.numero] !== undefined) return; // 1ère occurrence gardée, pas d'écrasement ambigu
+      if (positions[repere.numero] !== undefined) {
+        (doublonsParRepere[repere.numero] = doublonsParRepere[repere.numero] || []).push({ index, resteDeLigne: repere.resteDeLigne });
+        return;
+      }
       positions[repere.numero] = index;
       resteDeLigneParRepere[repere.numero] = repere.resteDeLigne;
     } else if (repere.type === 'evaluation' && positions.evaluation === undefined) {
@@ -1280,6 +1422,23 @@ function parserPlanEnseignant(planCours) {
       resteDeLigneParRepere.evaluation = repere.resteDeLigne;
     }
   });
+
+  // Repli ciblé, UNIQUEMENT si "IV" est introuvable : coquille fréquente où
+  // l'enseignant recopie par erreur le chiffre romain d'un repère déjà
+  // utilisé (typiquement "I.") devant "BILAN" au lieu de "IV." -- un tel
+  // doublon, s'il mentionne "bilan" dans le reste de sa ligne, est traité
+  // comme le repère IV plutôt que de faire échouer toute la structuration
+  // pour une simple coquille de frappe.
+  if (positions.IV === undefined) {
+    for (const numeroDuplique of Object.keys(doublonsParRepere)) {
+      const candidat = doublonsParRepere[numeroDuplique].find((occ) => /bilan/i.test(occ.resteDeLigne));
+      if (candidat) {
+        positions.IV = candidat.index;
+        resteDeLigneParRepere.IV = candidat.resteDeLigne;
+        break;
+      }
+    }
+  }
 
   const manquants = reperesAttendus.filter((r) => positions[r] === undefined);
   if (manquants.length) {
@@ -1318,8 +1477,11 @@ function parserPlanEnseignant(planCours) {
 // étiquettes d'une puce sont trouvées, elle devient une ligne propre à 4
 // colonnes ; sinon son texte brut est conservé intégralement dans une ligne à
 // cellule fusionnée -- jamais perdu, jamais réinventé.
+// Le numéro d'entrée est toléré COLLÉ à l'étiquette elle-même (ex. "Entrée 1:",
+// "Entrée n°2 :"), en plus de la puce/numérotation en tête de ligne déjà gérée
+// par ailleurs -- certains enseignants numérotent ainsi sans aucune puce.
 const ETIQUETTES_ENTREE_AXE = [
-  { cle: 'entree', regex: /entr[ée]e?s?\s*:\s*/i },
+  { cle: 'entree', regex: /entr[ée]e?s?\s*(?:n°\s*)?\d*\s*:\s*/i },
   { cle: 'indices', regex: /(?:indices?(?:\s+textuels?)?|relev[ée]s?)\s*:\s*/i },
   { cle: 'analyse', regex: /analyses?\s*:\s*/i },
   { cle: 'interpretation', regex: /interpr[ée]tations?\s*:\s*/i }
@@ -1353,7 +1515,7 @@ function decouperParEtiquettes(texte, etiquettes) {
 // fie à ce même compte). Se rabat sur l'ancien découpage par puce UNIQUEMENT
 // si aucune étiquette "Entrée" n'est trouvée du tout (axe non structuré selon
 // la méthodologie -- contenu conservé intégralement, jamais perdu).
-const REGEX_ENTREE_GLOBAL = /entr[ée]e?s?\s*:\s*/ig;
+const REGEX_ENTREE_GLOBAL = /entr[ée]e?s?\s*(?:n°\s*)?\d*\s*:\s*/ig;
 
 function parserEntreesAxe(texteAxe) {
   const texte = texteAxe || '';
@@ -1392,7 +1554,10 @@ function parserEntreesAxe(texteAxe) {
     const complet = champs.entree && champs.indices && champs.analyse && champs.interpretation;
     segments.push(complet
       ? { structure: true, entree: champs.entree, indices: champs.indices, analyse: champs.analyse, interpretation: champs.interpretation }
-      : { structure: false, brut: segment.replace(new RegExp('^' + MARQUEUR_PUCE + '\\s*'), '') });
+      // champsPartiels conservé (jamais juste "brut") -- permet de signaler
+      // précisément à l'enseignant QUELLES colonnes manquent quand le nom de
+      // l'entrée est fourni mais pas son détail (cf. verifierEntreesCompletude).
+      : { structure: false, brut: segment.replace(new RegExp('^' + MARQUEUR_PUCE + '\\s*'), ''), champsPartiels: champs });
   });
 
   return segments;
@@ -1466,15 +1631,87 @@ ${cell(tracesEcrites)}
   </tr>`;
 }
 
+// Détermine, pour UN axe, EXACTEMENT 2 entrées "réelles" -- garanti par le
+// code (règle B), pas seulement signalé : au-delà de 2 entrées fournies par
+// l'enseignant, les suivantes sont explicitement écartées (jamais tronquées
+// en silence -- avertissement listant précisément ce qui est écarté) ; en
+// dessous de 2, les entrées manquantes sont réservées à la complétion
+// automatique (cf. construireLigneEntreeAvecCompletion). Chaque slot retourné
+// porte son rendu HTML de ligne (déterministe, à compléter, ou brut) et,
+// s'il y en a une, la tâche de complétion associée -- jamais de perte
+// silencieuse d'une entrée fournie par l'enseignant : la ligne brute
+// (structure:false sans nom reconnu) reste intacte, jamais promue.
+//
+// Depuis le changement d'architecture du 07/08 : quand une entrée doit être
+// entièrement inventée (aucun nom fourni par l'enseignant, ou mode
+// automatique), son NOM n'est plus laissé au modèle -- il est choisi ici de
+// façon déterministe dans caracteristiquesParAxe(referentiel, numero), au
+// même titre qu'une entrée nommée par l'enseignant (même fonction
+// construireLigneEntreeAvecCompletion, seuls indices/analyse/interprétation
+// restent à compléter par le modèle à partir du texte support). Si le
+// référentiel ne fournit pas assez de catégories pour cet axe (référentiel
+// absent, ou type de texte non encore couvert), l'entrée n'est PLUS inventée
+// librement : le slot est marqué `bloque: true` et un message de blocage
+// explicite est renvoyé -- jamais un repli silencieux vers une invention
+// libre par le modèle.
+function determinerSlotsAxe(numero, titre, entrees, niveau, referentiel) {
+  const avertissements = [];
+  let entreesRetenues = entrees;
+  if (entrees.length > 2) {
+    const excedent = entrees.slice(2);
+    const noms = excedent.map((e) => {
+      const nom = e.structure ? e.entree : (e.champsPartiels && e.champsPartiels.entree);
+      return nom ? `« ${nom} »` : 'une entrée non nommée';
+    });
+    avertissements.push(`Axe ${numero} (« ${titre} ») fournissait ${entrees.length} entrées : seules les 2 premières sont retenues dans la fiche (méthodologie DPFC, 2 entrées par axe, jamais plus) -- ${noms.join(', ')} ${excedent.length > 1 ? 'ne sont pas utilisées' : "n'est pas utilisée"}. Retirez-la du plan si elle est superflue, ou fusionnez-la avec une entrée déjà retenue.`);
+    entreesRetenues = entrees.slice(0, 2);
+  }
+
+  const categoriesAxe = caracteristiquesParAxe(referentiel, numero);
+  let messageBlocage = null;
+
+  const slots = [];
+  entreesRetenues.forEach((e, i) => {
+    const slot = i + 1;
+    if (e.structure) {
+      const html = `  <tr><td style="border:1px solid #000;padding:6px;">${e.entree}</td><td style="border:1px solid #000;padding:6px;">${e.indices}</td><td style="border:1px solid #000;padding:6px;">${e.analyse}</td><td style="border:1px solid #000;padding:6px;">${e.interpretation}</td></tr>`;
+      slots.push({ slot, html, indicesConnues: e.indices, brut: null, tache: null });
+      return;
+    }
+    const champs = e.champsPartiels || {};
+    if (!champs.entree) {
+      const html = `  <tr><td colspan="4" style="border:1px solid #000;padding:6px;">${e.brut}</td></tr>`;
+      slots.push({ slot, html, indicesConnues: null, brut: e.brut, tache: null });
+      return;
+    }
+    const { html, tache } = construireLigneEntreeAvecCompletion(`A${numero}E${slot}`, champs.entree, ['indices', 'analyse', 'interpretation']);
+    const t = { ...tache, axeNumero: numero, axeTitre: titre, niveau };
+    slots.push({ slot, html, indicesConnues: null, brut: null, tache: t });
+  });
+  for (let slot = entreesRetenues.length + 1; slot <= 2; slot++) {
+    const categorie = categoriesAxe[slot - 1];
+    if (!categorie) {
+      messageBlocage = messageBlocage || construireMessageBlocageTypeTexteNonCouvert();
+      slots.push({ slot, html: null, indicesConnues: null, brut: null, tache: null, bloque: true });
+      continue;
+    }
+    const { html, tache } = construireLigneEntreeAvecCompletion(`A${numero}E${slot}`, categorie.libelle, ['indices', 'analyse', 'interpretation']);
+    const t = { ...tache, axeNumero: numero, axeTitre: titre, niveau };
+    slots.push({ slot, html, indicesConnues: null, brut: null, tache: t });
+  }
+
+  return { slots, avertissements, bloque: !!messageBlocage, messageBlocage };
+}
+
 // Construit le tableau autonome à 4 colonnes d'un axe (ligne-titre fusionnée +
-// une ligne par entrée) -- SEULE fonction qui construit ce tableau pour le
-// mode plan-enseignant.
-function construireTableauAxeHTML(numero, titre, entrees) {
-  const lignesHTML = entrees.length
-    ? entrees.map((e) => e.structure
-        ? `  <tr><td style="border:1px solid #000;padding:6px;">${e.entree}</td><td style="border:1px solid #000;padding:6px;">${e.indices}</td><td style="border:1px solid #000;padding:6px;">${e.analyse}</td><td style="border:1px solid #000;padding:6px;">${e.interpretation}</td></tr>`
-        : `  <tr><td colspan="4" style="border:1px solid #000;padding:6px;">${e.brut}</td></tr>`
-      ).join('\n')
+// une ligne par entrée AFFICHÉE) -- SEULE fonction qui construit ce tableau
+// pour le mode plan-enseignant. N'affiche que les `slots` reçus (cf.
+// determinerSlotsAxe et construireDeroulementPlanEnseignantHTML : l'Axe 2
+// n'en reçoit qu'1 -- règle C, sa 2e entrée est réservée à l'évaluation,
+// jamais affichée ici).
+function construireTableauAxeHTML(numero, titre, slots) {
+  const lignesHTML = slots.length
+    ? slots.map((s) => s.html).join('\n')
     : '  <tr><td colspan="4" style="border:1px solid #000;padding:6px;"></td></tr>';
 
   return `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
@@ -1509,6 +1746,95 @@ function verifierNombreEntreesParAxe(axes, niveau) {
     });
 }
 
+const LIBELLES_COLONNES_ENTREE = {
+  indices: 'Indices textuels',
+  analyse: 'Analyses',
+  interpretation: 'Interprétations'
+};
+
+// Vérifie, indépendamment du COMPTE d'entrées ci-dessus, que chaque entrée
+// individuellement fournit les 4 colonnes. Cas réel qui a motivé cet ajout :
+// un plan qui ne donne QUE le nom de chaque entrée ("Entrée 1: La structure
+// du texte") sans citations/analyse/interprétation -- le compte peut alors
+// être conforme (2/axe) tout en laissant les colonnes Indices
+// textuels/Analyses/Interprétations vides, sans que rien ne le signale.
+// SUPERSEDÉE depuis l'auto-complétion (cf. preparerLigneAxeAvecCompletion
+// ci-dessous) pour le pipeline principal : ce cas précis n'est plus
+// seulement signalé, il est activement complété par le modèle -- la fonction
+// reste définie (comportement inchangé, toujours testée) pour un usage
+// éventuel hors de ce pipeline, mais n'est plus appelée par
+// construireDeroulementPlanEnseignantHTML.
+function verifierEntreesCompletude(axes) {
+  const avertissements = [];
+  axes.forEach((axe) => {
+    axe.entrees.forEach((entree, i) => {
+      if (entree.structure) return;
+      const champs = entree.champsPartiels || {};
+      if (!champs.entree) return;
+      const manquantes = ['indices', 'analyse', 'interpretation']
+        .filter((cle) => !champs[cle])
+        .map((cle) => LIBELLES_COLONNES_ENTREE[cle]);
+      if (manquantes.length) {
+        avertissements.push(`Axe ${axe.numero} (« ${axe.titre} »), entrée ${i + 1} (« ${champs.entree} ») : colonne(s) ${manquantes.join(', ')} vide(s) -- seul le nom de l'entrée est fourni dans le plan, rien n'a été inventé pour compléter le tableau ; complétez le plan si vous voulez ce détail dans la fiche.`);
+      }
+    });
+  });
+  return avertissements;
+}
+
+// --- Auto-complétion des entrées du tableau de vérification ---
+//
+// Décision de conception explicite (04/08) : en mode plan-enseignant,
+// l'enseignant ne doit JAMAIS avoir à taper lui-même les Indices
+// textuels/Analyses/Interprétations -- il fournit seulement la structure
+// (axes + noms d'entrées, partiellement ou totalement), voire rien de plus
+// que le squelette I/II/III/IV. Tout ce qu'il n'a pas détaillé est généré
+// par le modèle, exactement comme le mode automatique le fait déjà --
+// SEULE différence entre les 2 modes : qui choisit les axes/noms d'entrées
+// (le modèle en mode automatique, l'enseignant partiellement ou totalement
+// ici). Génération strictement bornée à 3 éléments : le texte support (seule
+// source des citations), le nom de l'entrée (fixé par l'enseignant, ou à
+// déterminer par le modèle en respectant le rôle de l'axe), et le rôle de
+// l'axe + le niveau (cf. skill lecture méthodique, section 3) -- jamais
+// autre chose, pour ne jamais halluciner de contenu hors-sujet.
+// "titre" (titre d'un axe) ajouté pour le mode automatique (cf.
+// construireAxesAInventerHTML) -- même mécanique générique de jeton/marqueur
+// que pour les champs d'une entrée, réutilisée telle quelle.
+const ABREV_CHAMP_ENTREE = { nom: 'NOM', indices: 'IND', analyse: 'ANA', interpretation: 'INT', titre: 'TITRE' };
+const LIBELLES_CHAMP_ENTREE_LONG = {
+  nom: "le nom de l'entrée",
+  indices: 'les indices textuels',
+  analyse: "l'analyse",
+  interpretation: "l'interprétation",
+  titre: "le titre de l'axe"
+};
+
+// Texte du rôle méthodologique d'un axe (cf. skill section 3) : Axe 1
+// justifie le type de texte (+ tonalité à partir de la 4e), Axe 2 justifie
+// toujours le thème -- jamais une énumération libre de contenu.
+function roleAxeTexte(axeNumero, niveau) {
+  if (axeNumero === '1') {
+    return (niveau === '6e' || niveau === '5e')
+      ? 'doit justifier le TYPE DE TEXTE de l\'hypothèse générale (pas de tonalité à ce niveau)'
+      : 'doit justifier le TYPE DE TEXTE ET LA TONALITÉ de l\'hypothèse générale';
+  }
+  return 'doit justifier le THÈME de l\'hypothèse générale par une catégorie linguistique précise (jamais une énumération libre d\'arguments ou d\'éléments de contenu)';
+}
+
+// Construit la ligne <tr> d'UNE entrée d'axe, en insérant des jetons internes
+// (@@ID_CHAMP@@, jamais montrés au modèle ni visibles dans le document final)
+// pour chaque champ que le modèle doit compléter -- même mécanique que
+// JETON_PRESENTATION_RECOMPOSEE, généralisée à une liste de champs variable.
+// Enregistre une "tâche" par entrée à compléter (nomFixe = null si le modèle
+// doit aussi déterminer le nom lui-même), utilisée ensuite pour construire la
+// consigne de prompt et pour l'extraction post-génération.
+function construireLigneEntreeAvecCompletion(id, nomFixe, champsAGenerer) {
+  const cell = (contenu) => `<td style="border:1px solid #000;padding:6px;">${contenu}</td>`;
+  const jeton = (champ) => `@@${id}_${ABREV_CHAMP_ENTREE[champ]}@@`;
+  const html = `  <tr>${cell(nomFixe !== null ? nomFixe : jeton('nom'))}${cell(jeton('indices'))}${cell(jeton('analyse'))}${cell(jeton('interpretation'))}</tr>`;
+  return { html, tache: { id, nomFixe, champsAGenerer } };
+}
+
 // "I. Présentation du texte" -- l'enseignant fournit généralement ces
 // informations sous forme de champs séparés (comme avant). Réutilise
 // decouperParEtiquettes (même mécanique que pour les entrées d'axe) pour les
@@ -1541,9 +1867,121 @@ function extraireChampsPresentation(texteI) {
 // et son utilisation dans stream.on('finalMessage', ...).
 const JETON_PRESENTATION_RECOMPOSEE = '@@PRESENTATION_RECOMPOSEE@@';
 
-function construireDeroulementPlanEnseignantHTML(segments, niveau) {
+// Construit la consigne d'évaluation à partir de l'entrée réservée (TOUJOURS
+// Axe 2/Entrée 2, jamais une autre -- règle D, cf. skill section 6, confirmé
+// dans le corpus Lect_meth_7_Le_spect_Koteba). Ne révèle QUE les indices
+// textuels (citations, le "repérage") -- jamais le nom, l'analyse ni
+// l'interprétation, que l'élève doit retrouver SEUL. Repli explicite (jamais
+// silencieux) si le contenu fourni par l'enseignant pour cette entrée n'est
+// pas structuré (aucune citation sûre à réutiliser).
+function construireEntreeReserveeEvaluation(numero, titre, niveau, slotReserve) {
+  if (slotReserve.indicesConnues !== null) {
+    return { indicesTexteOuJeton: slotReserve.indicesConnues, tache: null, avertissement: null };
+  }
+  if (slotReserve.tache) {
+    return { indicesTexteOuJeton: `@@${slotReserve.tache.id}_IND@@`, tache: slotReserve.tache, avertissement: null };
+  }
+  const t = { id: `A${numero}E${slotReserve.slot}RES`, nomFixe: null, champsAGenerer: ['indices'], axeNumero: numero, axeTitre: titre, niveau };
+  const brut = slotReserve.brut || '';
+  const brutTronque = brut.length > 100 ? brut.slice(0, 100) + '...' : brut;
+  return {
+    indicesTexteOuJeton: `@@${t.id}_IND@@`,
+    tache: t,
+    avertissement: `Axe ${numero} (« ${titre} »), entrée réservée à l'évaluation : le contenu fourni ("${brutTronque}") n'a pas pu être reconnu comme une entrée structurée -- un repérage a été généré automatiquement à la place pour l'évaluation. Vérifiez si ce contenu doit être réintégré ailleurs dans le plan.`
+  };
+}
+
+function construireConsigneEvaluationReservee(indicesTexteOuJeton) {
+  return `<p>Le professeur propose aux élèves de retrouver seuls, sur le même texte support, la dernière entrée de vérification (non travaillée en classe). Il leur soumet le repérage suivant : ${indicesTexteOuJeton}</p><p>Consignes : 1) Nomme et justifie l'emploi de ce procédé. 2) Interprète-le : quel effet produit-il ? 3) Détermine l'entrée correspondante.</p>`;
+}
+
+// Mode automatique (Mode 1, titre seul, sans plan enseignant) -- amène ce
+// mode au MÊME niveau de garantie que le mode plan-enseignant (règles A/B/C/D),
+// en réutilisant EXACTEMENT le même mécanisme, jamais une réécriture séparée :
+// determinerSlotsAxe (appelé avec une liste d'entrées VIDE -- ici, rien n'est
+// fourni par un enseignant, tout doit être inventé -- produit exactement le
+// même repli "2 entrées à compléter" que le cas "squelette minimal" du mode
+// plan-enseignant), construireTableauAxeHTML (le titre de l'axe, inconnu tant
+// que le modèle n'a pas répondu, est simplement un jeton interne de plus,
+// résolu par le même resoudreCompletionsEntrees générique), et
+// construireEntreeReserveeEvaluation (Axe 2/Entrée 2 réservée, identique).
+// Seule différence avec le mode plan-enseignant : aucun titre d'axe n'est
+// connu à l'avance (jeton systématique), et aucune entrée fournie par
+// l'enseignant n'existe (donc aucun excédent possible, aucun contenu brut).
+function construireAxesAInventerHTML(niveau, referentiel) {
+  let tachesCompletion = [];
+  let entreeReservee = null;
+  let messageBlocage = null;
+  const axesHTML = ['1', '2'].map((numero) => {
+    if (messageBlocage) return '';
+    const titreLabel = `Axe ${numero}`; // libellé générique pour les messages -- le vrai titre est un jeton, résolu après génération
+    const jetonTitre = `@@AXE${numero}_TITRE@@`;
+    const tacheTitre = { id: `AXE${numero}`, nomFixe: null, champsAGenerer: ['titre'], axeNumero: numero, axeTitre: titreLabel, niveau };
+
+    const { slots, bloque, messageBlocage: messageBlocageAxe } = determinerSlotsAxe(numero, titreLabel, [], niveau, referentiel);
+    if (bloque) { messageBlocage = messageBlocageAxe; return ''; }
+
+    tachesCompletion.push(tacheTitre);
+    const slotsAffiches = numero === '2' ? slots.filter((s) => s.slot === 1) : slots;
+    slotsAffiches.forEach((s) => { if (s.tache) tachesCompletion.push(s.tache); });
+
+    if (numero === '2') {
+      const slotReserve = slots.find((s) => s.slot === 2);
+      entreeReservee = construireEntreeReserveeEvaluation(numero, titreLabel, niveau, slotReserve);
+      if (entreeReservee.tache) tachesCompletion.push(entreeReservee.tache);
+    }
+
+    return construireTableauAxeHTML(numero, jetonTitre, slotsAffiches);
+  }).join('\n\n');
+
+  if (messageBlocage) {
+    return { bloque: true, messageBlocage, axesHTML: null, tachesCompletion: [], entreeReservee: null };
+  }
+  return { bloque: false, messageBlocage: null, axesHTML, tachesCompletion, entreeReservee };
+}
+
+function construireDeroulementPlanEnseignantHTML(segments, niveau, referentiel) {
   const { axes, situationEvaluation } = parserAxesDepuisVerification(segments.verification);
-  const avertissementsEntrees = verifierNombreEntreesParAxe(axes, niveau);
+
+  // Détermine et rend chaque tableau d'axe -- règle B (2 entrées par axe,
+  // garanti par le code, cf. determinerSlotsAxe) + règle C (Axe 2 : seule sa
+  // 1ère entrée est affichée ici, la 2e est réservée à l'évaluation
+  // ci-dessous, cf. construireEntreeReserveeEvaluation). Un axe où
+  // l'enseignant a fourni MOINS de 2 entrées a besoin du référentiel pour
+  // nommer les entrées manquantes (cf. determinerSlotsAxe) -- si celui-ci ne
+  // le permet pas, tout le mode plan-enseignant est bloqué ici (jamais un
+  // repli silencieux vers une invention libre par le modèle).
+  let tachesCompletion = [];
+  let avertissementsEntrees = [];
+  let entreeReservee = null;
+  let messageBlocage = null;
+  const axesHTML = axes.length
+    ? axes.map((a) => {
+        if (messageBlocage) return '';
+        const { slots, avertissements, bloque, messageBlocage: messageBlocageAxe } = determinerSlotsAxe(a.numero, a.titre, a.entrees, niveau, referentiel);
+        if (bloque) { messageBlocage = messageBlocageAxe; return ''; }
+        avertissementsEntrees = avertissementsEntrees.concat(avertissements);
+
+        const slotsAffiches = a.numero === '2' ? slots.filter((s) => s.slot === 1) : slots;
+        slotsAffiches.forEach((s) => { if (s.tache) tachesCompletion.push(s.tache); });
+
+        if (a.numero === '2') {
+          const slotReserve = slots.find((s) => s.slot === 2);
+          if (slotReserve) {
+            entreeReservee = construireEntreeReserveeEvaluation(a.numero, a.titre, niveau, slotReserve);
+            if (entreeReservee.tache) tachesCompletion.push(entreeReservee.tache);
+            if (entreeReservee.avertissement) avertissementsEntrees.push(entreeReservee.avertissement);
+          }
+        }
+
+        return construireTableauAxeHTML(a.numero, a.titre, slotsAffiches);
+      }).join('\n\n')
+    : '';
+
+  if (messageBlocage) {
+    return { bloque: true, messageBlocage };
+  }
+
   const libelleAxes = axes.length
     ? axes.map((a) => `Axe ${a.numero} : ${a.titre}`).join(' / ')
     : texteSupportVersHtml(segments.verification).replace(/<\/?p>/g, ' ').trim();
@@ -1554,7 +1992,15 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau) {
   // tableau, quel que soit l'endroit où l'enseignant l'a écrite. Le repère
   // "IV." explicite reste prioritaire s'il existe (cas où l'enseignant aurait
   // rédigé les deux, peu probable mais on ne veut jamais en perdre un).
-  const evaluationEffective = segments.evaluation || situationEvaluation || '';
+  // Règle D : la consigne réservée (ci-dessus) est TOUJOURS présente en tête
+  // -- garantie par le code, jamais laissée à la discrétion de l'enseignant
+  // -- tout contenu d'évaluation qu'il a lui-même rédigé vient s'y AJOUTER,
+  // jamais à sa place (aucun contenu de l'enseignant n'est perdu).
+  const consigneEnseignant = segments.evaluation || situationEvaluation || '';
+  const evaluationEffective = [
+    entreeReservee ? construireConsigneEvaluationReservee(entreeReservee.indicesTexteOuJeton) : '',
+    consigneEnseignant ? texteSupportVersHtml(consigneEnseignant) : ''
+  ].filter(Boolean).join('\n');
 
   // Exception étroite (à partir de la 4e SEULEMENT) : si l'enseignant a
   // fourni la présentation du texte sous forme de champs séparés, le
@@ -1602,14 +2048,14 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau) {
       strategie: evaluationEffective ? 'Travail individuel' : '',
       activiteEnseignant: evaluationEffective ? 'Donne le sujet.' : '',
       activiteEleves: evaluationEffective ? 'Travaillent seuls, à l\'écrit.' : '',
-      // Ligne laissée VIDE si l'enseignant n'a rédigé aucune évaluation
-      // (ni après "IV.", ni via "Situation d'évaluation" dans la partie III)
-      // -- jamais d'exercice inventé pour la compléter.
-      tracesEcrites: evaluationEffective ? texteSupportVersHtml(evaluationEffective) : ''
+      // evaluationEffective contient déjà du HTML pré-construit (consigne
+      // réservée + éventuel contenu enseignant déjà passé par
+      // texteSupportVersHtml ci-dessus) -- ne jamais le repasser dans
+      // texteSupportVersHtml ici (double échappement/encapsulation). Ne peut
+      // plus être vide dès qu'un Axe 2 existe (règle D, garantie par le code).
+      tracesEcrites: evaluationEffective
     })
   ].join('\n');
-
-  const axesHTML = axes.length ? axes.map((a) => construireTableauAxeHTML(a.numero, a.titre, a.entrees)).join('\n\n') : '';
 
   return {
     lignesHTML,
@@ -1621,7 +2067,13 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau) {
     presentationVerbatimFallbackHTML: texteSupportVersHtml(segments.presentation),
     // Pour le texte du prompt (mention "/Évaluation" détectée) -- reflète la
     // fusion ci-dessus, pas seulement le repère "IV." explicite.
-    evaluationDetectee: !!evaluationEffective
+    evaluationDetectee: !!evaluationEffective,
+    // Entrées à compléter automatiquement par le modèle (nom fixé ou à
+    // déterminer + colonnes manquantes) -- cf. construireConsigneCompletionEntrees
+    // et extraireCompletionsEntrees/resoudreCompletionsEntrees plus bas.
+    tachesCompletion,
+    bloque: false,
+    messageBlocage: null
   };
 }
 
@@ -1642,7 +2094,43 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau) {
 //   null si le parsing a échoué (voir bloc de repli ci-dessous).
 // - avertissement, non-null uniquement si le parsing a échoué : à afficher
 //   explicitement à l'enseignant (jamais un échec silencieux).
-function construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours) {
+
+// Construit la consigne de prompt pour les entrées à compléter (cf.
+// construireLigneEntreeAvecCompletion) -- absente (chaîne vide) si aucune
+// tâche, jamais de génération demandée hors de ce cadre strict : texte
+// support + nom de l'entrée (fixé ou à déterminer) + rôle de l'axe/niveau,
+// rien d'autre.
+function construireConsigneCompletionEntrees(taches) {
+  if (!taches.length) return '';
+
+  const rolesParAxe = {};
+  taches.forEach((t) => { rolesParAxe[t.axeNumero] = { titre: t.axeTitre, role: roleAxeTexte(t.axeNumero, t.niveau) }; });
+  const consigneNiveauLangage = (taches[0].niveau === '6e' || taches[0].niveau === '5e')
+    ? ' Niveau 6e/5e : vocabulaire CONCRET et accessible, jamais de méta-langage dense (interdits : « procédés d\'expression de... », « organisation spatiale de... »).'
+    : '';
+
+  const rolesTexte = Object.entries(rolesParAxe)
+    .map(([numero, { titre, role }]) => `Axe ${numero} (« ${titre} ») ${role}.`)
+    .join(' ');
+
+  const consignesEntrees = taches.map((t) => {
+    const marqueur = (champ) => {
+      const id = `${t.id}_${ABREV_CHAMP_ENTREE[champ]}`;
+      return `{{${id}}}...{{FIN_${id}}}`;
+    };
+    const partieNom = t.nomFixe === null
+      ? `nom à déterminer toi-même (une SEULE catégorie linguistique/grammaticale/lexicale précise, cohérente avec le rôle de l'axe ci-dessus -- JAMAIS une entrée thématique ou psychologisante), à placer entre ${marqueur('nom')}, puis `
+      : `entrée « ${t.nomFixe} » (nom fixé, ne le modifie pas) : `;
+    return `   - Axe ${t.axeNumero}, ${partieNom}Indices textuels (citations EXACTES du texte support, entre guillemets, jamais inventées) entre ${marqueur('indices')} ; Analyses (nomme et justifie le procédé) entre ${marqueur('analyse')} ; Interprétations (l'effet produit sur le lecteur/le sens dégagé) entre ${marqueur('interpretation')}.`;
+  }).join('\n');
+
+  return `
+
+COMPLÉTION AUTOMATIQUE D'ENTRÉES DU TABLEAU DE VÉRIFICATION (exception étroite à la règle "jamais inventer" ci-dessus, limitée STRICTEMENT à ce qui suit) : l'enseignant n'a pas détaillé certaines entrées de son plan. Pour CHACUNE listées ci-dessous, génère UNIQUEMENT à partir du texte support fourni (jamais d'autre source, jamais de connaissance générale sur le genre, jamais de fait inventé) le contenu demandé. ${rolesTexte}${consigneNiveauLangage}
+${consignesEntrees}
+Place chaque élément, et UNIQUEMENT lui, entre ses 2 marqueurs dédiés, N'IMPORTE OÙ dans ta réponse (par exemple juste avant {{AXES_PLAN_ENSEIGNANT}}) -- ces marqueurs et leur contenu seront extraits puis retirés du document final, ils ne doivent apparaître nulle part ailleurs. N'écris PAS toi-même les lignes du tableau d'axes concernées : elles sont déjà construites, seuls ces éléments précis sont attendus de toi, un élément par marqueur, jamais une énumération libre ni un tableau complet.`;
+}
+function construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentiel) {
   const niveau = niveauLectureMethodique(classe);
   const resultatParsing = parserPlanEnseignant(planCours);
 
@@ -1659,7 +2147,7 @@ function construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planC
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE, MODE "PLAN FOURNI PAR L'ENSEIGNANT" (cette fiche est une lecture méthodique dont l'enseignant a rédigé lui-même l'intégralité du contenu pédagogique du développement -- hypothèse, axes, analyses, interprétations. Les instructions ci-dessous concernent UNIQUEMENT le tableau Habiletés/Contenus, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION : elles REMPLACENT, pour ces 3 éléments SEULEMENT, les règles du mode automatique de Lecture méthodique décrites par ailleurs dans ce message. TOUT LE RESTE DE LA FICHE N'EST PAS CONCERNÉ et reste à rédiger NORMALEMENT à partir des instructions générales données ailleurs dans ce message : entête (y compris le champ Compétence, à résoudre exactement comme d'habitude), Situation d'apprentissage, Supports didactiques/Bibliographie ci-dessous.) :
 
-RÈGLE ABSOLUE, UNIQUEMENT POUR LE CONTENU PÉDAGOGIQUE DU DÉVELOPPEMENT (hypothèse, axes de lecture, entrées des tableaux de vérification, analyses, interprétations) : tu ne dois JAMAIS l'inventer, le compléter ou le reformuler substantiellement. Il vient à 100% du texte de l'enseignant. Cette règle ne concerne QUE ce contenu précis -- elle ne restreint rien d'autre dans la fiche.
+RÈGLE ABSOLUE, UNIQUEMENT POUR LE CONTENU PÉDAGOGIQUE DU DÉVELOPPEMENT (hypothèse, axes de lecture, entrées des tableaux de vérification, analyses, interprétations) : tu ne dois JAMAIS l'inventer, le compléter ou le reformuler substantiellement -- SAUF pour les entrées explicitement listées plus bas dans une section dédiée "COMPLÉTION AUTOMATIQUE D'ENTRÉES", SI ELLE EST PRÉSENTE dans ce message (absente si l'enseignant a déjà tout détaillé), où tu es exceptionnellement autorisé à générer le détail manquant, dans le cadre strict qui y est décrit. En dehors de cette section précise, tout le reste vient à 100% du texte de l'enseignant.
 
 CONTRAINTE SUR LA LIGNE PRÉSENTATION RITUELLE (avant "I. Présentation du texte", début de séance) : inchangée par rapport au mode automatique -- cette phase d'accueil ne doit JAMAIS révéler le thème précis du texte étudié. Reste strictement générique (ex. « un texte que nous allons découvrir ensemble »). Ne la rédige toi-même que si l'enseignant ne l'a pas incluse dans son plan.
 
@@ -1682,12 +2170,28 @@ ${habiletesLectureMethodique(niveau)}`;
       // noyer ces instructions sous un pavé de texte brut potentiellement
       // long (cause probable du champ Compétence disparu constaté en test).
       planCoursPourPromptFinal: `\n\nPLAN DE COURS FOURNI PAR L'ENSEIGNANT (contenu à corriger orthographiquement, jamais à réinventer, pour la ligne DÉVELOPPEMENT UNIQUEMENT -- ne concerne aucun autre champ de la fiche) :\n${planCours}`,
-      avertissement: `Le plan de cours fourni n'a pas pu être structuré automatiquement (${resultatParsing.raison}) : les repères "I.", "II.", "III.", "IV." sont attendus chacun en tout début de ligne. La fiche a été générée en mode de repli (texte non structuré, clairement signalé dans le document) -- corrigez le format des repères et régénérez pour obtenir un tableau correctement réparti.`
+      avertissement: `Le plan de cours fourni n'a pas pu être structuré automatiquement (${resultatParsing.raison}) : les repères "I.", "II.", "III.", "IV." sont attendus chacun en tout début de ligne. La fiche a été générée en mode de repli (texte non structuré, clairement signalé dans le document) -- corrigez le format des repères et régénérez pour obtenir un tableau correctement réparti.`,
+      tachesCompletion: [],
+      bloque: false,
+      messageBlocage: null
     };
   }
 
-  const { lignesHTML, axesHTML, avertissementsEntrees, champsPresentationARecomposer, presentationVerbatimFallbackHTML, evaluationDetectee } =
-    construireDeroulementPlanEnseignantHTML(resultatParsing.segments, niveau);
+  const resultatDeroulement = construireDeroulementPlanEnseignantHTML(resultatParsing.segments, niveau, referentiel);
+  if (resultatDeroulement.bloque) {
+    return {
+      instructions: '',
+      injectionDeroulement: null,
+      injectionAxes: null,
+      avertissement: null,
+      planCoursPourPromptFinal: null,
+      tachesCompletion: [],
+      bloque: true,
+      messageBlocage: resultatDeroulement.messageBlocage
+    };
+  }
+  const { lignesHTML, axesHTML, avertissementsEntrees, champsPresentationARecomposer, presentationVerbatimFallbackHTML, evaluationDetectee, tachesCompletion } =
+    resultatDeroulement;
 
   // Exception étroite accordée pour la ligne I UNIQUEMENT (à partir de la 4e,
   // quand l'enseignant a fourni Titre/Auteur/Source/Nature/Tonalité/Thème en
@@ -1708,7 +2212,7 @@ DÉTECTION RÉUSSIE — le plan de l'enseignant a déjà été segmenté et mis 
    1. Dans le tableau DÉROULEMENT (5 colonnes), juste après la ligne PRÉSENTATION rituelle (celle-ci, générique, reste à ta charge comme d'habitude), place EXACTEMENT le marqueur {{DEROULEMENT_PLAN_ENSEIGNANT}} comme SEUL contenu de cette position -- il sera remplacé par les lignes I à IV${evaluationDetectee ? ' et Évaluation' : ''} déjà construites. Referme normalement le tableau juste après (</table>).
    2. Juste APRÈS ce tableau DÉROULEMENT (donc après son </table>, au même niveau que les autres tableaux de la fiche, JAMAIS à l'intérieur d'une cellule), place EXACTEMENT le marqueur {{TEXTE_SUPPORT}} sur sa propre ligne, UNE SEULE FOIS dans tout le document -- il sera remplacé par le texte support fourni par l'enseignant.
    3. Juste après {{TEXTE_SUPPORT}}, place EXACTEMENT le marqueur {{AXES_PLAN_ENSEIGNANT}} sur sa propre ligne -- il sera remplacé par le ou les tableaux d'axes déjà construits.
-N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi-même pour cette partie : il est déjà entièrement construit. Le reste de la fiche (entête, Compétence, Situation d'apprentissage, Supports/Bibliographie...) n'est PAS concerné par cette restriction et se rédige normalement.${consigneRecompositionPresentation}`;
+N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi-même pour cette partie : il est déjà entièrement construit. Le reste de la fiche (entête, Compétence, Situation d'apprentissage, Supports/Bibliographie...) n'est PAS concerné par cette restriction et se rédige normalement.${consigneRecompositionPresentation}${construireConsigneCompletionEntrees(tachesCompletion)}`;
 
   // Le texte brut du plan n'a plus besoin d'être montré au modèle dans le cas
   // réussi : il ne sert plus qu'à la structuration, déjà faite côté code --
@@ -1724,30 +2228,37 @@ N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi
     avertissement: avertissementsEntrees.length ? avertissementsEntrees.join(' ') : null,
     planCoursPourPromptFinal: null,
     presentationARecomposer: !!champsPresentationARecomposer,
-    presentationVerbatimFallbackHTML
+    presentationVerbatimFallbackHTML,
+    tachesCompletion,
+    bloque: false,
+    messageBlocage: null
   };
 }
 
 // Vérifie, dans le HTML brut renvoyé par le modèle (AVANT toute injection),
-// que les 3 marqueurs attendus du mode plan-enseignant sont bien présents.
-// Sans ce contrôle, un marqueur omis par le modèle (réponse tronquée, ou
-// modèle "estimant avoir fini" après avoir mentionné les axes en texte libre
-// dans la ligne III) provoque soit une perte de contenu totalement
-// silencieuse (tableau d'axes, via injecterMarqueurUneFois qui ne fait rien
-// si le marqueur est absent), soit un repli mal positionné (texte support,
-// dont le repli dans injecterTexteSupport suppose un autre tableau de
-// référence qui peut ne pas exister) -- jamais sans avertissement explicite
-// à l'enseignant.
+// que les marqueurs attendus sont bien présents -- valable pour les 2 modes
+// (plan-enseignant ET automatique, cf. construireInstructionsLectureMethodique) :
+// {{DEROULEMENT_PLAN_ENSEIGNANT}} n'est vérifié que si injectionDeroulement
+// est réellement attendu (jamais en mode automatique, où le déroulement
+// reste rédigé librement par le modèle -- seuls les tableaux d'axes sont
+// pré-construits). Sans ce contrôle, un marqueur omis par le modèle
+// (réponse tronquée, ou modèle "estimant avoir fini" après avoir mentionné
+// les axes en texte libre dans la ligne III) provoque soit une perte de
+// contenu totalement silencieuse (tableau d'axes, via injecterMarqueurUneFois
+// qui ne fait rien si le marqueur est absent), soit un repli mal positionné
+// (texte support, dont le repli dans injecterTexteSupport suppose un autre
+// tableau de référence qui peut ne pas exister) -- jamais sans avertissement
+// explicite à l'enseignant.
 function verifierMarqueursPlanEnseignant(contenuHTMLBrut, injection) {
-  if (!injection || injection.injectionDeroulement === null) return [];
+  if (!injection || (injection.injectionDeroulement === null && injection.injectionAxes === null)) return [];
   const avertissements = [];
-  if (!contenuHTMLBrut.includes('{{DEROULEMENT_PLAN_ENSEIGNANT}}')) {
+  if (injection.injectionDeroulement !== null && !contenuHTMLBrut.includes('{{DEROULEMENT_PLAN_ENSEIGNANT}}')) {
     avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le tableau déroulement (lignes I à IV) : ce tableau n'a pas pu être inséré automatiquement à l'emplacement prévu. Vérifiez la fiche générée.");
   }
   if (!contenuHTMLBrut.includes('{{TEXTE_SUPPORT}}')) {
     avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le texte support : il a été réinséré automatiquement à un emplacement par défaut, qui peut ne pas correspondre à l'emplacement prévu (juste après le tableau déroulement). Vérifiez son positionnement dans la fiche générée.");
   }
-  if (!contenuHTMLBrut.includes('{{AXES_PLAN_ENSEIGNANT}}')) {
+  if (injection.injectionAxes !== null && !contenuHTMLBrut.includes('{{AXES_PLAN_ENSEIGNANT}}')) {
     avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le tableau détaillé des axes (Entrées/Indices textuels/Analyses/Interprétations) : ce tableau n'a pas pu être inséré automatiquement. Vérifiez la fiche générée.");
   }
   return avertissements;
@@ -1787,6 +2298,22 @@ function extraireEtRetirerRecompositionPresentation(contenuHTML) {
   return { texte: texte || null, contenuHTML: nettoye };
 }
 
+// Même mécanique qu'extraireEtRetirerRecompositionPresentation ci-dessus,
+// pour le texte support rédigé par le modèle en Mode 1 (Lecture méthodique
+// automatique) quand l'enseignant n'en a fourni aucun (cf. userMessage plus
+// bas). Le texte extrait devient ensuite la valeur de `texteSupport`,
+// injectée par injecterTexteSupport EXACTEMENT comme un texte fourni par
+// l'enseignant -- imprimée en entier dans la fiche, et seule source des
+// citations pour le tableau de vérification ET pour l'entrée réservée à
+// l'Évaluation (jamais un extrait différent, règle verrouillée du 04/08).
+function extraireEtRetirerTexteSupportGenere(contenuHTML) {
+  const m = /\{\{TEXTE_SUPPORT_GENERE\}\}([\s\S]*?)\{\{FIN_TEXTE_SUPPORT_GENERE\}\}/.exec(contenuHTML);
+  if (!m) return { texte: null, contenuHTML };
+  const texte = m[1].trim();
+  const nettoye = contenuHTML.slice(0, m.index) + contenuHTML.slice(m.index + m[0].length);
+  return { texte: texte || null, contenuHTML: nettoye };
+}
+
 // Résout, dans le HTML déjà construit de la ligne I, le jeton interne
 // réservé à la phrase recomposée par le modèle. Repli sûr si le modèle ne
 // l'a pas fournie (texte de l'enseignant reproduit tel quel, jamais un
@@ -1803,6 +2330,59 @@ function resoudrePresentationRecomposee(injection, texteRecompose) {
     },
     repliUtilise
   };
+}
+
+// Extrait, pour CHAQUE tâche de complétion (cf. construireLigneEntreeAvecCompletion),
+// le contenu que le modèle a placé entre ses marqueurs dédiés {{ID_CHAMP}}...
+// {{FIN_ID_CHAMP}} -- puis retire ces marqueurs du HTML, même mécanique que
+// extraireEtRetirerRecompositionPresentation, généralisée à une liste
+// variable de champs. Ne modifie QUE ce qui est extrait ici -- le reste du
+// document (y compris tout marqueur non concerné) reste intact.
+function extraireCompletionsEntrees(contenuHTML, taches) {
+  let html = contenuHTML;
+  const valeurs = {};
+  taches.forEach((t) => {
+    t.champsAGenerer.forEach((champ) => {
+      const id = `${t.id}_${ABREV_CHAMP_ENTREE[champ]}`;
+      const regex = new RegExp(`\\{\\{${id}\\}\\}([\\s\\S]*?)\\{\\{FIN_${id}\\}\\}`);
+      const m = regex.exec(html);
+      if (!m) { valeurs[`${t.id}_${champ}`] = null; return; }
+      valeurs[`${t.id}_${champ}`] = m[1].trim() || null;
+      html = html.slice(0, m.index) + html.slice(m.index + m[0].length);
+    });
+  });
+  return { contenuHTML: html, valeurs };
+}
+
+// Résout, dans UN bloc HTML déjà construit (tableaux d'axes OU tableau
+// déroulement -- un jeton donné ne vit jamais que dans un seul des deux, cf.
+// construireEntreeReserveeEvaluation pour le cas de la ligne ÉVALUATION), les
+// jetons internes réservés à chaque champ à compléter -- repli sûr et
+// avertissement explicite si le modèle n'a pas fourni un élément (jamais un
+// jeton laissé visible, jamais un échec silencieux) : le nom manquant devient
+// un libellé générique, les autres colonnes une mention explicite d'absence,
+// jamais une case vide sans explication ni un contenu inventé pour la
+// combler. Générique (un simple bloc HTML en entrée) pour être appelée sur
+// chaque bloc concerné, plutôt qu'une fonction dédiée par bloc. `html` peut
+// être null (mode automatique : aucun injectionDeroulement pré-construit,
+// le déroulement restant rédigé librement par le modèle) -- no-op sûr.
+function resoudreCompletionsEntrees(html, taches, valeurs) {
+  if (html === null) return { html: null, avertissements: [] };
+  let resultat = html;
+  const avertissements = [];
+  taches.forEach((t) => {
+    t.champsAGenerer.forEach((champ) => {
+      const jeton = `@@${t.id}_${ABREV_CHAMP_ENTREE[champ]}@@`;
+      if (!resultat.includes(jeton)) return;
+      const valeur = valeurs[`${t.id}_${champ}`];
+      const repli = champ === 'nom' ? 'Entrée à préciser' : champ === 'titre' ? 'Titre à préciser' : '(non complété automatiquement -- régénérez la fiche)';
+      resultat = resultat.split(jeton).join(valeur || repli);
+      if (!valeur) {
+        avertissements.push(`Axe ${t.axeNumero} (« ${t.axeTitre} ») : le modèle n'a pas fourni ${LIBELLES_CHAMP_ENTREE_LONG[champ]} pour une entrée à compléter automatiquement -- vérifiez cette entrée dans la fiche générée.`);
+      }
+    });
+  });
+  return { html: resultat, avertissements };
 }
 
 function construireInstructionsExpressionEcriture(referentiel) {
@@ -2407,6 +2987,21 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
   }
 });
 
+// Blocage explicite AVANT tout appel au modèle (jamais un échec silencieux
+// ni une génération libre en repli) -- réutilise le MÊME canal SSE que les
+// erreurs de stream (cf. stream.on('error', ...) plus bas) pour que le
+// client affiche le message réel (celui-ci lit `json.error`, cf.
+// public/index.html) plutôt que le message générique "Erreur serveur" d'une
+// réponse HTTP non-ok classique.
+function envoyerBlocageSSE(res, message) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+  res.end();
+}
+
  app.post('/api/generer-fiche', uploadTexteSupportFichier, async (req, res) => {
   console.log('📩 Requête reçue:', req.body.discipline, req.body.classe, req.body.lecon);
   try {
@@ -2439,6 +3034,12 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
     // dans stream.on('finalMessage', ...) plus bas) -- null si le mode plan-
     // enseignant n'est pas déclenché ou si son parsing a échoué.
     let planFourniInjection = null;
+    // Mode 1 (automatique, Lecture méthodique) sans texte support fourni par
+    // l'enseignant : le modèle doit rédiger lui-même le texte support (cf.
+    // section "texteSupport" plus bas) -- utilisé aussi pour retrouver le
+    // référentiel du type de texte demandé (conformité structurelle exigée).
+    let modeAutoLM = false;
+    let referentielTypeTexteLM = null;
 
     if (niveau !== 'primaire') {
       const estLM = estLectureMethodique({ discipline, lecon, theme, activite });
@@ -2453,24 +3054,47 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
         // lui-même le contenu pédagogique (hypothèse/axes/analyses), on ne
         // génère plus rien -- on structure et corrige uniquement. Ajout, pas
         // remplacement : le mode génération automatique (construireInstructionsLectureMethodique)
-        // reste inchangé et s'applique dès que le plan n'est pas substantiel.
+        // reste inchangé et s'applique dès que le plan n'est pas substantiel --
+        // et repose désormais sur EXACTEMENT le même mécanisme d'injection
+        // (planFourniInjection, quel que soit le mode -- cf. verifierMarqueursPlanEnseignant,
+        // extraireCompletionsEntrees, resoudreCompletionsEntrees, injecterDeroulementPlanEnseignant,
+        // aucun n'est spécifique à un mode). Référentiel toujours cherché AVEC
+        // classe (fusion socle collège) pour les 2 sous-modes -- seul lui
+        // permet de nommer, de façon déterministe, les entrées non fournies
+        // par l'enseignant (cf. determinerSlotsAxe) ; s'il est absent, la
+        // génération est bloquée AVANT tout appel au modèle (changement
+        // d'architecture du 07/08, cf. construireMessageBlocageTypeTexteNonCouvert)
+        // -- jamais un repli silencieux vers une invention libre.
+        referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
         if (planCoursEstSubstantiel(planCours)) {
-          const resultatPlanFourni = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours);
+          const resultatPlanFourni = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentielTypeTexteLM);
+          if (resultatPlanFourni.bloque) {
+            return envoyerBlocageSSE(res, resultatPlanFourni.messageBlocage);
+          }
           systemPrompt += resultatPlanFourni.instructions;
           planFourniInjection = resultatPlanFourni;
           if (resultatPlanFourni.avertissement) {
             avertissementRappel = avertissementRappel ? `${avertissementRappel} ${resultatPlanFourni.avertissement}` : resultatPlanFourni.avertissement;
           }
         } else {
-          const referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
-          systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
+          const resultatAuto = construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
+          if (resultatAuto.bloque) {
+            return envoyerBlocageSSE(res, resultatAuto.messageBlocage);
+          }
+          systemPrompt += resultatAuto.instructions;
+          planFourniInjection = resultatAuto;
+          modeAutoLM = true;
         }
       } else if (estEE) {
-        systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
+        // Même principe de blocage (07/08) que pour Lecture méthodique : la
+        // section "Caractéristiques du texte"/outils de la langue ne doit
+        // JAMAIS être une estimation libre du modèle quand le type de texte
+        // n'est pas sourcé -- remplace l'ancien avertissement doux par un
+        // blocage explicite AVANT tout appel au modèle.
         if (!referentielTypeTexte) {
-          const avertissementReferentiel = `Aucun référentiel de type de texte disponible pour cette leçon d'Expression écrite ("${lecon}") — les outils de la langue proposés restent une estimation libre du modèle.`;
-          avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementReferentiel}` : avertissementReferentiel;
+          return envoyerBlocageSSE(res, construireMessageBlocageTypeTexteNonCouvert());
         }
+        systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
       }
 
       // Champ Leçon de l'entête : pour Lecture méthodique et Expression écrite
@@ -2672,6 +3296,18 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} UNE SEULE FOIS, à l'endroit où le texte doit apparaître dans le HTML (jamais une deuxième fois ailleurs dans le document, par exemple jamais entre deux tableaux d'analyse). ${instructionMiseEnPage}\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
     } else if (estFicheExpressionEcrite) {
       userMessage += `\n\nAucun texte support n'a été fourni par l'enseignant : si tu dois toi-même rédiger un exemple de texte (lettre, etc.) à titre de modèle, reste sous les 250 mots afin qu'il tienne sur une seule page (mise en forme observable d'un coup d'œil par les élèves), et places-le dans une balise <div class="texte-support-page-unique">...</div> pour qu'il bénéficie du même traitement de mise en page qu'un texte support fourni par l'enseignant.`;
+    } else if (modeAutoLM) {
+      // Mode 1 (Lecture méthodique automatique) sans texte support fourni :
+      // le modèle doit en rédiger un lui-même, mais ne le recopie JAMAIS
+      // directement à l'endroit du marqueur {{TEXTE_SUPPORT}} (déjà demandé
+      // plus haut, résolu automatiquement côté serveur comme pour un texte
+      // fourni par l'enseignant) -- il le place dans un bloc d'extraction
+      // dédié, pour que la fiche ÉVALUATION (construireConsigneEvaluationReservee,
+      // toujours "sur le même texte support") s'appuie garantie sur EXACTEMENT
+      // ce même texte, jamais un extrait différent (règle verrouillée du
+      // 04/08). referentielTypeTexteLM est non-null ici : bloqué en amont sinon
+      // (cf. construireInstructionsLectureMethodique).
+      userMessage += `\n\nAucun texte support n'a été fourni par l'enseignant : tu dois toi-même rédiger un texte support ORIGINAL, adapté au niveau ${niveau}, dont la NATURE correspond EXACTEMENT au type de texte « ${referentielTypeTexteLM.typeTexte} » demandé par la leçon (structure et caractéristiques conformes au référentiel déjà utilisé plus haut pour construire les entrées du tableau de vérification -- jamais un autre type de texte). Longueur raisonnable pour occuper une bonne partie d'une page (environ 100 à 220 mots selon le niveau). Place ce texte, et UNIQUEMENT lui (sans titre répété ni commentaire), entre les marqueurs {{TEXTE_SUPPORT_GENERE}} et {{FIN_TEXTE_SUPPORT_GENERE}}, N'IMPORTE OÙ dans ta réponse -- ce bloc sera extrait puis retiré du document final, il ne doit apparaître nulle part ailleurs. NE RECOPIE PAS ce texte à l'endroit du marqueur {{TEXTE_SUPPORT}} (déjà demandé plus haut) : le serveur l'y insérera automatiquement, intégralement, à partir de ce que tu places entre {{TEXTE_SUPPORT_GENERE}} et {{FIN_TEXTE_SUPPORT_GENERE}}.`;
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -2725,9 +3361,44 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           res.write(`data: ${JSON.stringify({ avertissement: "La recomposition en phrase(s) de la présentation du texte (ligne I) n'a pas pu être appliquée -- les informations fournies (Titre/Auteur/Source/Nature/Tonalité/Thème) sont affichées telles quelles, sous forme de champs." })}\n\n`);
         }
       }
+      // Auto-complétion des entrées du tableau de vérification (axes/entrées
+      // non détaillés par l'enseignant, y compris la consigne d'évaluation de
+      // l'entrée réservée Axe 2/Entrée 2) : extrait ce que le modèle a rédigé
+      // entre les marqueurs dédiés, AVANT l'injection des tableaux déjà
+      // construits -- repli sûr + avertissement explicite si le modèle n'a
+      // pas fourni un élément (jamais un jeton laissé visible). Un jeton donné
+      // ne vivant que dans UN SEUL des 2 blocs (déroulement OU axes, jamais
+      // les deux), résoudre séparément chaque bloc ne double jamais un
+      // avertissement.
+      if (planFourniInjection && planFourniInjection.tachesCompletion && planFourniInjection.tachesCompletion.length) {
+        const { contenuHTML: contenuNettoyeCompletion, valeurs } = extraireCompletionsEntrees(contenuHTML, planFourniInjection.tachesCompletion);
+        contenuHTML = contenuNettoyeCompletion;
+        const resDeroulement = resoudreCompletionsEntrees(planFourniInjection.injectionDeroulement, planFourniInjection.tachesCompletion, valeurs);
+        const resAxes = resoudreCompletionsEntrees(planFourniInjection.injectionAxes, planFourniInjection.tachesCompletion, valeurs);
+        planFourniInjection = { ...planFourniInjection, injectionDeroulement: resDeroulement.html, injectionAxes: resAxes.html };
+        for (const avertissementCompletion of resDeroulement.avertissements.concat(resAxes.avertissements)) {
+          res.write(`data: ${JSON.stringify({ avertissement: avertissementCompletion })}\n\n`);
+        }
+      }
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
+      }
+      // Mode 1 (Lecture méthodique automatique) sans texte support fourni :
+      // extrait le texte rédigé par le modèle (cf. userMessage plus haut)
+      // AVANT injecterTexteSupport ci-dessous, pour qu'il soit imprimé en
+      // entier dans la fiche exactement comme un texte fourni par
+      // l'enseignant -- jamais absent (bug corrigé le 07/08 : auparavant,
+      // {{TEXTE_SUPPORT}} n'était résolu par RIEN dans ce cas, cf. `if
+      // (!texteSupport) return contenuHTML;` dans injecterTexteSupport).
+      if (modeAutoLM && !texteSupport) {
+        const { texte: texteSupportGenere, contenuHTML: contenuNettoyeTexteSupport } = extraireEtRetirerTexteSupportGenere(contenuHTML);
+        contenuHTML = contenuNettoyeTexteSupport;
+        if (texteSupportGenere) {
+          texteSupport = texteSupportGenere;
+        } else {
+          res.write(`data: ${JSON.stringify({ avertissement: "Le modèle n'a pas fourni de texte support généré automatiquement (marqueur {{TEXTE_SUPPORT_GENERE}} absent ou vide) -- aucun texte support n'a pu être imprimé dans la fiche. Régénérez la fiche, ou fournissez vous-même un texte support." })}\n\n`);
+        }
       }
       contenuHTML = injecterTexteSupport(contenuHTML, texteSupport, { unePage: estFicheExpressionEcrite });
       const fiche = await Fiche.create({
