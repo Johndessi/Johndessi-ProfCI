@@ -1149,11 +1149,22 @@ function habiletesLectureMethodique(niveau) {
   <tr><td style="border:1px solid #000;padding:6px;">Appliquer</td><td style="border:1px solid #000;padding:6px;">la démarche de la lecture méthodique</td></tr>`;
 }
 
+// Mode automatique (Mode 1) -- même niveau de garantie que le mode
+// plan-enseignant (règles A/B/C/D), via construireAxesAInventerHTML qui
+// réutilise EXACTEMENT le même mécanisme (determinerSlotsAxe,
+// construireTableauAxeHTML, construireEntreeReserveeEvaluation,
+// construireConsigneCompletionEntrees). Retourne désormais
+// { instructions, injectionDeroulement: null, injectionAxes, tachesCompletion,
+// avertissement: null } -- même forme que construireInstructionsLectureMethodiqueAvecPlanEnseignant,
+// pour que le reste du pipeline (verifierMarqueursPlanEnseignant,
+// extraireCompletionsEntrees, resoudreCompletionsEntrees,
+// injecterDeroulementPlanEnseignant) fonctionne à l'identique sans
+// modification, quel que soit le mode.
 function construireInstructionsLectureMethodique(referentiel, classe) {
   const niveau = niveauLectureMethodique(classe);
   const reglesFiguresReelles = ' Les figures de style éventuellement listées ci-dessus ne sont que des possibilités : n\'utilise QUE celles réellement présentes dans le texte support fourni, jamais de façon systématique — si aucune de ces figures n\'apparaît dans le texte, n\'en invente aucune et appuie-toi sur les autres catégories.';
   const consigneEntrees = referentiel
-    ? `Les « entrées » possibles pour les 2 tableaux d'axes sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » ci-dessous — pioche EXCLUSIVEMENT dans ces catégories (tu peux n'en utiliser qu'une partie selon les 2 axes retenus, mais n'en invente AUCUNE en dehors de cette liste) :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}\n\nLes relevés précis (citations, exemples tirés du texte) restent bien sûr propres à CE texte : seules les catégories/étiquettes des « entrées » sont fixées par le référentiel.${reglesFiguresReelles}`
+    ? `Les « entrées » possibles pour les 2 tableaux d'axes sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » ci-dessous — pioche EXCLUSIVEMENT dans ces catégories (tu peux n'en utiliser qu'une partie selon les axes retenus, mais n'en invente AUCUNE en dehors de cette liste) :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}\n\nLes relevés précis (citations, exemples tirés du texte) restent bien sûr propres à CE texte : seules les catégories/étiquettes des « entrées » sont fixées par le référentiel.${reglesFiguresReelles}`
     : `Aucun référentiel de caractéristiques n'est disponible pour ce type de texte précis : détermine les « entrées » les plus pertinentes toi-même, à partir d'une analyse rigoureuse du texte, en respectant STRICTEMENT la contrainte ci-dessous sur la nature des entrées.${reglesFiguresReelles}`;
 
   // 6e/5e : les élèves de début de collège n'ont pas encore la notion de
@@ -1173,7 +1184,9 @@ function construireInstructionsLectureMethodique(referentiel, classe) {
     ? `\n\nNIVEAU DE LANGUE (6e/5e) : le vocabulaire de l'hypothèse générale, des libellés des 2 axes et des colonnes Analyses/Interprétations doit rester CONCRET et ACCESSIBLE à des élèves de début de collège — au même niveau de langue que celui déjà utilisé dans les fiches d'Expression écrite pour ce niveau. INTERDITS car trop abstraits/savants pour ce niveau : des formulations comme « procédés d'expression de l'admiration », « organisation spatiale de la description », ou toute expression méta-linguistique dense. Préfère des formulations simples et directement descriptives (ex. « les mots qui montrent que [le personnage] va bien » plutôt que « les marqueurs lexicaux de l'état de santé »).`
     : '';
 
-  return `
+  const { axesHTML, tachesCompletion } = construireAxesAInventerHTML(niveau);
+
+  const instructions = `
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE MÉTHODIQUE (cette fiche est une lecture méthodique : les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, le tableau Habiletés/Contenus générique, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête et la Situation d'apprentissage restent inchangés. La ligne PRÉSENTATION rituelle du début de séance reste aussi inchangée dans sa structure, SAUF la contrainte suivante :) :
 
@@ -1199,19 +1212,25 @@ II. HYPOTHÈSE GÉNÉRALE — UNE SEULE phrase, dérivée EXPLICITEMENT ${compos
 
 III. VÉRIFICATION DE L'HYPOTHÈSE GÉNÉRALE :
    1. Détermination des axes de lecture : EXACTEMENT 2 axes (jamais 3, jamais 4). Axe 1 = SEGMENT 1 de l'hypothèse générale ci-dessus, repris QUASI MOT POUR MOT (ex. hypothèse « Lettre familière dans laquelle Konan Aurélie donne ses nouvelles à sa mère » → Axe 1 « Une lettre familière »). Axe 2 = SEGMENT 2, repris QUASI MOT POUR MOT (ex. Axe 2 « Les nouvelles d'Aurélie à sa mère »). INTERDICTION ABSOLUE d'introduire dans le libellé d'un axe une notion, un procédé ou une catégorie d'analyse ABSENTE des mots de l'hypothèse (interdits si l'hypothèse ne les mentionne pas, ex. : « organisation spatiale », « procédés d'expression de... ») : les axes ne sont JAMAIS le produit d'une analyse indépendante du texte, seulement une reformulation quasi identique des deux segments déjà écrits dans l'hypothèse.
-   2. Dans la ligne III du tableau DÉROULEMENT, la colonne Traces écrites contient UNIQUEMENT du texte simple (jamais de tableau) : le libellé des 2 axes (ex. "Axe 1 : ... / Axe 2 : ..."). Les Activités de l'enseignant/des élèves de cette ligne portent le questionnement guidé qui permet de dégager ces axes.
-   3. Pour CHAQUE axe, un tableau à 4 colonnes (Entrées | Indices textuels (Relevés/Repérage) | Analyses | Interprétations) rempli PAR QUESTIONNEMENT GUIDÉ (chaque ligne correspond à une « entrée » avec des relevés précis tirés du texte, l'analyse du procédé, et l'interprétation de son effet). Ce tableau COMMENCE par une ligne-titre fusionnée sur les 4 colonnes (<td colspan="4">) annonçant « Axe 1 : [libellé] » (ou « Axe 2 : ... »). Chaque cellule « Entrées » contient une question numérotée intégrée, reformulée SPÉCIFIQUEMENT pour ce que cette ligne observe dans CE texte — jamais un gabarit générique recopié tel quel d'une entrée à l'autre (style attendu : « 1- Relevez... », « 2- Nommez et justifiez... », « 4- Pourquoi/Que révèle... »). ${consigneEntrees} Dans tous les cas (référentiel disponible ou non), les entrées sont STRICTEMENT des catégories linguistiques/grammaticales/lexicales (temps verbaux, types et formes de phrase, indices spatiaux/temporels, lexique thématique/mélioratif/péjoratif, pronoms, comparaisons et autres figures de style, ponctuation...) — JAMAIS une entrée thématique ou psychologisante (interdits, ex. : « le regret », « l'attachement affectif », « les détails techniques », « l'irruption du sentiment »...). Si un tel aspect thématique/affectif apparaît dans le texte sans être couvert par les 2 axes, il devient la matière de l'extrait d'ÉVALUATION plus bas — jamais une entrée de ce tableau. CES 2 TABLEAUX SONT DES ÉLÉMENTS AUTONOMES DU DOCUMENT HTML, PLACÉS APRÈS LE TABLEAU DÉROULEMENT COMPLET (donc en dehors de toute balise <td>/<th>) — JAMAIS imbriqués à l'intérieur d'une cellule d'un autre tableau (rendu illisible en Word/PDF : colonnes écrasées, texte compressé). Un tableau HTML ne doit JAMAIS contenir un autre tableau HTML dans une de ses cellules, nulle part dans la fiche.
+   2. Dans la ligne III du tableau DÉROULEMENT, la colonne Traces écrites contient UNIQUEMENT du texte simple (jamais de tableau) : le libellé des 2 axes (ex. "Axe 1 : ... / Axe 2 : ..."), avec le MÊME texte que celui placé entre les marqueurs de titre d'axe décrits ci-dessous. Les Activités de l'enseignant/des élèves de cette ligne portent le questionnement guidé qui permet de dégager ces axes.
+   3. Les 2 tableaux détaillés des axes (4 colonnes : Entrées | Indices textuels | Analyses | Interprétations) sont DÉJÀ CONSTRUITS côté serveur (structure, en-têtes et bordures fixes) -- tu ne les écris PLUS toi-même. Juste APRÈS le tableau DÉROULEMENT complet (donc après son </table>, jamais à l'intérieur d'une cellule), place EXACTEMENT le marqueur {{AXES_PLAN_ENSEIGNANT}} sur sa propre ligne, UNE SEULE FOIS -- il sera remplacé par les 2 tableaux déjà construits. Pour CHAQUE axe, place aussi le titre déterminé au point 1 ci-dessus entre ses 2 marqueurs dédiés, N'IMPORTE OÙ dans ta réponse : {{AXE1_TITRE}}...{{FIN_AXE1_TITRE}} pour l'Axe 1, {{AXE2_TITRE}}...{{FIN_AXE2_TITRE}} pour l'Axe 2 (texte IDENTIQUE à celui écrit dans la ligne III du tableau déroulement, point 2 ci-dessus) -- ces marqueurs seront extraits puis retirés du document final, ils ne doivent apparaître nulle part ailleurs.${construireConsigneCompletionEntrees(tachesCompletion)}
+
+${consigneEntrees} Dans tous les cas (référentiel disponible ou non), les entrées des 2 tableaux d'axes sont STRICTEMENT des catégories linguistiques/grammaticales/lexicales (temps verbaux, types et formes de phrase, indices spatiaux/temporels, lexique thématique/mélioratif/péjoratif, pronoms, comparaisons et autres figures de style, ponctuation...) — JAMAIS une entrée thématique ou psychologisante (interdits, ex. : « le regret », « l'attachement affectif », « les détails techniques », « l'irruption du sentiment »...).
 
 IV. BILAN GÉNÉRAL :
    - Question de synthèse : « Quels éléments de la langue/du texte ont permis d'étudier ce texte ? »
    - Confrontation EXPLICITE hypothèse/bilan, avec la formule EXACTE : « Notre hypothèse générale est donc vérifiée. »
    - Optionnel : une question d'ouverture ou d'avis personnel.
 
-ÉVALUATION (ligne distincte du tableau DÉROULEMENT, différente et SÉPARÉE du Bilan général — ne jamais fusionner les deux) :
-   - Fournis un relevé NEUF, non exploité dans le corps de la fiche (nouvelles citations du MÊME texte, non analysées plus haut dans les axes).
-   - Demande à l'élève, SEUL : 1) d'identifier l'entrée correspondante, 2) d'analyser, 3) d'interpréter. Ce sont les SEULS moments de toute la fiche où ce registre de verbes taxonomiques (Identifier, Analyser, Interpréter, Appliquer) s'adresse directement à l'élève dans une consigne — partout ailleurs dans la fiche, langage naturel de classe.
-   - Si un aspect thématique/affectif du texte n'a pas été traité dans les 2 axes (ex. un revirement de sentiment en fin de texte), c'est CET extrait d'évaluation qui doit le faire travailler.
-   - INTERDICTION ABSOLUE de remplacer ceci par des questions de compréhension du texte (ex. « qui est le narrateur ? », « que ressent-il ? ») : l'évaluation teste la maîtrise de la MÉTHODE de lecture méthodique, pas la compréhension du contenu.`;
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT, différente et SÉPARÉE du Bilan général — ne jamais fusionner les deux) : cette ligne est ELLE AUSSI déjà construite côté serveur, à partir de la 2e entrée de l'Axe 2 (déjà décrite plus haut parmi les entrées à compléter -- jamais travaillée dans le tableau de l'Axe 2, qui n'affiche que sa 1ère entrée). Ne rédige RIEN toi-même pour cette ligne, ni relevé neuf ni consigne : contente-toi de fournir, pour cette entrée, ce qui est demandé plus haut via ses marqueurs dédiés.`;
+
+  return {
+    instructions,
+    injectionDeroulement: null,
+    injectionAxes: axesHTML,
+    avertissement: null,
+    tachesCompletion
+  };
 }
 
 // Seuil arbitraire mais raisonnable pour distinguer un vrai plan de cours rédigé
@@ -1639,12 +1658,16 @@ function verifierEntreesCompletude(axes) {
 // déterminer par le modèle en respectant le rôle de l'axe), et le rôle de
 // l'axe + le niveau (cf. skill lecture méthodique, section 3) -- jamais
 // autre chose, pour ne jamais halluciner de contenu hors-sujet.
-const ABREV_CHAMP_ENTREE = { nom: 'NOM', indices: 'IND', analyse: 'ANA', interpretation: 'INT' };
+// "titre" (titre d'un axe) ajouté pour le mode automatique (cf.
+// construireAxesAInventerHTML) -- même mécanique générique de jeton/marqueur
+// que pour les champs d'une entrée, réutilisée telle quelle.
+const ABREV_CHAMP_ENTREE = { nom: 'NOM', indices: 'IND', analyse: 'ANA', interpretation: 'INT', titre: 'TITRE' };
 const LIBELLES_CHAMP_ENTREE_LONG = {
   nom: "le nom de l'entrée",
   indices: 'les indices textuels',
   analyse: "l'analyse",
-  interpretation: "l'interprétation"
+  interpretation: "l'interprétation",
+  titre: "le titre de l'axe"
 };
 
 // Texte du rôle méthodologique d'un axe (cf. skill section 3) : Axe 1
@@ -1731,6 +1754,44 @@ function construireEntreeReserveeEvaluation(numero, titre, niveau, slotReserve) 
 
 function construireConsigneEvaluationReservee(indicesTexteOuJeton) {
   return `<p>Le professeur propose aux élèves de retrouver seuls, sur le même texte support, la dernière entrée de vérification (non travaillée en classe). Il leur soumet le repérage suivant : ${indicesTexteOuJeton}</p><p>Consignes : 1) Nomme et justifie l'emploi de ce procédé. 2) Interprète-le : quel effet produit-il ? 3) Détermine l'entrée correspondante.</p>`;
+}
+
+// Mode automatique (Mode 1, titre seul, sans plan enseignant) -- amène ce
+// mode au MÊME niveau de garantie que le mode plan-enseignant (règles A/B/C/D),
+// en réutilisant EXACTEMENT le même mécanisme, jamais une réécriture séparée :
+// determinerSlotsAxe (appelé avec une liste d'entrées VIDE -- ici, rien n'est
+// fourni par un enseignant, tout doit être inventé -- produit exactement le
+// même repli "2 entrées à compléter" que le cas "squelette minimal" du mode
+// plan-enseignant), construireTableauAxeHTML (le titre de l'axe, inconnu tant
+// que le modèle n'a pas répondu, est simplement un jeton interne de plus,
+// résolu par le même resoudreCompletionsEntrees générique), et
+// construireEntreeReserveeEvaluation (Axe 2/Entrée 2 réservée, identique).
+// Seule différence avec le mode plan-enseignant : aucun titre d'axe n'est
+// connu à l'avance (jeton systématique), et aucune entrée fournie par
+// l'enseignant n'existe (donc aucun excédent possible, aucun contenu brut).
+function construireAxesAInventerHTML(niveau) {
+  let tachesCompletion = [];
+  let entreeReservee = null;
+  const axesHTML = ['1', '2'].map((numero) => {
+    const titreLabel = `Axe ${numero}`; // libellé générique pour les messages -- le vrai titre est un jeton, résolu après génération
+    const jetonTitre = `@@AXE${numero}_TITRE@@`;
+    const tacheTitre = { id: `AXE${numero}`, nomFixe: null, champsAGenerer: ['titre'], axeNumero: numero, axeTitre: titreLabel, niveau };
+    tachesCompletion.push(tacheTitre);
+
+    const { slots } = determinerSlotsAxe(numero, titreLabel, [], niveau);
+    const slotsAffiches = numero === '2' ? slots.filter((s) => s.slot === 1) : slots;
+    slotsAffiches.forEach((s) => { if (s.tache) tachesCompletion.push(s.tache); });
+
+    if (numero === '2') {
+      const slotReserve = slots.find((s) => s.slot === 2);
+      entreeReservee = construireEntreeReserveeEvaluation(numero, titreLabel, niveau, slotReserve);
+      if (entreeReservee.tache) tachesCompletion.push(entreeReservee.tache);
+    }
+
+    return construireTableauAxeHTML(numero, jetonTitre, slotsAffiches);
+  }).join('\n\n');
+
+  return { axesHTML, tachesCompletion, entreeReservee };
 }
 
 function construireDeroulementPlanEnseignantHTML(segments, niveau) {
@@ -1999,25 +2060,29 @@ N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi
 }
 
 // Vérifie, dans le HTML brut renvoyé par le modèle (AVANT toute injection),
-// que les 3 marqueurs attendus du mode plan-enseignant sont bien présents.
-// Sans ce contrôle, un marqueur omis par le modèle (réponse tronquée, ou
-// modèle "estimant avoir fini" après avoir mentionné les axes en texte libre
-// dans la ligne III) provoque soit une perte de contenu totalement
-// silencieuse (tableau d'axes, via injecterMarqueurUneFois qui ne fait rien
-// si le marqueur est absent), soit un repli mal positionné (texte support,
-// dont le repli dans injecterTexteSupport suppose un autre tableau de
-// référence qui peut ne pas exister) -- jamais sans avertissement explicite
-// à l'enseignant.
+// que les marqueurs attendus sont bien présents -- valable pour les 2 modes
+// (plan-enseignant ET automatique, cf. construireInstructionsLectureMethodique) :
+// {{DEROULEMENT_PLAN_ENSEIGNANT}} n'est vérifié que si injectionDeroulement
+// est réellement attendu (jamais en mode automatique, où le déroulement
+// reste rédigé librement par le modèle -- seuls les tableaux d'axes sont
+// pré-construits). Sans ce contrôle, un marqueur omis par le modèle
+// (réponse tronquée, ou modèle "estimant avoir fini" après avoir mentionné
+// les axes en texte libre dans la ligne III) provoque soit une perte de
+// contenu totalement silencieuse (tableau d'axes, via injecterMarqueurUneFois
+// qui ne fait rien si le marqueur est absent), soit un repli mal positionné
+// (texte support, dont le repli dans injecterTexteSupport suppose un autre
+// tableau de référence qui peut ne pas exister) -- jamais sans avertissement
+// explicite à l'enseignant.
 function verifierMarqueursPlanEnseignant(contenuHTMLBrut, injection) {
-  if (!injection || injection.injectionDeroulement === null) return [];
+  if (!injection || (injection.injectionDeroulement === null && injection.injectionAxes === null)) return [];
   const avertissements = [];
-  if (!contenuHTMLBrut.includes('{{DEROULEMENT_PLAN_ENSEIGNANT}}')) {
+  if (injection.injectionDeroulement !== null && !contenuHTMLBrut.includes('{{DEROULEMENT_PLAN_ENSEIGNANT}}')) {
     avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le tableau déroulement (lignes I à IV) : ce tableau n'a pas pu être inséré automatiquement à l'emplacement prévu. Vérifiez la fiche générée.");
   }
   if (!contenuHTMLBrut.includes('{{TEXTE_SUPPORT}}')) {
     avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le texte support : il a été réinséré automatiquement à un emplacement par défaut, qui peut ne pas correspondre à l'emplacement prévu (juste après le tableau déroulement). Vérifiez son positionnement dans la fiche générée.");
   }
-  if (!contenuHTMLBrut.includes('{{AXES_PLAN_ENSEIGNANT}}')) {
+  if (injection.injectionAxes !== null && !contenuHTMLBrut.includes('{{AXES_PLAN_ENSEIGNANT}}')) {
     avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le tableau détaillé des axes (Entrées/Indices textuels/Analyses/Interprétations) : ce tableau n'a pas pu être inséré automatiquement. Vérifiez la fiche générée.");
   }
   return avertissements;
@@ -2106,8 +2171,11 @@ function extraireCompletionsEntrees(contenuHTML, taches) {
 // un libellé générique, les autres colonnes une mention explicite d'absence,
 // jamais une case vide sans explication ni un contenu inventé pour la
 // combler. Générique (un simple bloc HTML en entrée) pour être appelée sur
-// chaque bloc concerné, plutôt qu'une fonction dédiée par bloc.
+// chaque bloc concerné, plutôt qu'une fonction dédiée par bloc. `html` peut
+// être null (mode automatique : aucun injectionDeroulement pré-construit,
+// le déroulement restant rédigé librement par le modèle) -- no-op sûr.
 function resoudreCompletionsEntrees(html, taches, valeurs) {
+  if (html === null) return { html: null, avertissements: [] };
   let resultat = html;
   const avertissements = [];
   taches.forEach((t) => {
@@ -2115,7 +2183,7 @@ function resoudreCompletionsEntrees(html, taches, valeurs) {
       const jeton = `@@${t.id}_${ABREV_CHAMP_ENTREE[champ]}@@`;
       if (!resultat.includes(jeton)) return;
       const valeur = valeurs[`${t.id}_${champ}`];
-      const repli = champ === 'nom' ? 'Entrée à préciser' : '(non complété automatiquement -- vérifiez le plan ou régénérez la fiche)';
+      const repli = champ === 'nom' ? 'Entrée à préciser' : champ === 'titre' ? 'Titre à préciser' : '(non complété automatiquement -- régénérez la fiche)';
       resultat = resultat.split(jeton).join(valeur || repli);
       if (!valeur) {
         avertissements.push(`Axe ${t.axeNumero} (« ${t.axeTitre} ») : le modèle n'a pas fourni ${LIBELLES_CHAMP_ENTREE_LONG[champ]} pour une entrée à compléter automatiquement -- vérifiez cette entrée dans la fiche générée.`);
@@ -2773,7 +2841,11 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
         // lui-même le contenu pédagogique (hypothèse/axes/analyses), on ne
         // génère plus rien -- on structure et corrige uniquement. Ajout, pas
         // remplacement : le mode génération automatique (construireInstructionsLectureMethodique)
-        // reste inchangé et s'applique dès que le plan n'est pas substantiel.
+        // reste inchangé et s'applique dès que le plan n'est pas substantiel --
+        // et repose désormais sur EXACTEMENT le même mécanisme d'injection
+        // (planFourniInjection, quel que soit le mode -- cf. verifierMarqueursPlanEnseignant,
+        // extraireCompletionsEntrees, resoudreCompletionsEntrees, injecterDeroulementPlanEnseignant,
+        // aucun n'est spécifique à un mode).
         if (planCoursEstSubstantiel(planCours)) {
           const resultatPlanFourni = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours);
           systemPrompt += resultatPlanFourni.instructions;
@@ -2783,7 +2855,9 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
           }
         } else {
           const referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
-          systemPrompt += construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
+          const resultatAuto = construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
+          systemPrompt += resultatAuto.instructions;
+          planFourniInjection = resultatAuto;
         }
       } else if (estEE) {
         systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
