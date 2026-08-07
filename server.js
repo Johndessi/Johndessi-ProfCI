@@ -1495,59 +1495,72 @@ ${cell(tracesEcrites)}
   </tr>`;
 }
 
-// Construit le tableau autonome à 4 colonnes d'un axe (ligne-titre fusionnée +
-// une ligne par entrée) -- SEULE fonction qui construit ce tableau pour le
-// mode plan-enseignant. Complète automatiquement (via des jetons internes
-// destinés au modèle, cf. construireLigneEntreeAvecCompletion) :
-// - toute entrée dont seul le nom est fourni (Indices/Analyse/Interprétation
-//   manquants) ;
-// - toute entrée manquante si l'axe en compte moins de 2 (nom ET 3 colonnes
-//   à déterminer par le modèle).
-// N'invente/ne touche RIEN d'autre : une entrée déjà complète (structure:true)
-// reste 100% déterministe, et une entrée totalement non structurée (aucun nom
-// reconnu -- structure:false sans champsPartiels.entree) reste une cellule
-// fusionnée brute inchangée, jamais promue en complétion (aucune ancre sûre
-// pour deviner ce qu'elle représente). Retourne { html, taches } : taches
-// liste ce que le modèle doit générer pour ce tableau (vide si l'axe était
-// déjà complet).
-function construireTableauAxeHTML(numero, titre, entrees, niveau) {
-  const taches = [];
-  const lignes = [];
+// Détermine, pour UN axe, EXACTEMENT 2 entrées "réelles" -- garanti par le
+// code (règle B), pas seulement signalé : au-delà de 2 entrées fournies par
+// l'enseignant, les suivantes sont explicitement écartées (jamais tronquées
+// en silence -- avertissement listant précisément ce qui est écarté) ; en
+// dessous de 2, les entrées manquantes sont réservées à la complétion
+// automatique (cf. construireLigneEntreeAvecCompletion). Chaque slot retourné
+// porte son rendu HTML de ligne (déterministe, à compléter, ou brut) et,
+// s'il y en a une, la tâche de complétion associée -- jamais de perte
+// silencieuse d'une entrée fournie par l'enseignant : la ligne brute
+// (structure:false sans nom reconnu) reste intacte, jamais promue.
+function determinerSlotsAxe(numero, titre, entrees, niveau) {
+  const avertissements = [];
+  let entreesRetenues = entrees;
+  if (entrees.length > 2) {
+    const excedent = entrees.slice(2);
+    const noms = excedent.map((e) => {
+      const nom = e.structure ? e.entree : (e.champsPartiels && e.champsPartiels.entree);
+      return nom ? `« ${nom} »` : 'une entrée non nommée';
+    });
+    avertissements.push(`Axe ${numero} (« ${titre} ») fournissait ${entrees.length} entrées : seules les 2 premières sont retenues dans la fiche (méthodologie DPFC, 2 entrées par axe, jamais plus) -- ${noms.join(', ')} ${excedent.length > 1 ? 'ne sont pas utilisées' : "n'est pas utilisée"}. Retirez-la du plan si elle est superflue, ou fusionnez-la avec une entrée déjà retenue.`);
+    entreesRetenues = entrees.slice(0, 2);
+  }
 
-  entrees.forEach((e, i) => {
+  const slots = [];
+  entreesRetenues.forEach((e, i) => {
+    const slot = i + 1;
     if (e.structure) {
-      lignes.push(`  <tr><td style="border:1px solid #000;padding:6px;">${e.entree}</td><td style="border:1px solid #000;padding:6px;">${e.indices}</td><td style="border:1px solid #000;padding:6px;">${e.analyse}</td><td style="border:1px solid #000;padding:6px;">${e.interpretation}</td></tr>`);
+      const html = `  <tr><td style="border:1px solid #000;padding:6px;">${e.entree}</td><td style="border:1px solid #000;padding:6px;">${e.indices}</td><td style="border:1px solid #000;padding:6px;">${e.analyse}</td><td style="border:1px solid #000;padding:6px;">${e.interpretation}</td></tr>`;
+      slots.push({ slot, html, indicesConnues: e.indices, brut: null, tache: null });
       return;
     }
     const champs = e.champsPartiels || {};
     if (!champs.entree) {
-      lignes.push(`  <tr><td colspan="4" style="border:1px solid #000;padding:6px;">${e.brut}</td></tr>`);
+      const html = `  <tr><td colspan="4" style="border:1px solid #000;padding:6px;">${e.brut}</td></tr>`;
+      slots.push({ slot, html, indicesConnues: null, brut: e.brut, tache: null });
       return;
     }
-    const { html, tache } = construireLigneEntreeAvecCompletion(`A${numero}E${i + 1}`, champs.entree, ['indices', 'analyse', 'interpretation']);
-    lignes.push(html);
-    taches.push({ ...tache, axeNumero: numero, axeTitre: titre, niveau });
+    const { html, tache } = construireLigneEntreeAvecCompletion(`A${numero}E${slot}`, champs.entree, ['indices', 'analyse', 'interpretation']);
+    const t = { ...tache, axeNumero: numero, axeTitre: titre, niveau };
+    slots.push({ slot, html, indicesConnues: null, brut: null, tache: t });
   });
-
-  // Complète jusqu'à 2 entrées si l'axe en fournit moins (nom ET 3 colonnes
-  // à déterminer par le modèle, en respectant le rôle de l'axe) -- jamais si
-  // l'enseignant en a fourni AUTANT OU PLUS de 2 (cas "trop d'entrées",
-  // signalé séparément par verifierNombreEntreesParAxe, jamais tronqué).
-  for (let slot = entrees.length + 1; slot <= 2; slot++) {
+  for (let slot = entreesRetenues.length + 1; slot <= 2; slot++) {
     const { html, tache } = construireLigneEntreeAvecCompletion(`A${numero}E${slot}`, null, ['nom', 'indices', 'analyse', 'interpretation']);
-    lignes.push(html);
-    taches.push({ ...tache, axeNumero: numero, axeTitre: titre, niveau });
+    const t = { ...tache, axeNumero: numero, axeTitre: titre, niveau };
+    slots.push({ slot, html, indicesConnues: null, brut: null, tache: t });
   }
 
-  const lignesHTML = lignes.length ? lignes.join('\n') : '  <tr><td colspan="4" style="border:1px solid #000;padding:6px;"></td></tr>';
+  return { slots, avertissements };
+}
 
-  const html = `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+// Construit le tableau autonome à 4 colonnes d'un axe (ligne-titre fusionnée +
+// une ligne par entrée AFFICHÉE) -- SEULE fonction qui construit ce tableau
+// pour le mode plan-enseignant. N'affiche que les `slots` reçus (cf.
+// determinerSlotsAxe et construireDeroulementPlanEnseignantHTML : l'Axe 2
+// n'en reçoit qu'1 -- règle C, sa 2e entrée est réservée à l'évaluation,
+// jamais affichée ici).
+function construireTableauAxeHTML(numero, titre, slots) {
+  const lignesHTML = slots.length
+    ? slots.map((s) => s.html).join('\n')
+    : '  <tr><td colspan="4" style="border:1px solid #000;padding:6px;"></td></tr>';
+
+  return `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
   <tr><td colspan="4" style="border:1px solid #000;padding:6px;background:#e4ede6;font-weight:bold;">Axe ${numero} : ${titre}</td></tr>
   <tr><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Entrées</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Indices textuels</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Analyses</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Interprétations</th></tr>
 ${lignesHTML}
 </table>`;
-
-  return { html, taches };
 }
 
 // Orchestre les 2 fonctions ci-dessus à partir des segments déjà découpés par
@@ -1692,13 +1705,65 @@ function extraireChampsPresentation(texteI) {
 // et son utilisation dans stream.on('finalMessage', ...).
 const JETON_PRESENTATION_RECOMPOSEE = '@@PRESENTATION_RECOMPOSEE@@';
 
+// Construit la consigne d'évaluation à partir de l'entrée réservée (TOUJOURS
+// Axe 2/Entrée 2, jamais une autre -- règle D, cf. skill section 6, confirmé
+// dans le corpus Lect_meth_7_Le_spect_Koteba). Ne révèle QUE les indices
+// textuels (citations, le "repérage") -- jamais le nom, l'analyse ni
+// l'interprétation, que l'élève doit retrouver SEUL. Repli explicite (jamais
+// silencieux) si le contenu fourni par l'enseignant pour cette entrée n'est
+// pas structuré (aucune citation sûre à réutiliser).
+function construireEntreeReserveeEvaluation(numero, titre, niveau, slotReserve) {
+  if (slotReserve.indicesConnues !== null) {
+    return { indicesTexteOuJeton: slotReserve.indicesConnues, tache: null, avertissement: null };
+  }
+  if (slotReserve.tache) {
+    return { indicesTexteOuJeton: `@@${slotReserve.tache.id}_IND@@`, tache: slotReserve.tache, avertissement: null };
+  }
+  const t = { id: `A${numero}E${slotReserve.slot}RES`, nomFixe: null, champsAGenerer: ['indices'], axeNumero: numero, axeTitre: titre, niveau };
+  const brut = slotReserve.brut || '';
+  const brutTronque = brut.length > 100 ? brut.slice(0, 100) + '...' : brut;
+  return {
+    indicesTexteOuJeton: `@@${t.id}_IND@@`,
+    tache: t,
+    avertissement: `Axe ${numero} (« ${titre} »), entrée réservée à l'évaluation : le contenu fourni ("${brutTronque}") n'a pas pu être reconnu comme une entrée structurée -- un repérage a été généré automatiquement à la place pour l'évaluation. Vérifiez si ce contenu doit être réintégré ailleurs dans le plan.`
+  };
+}
+
+function construireConsigneEvaluationReservee(indicesTexteOuJeton) {
+  return `<p>Le professeur propose aux élèves de retrouver seuls, sur le même texte support, la dernière entrée de vérification (non travaillée en classe). Il leur soumet le repérage suivant : ${indicesTexteOuJeton}</p><p>Consignes : 1) Nomme et justifie l'emploi de ce procédé. 2) Interprète-le : quel effet produit-il ? 3) Détermine l'entrée correspondante.</p>`;
+}
+
 function construireDeroulementPlanEnseignantHTML(segments, niveau) {
   const { axes, situationEvaluation } = parserAxesDepuisVerification(segments.verification);
-  // verifierEntreesCompletude n'est plus appelée ici : le cas qu'elle
-  // signalait (nom fourni, colonnes manquantes) est désormais activement
-  // complété par le modèle (cf. construireTableauAxeHTML / tachesCompletion
-  // ci-dessous) plutôt que simplement signalé.
-  const avertissementsEntrees = verifierNombreEntreesParAxe(axes, niveau);
+
+  // Détermine et rend chaque tableau d'axe -- règle B (2 entrées par axe,
+  // garanti par le code, cf. determinerSlotsAxe) + règle C (Axe 2 : seule sa
+  // 1ère entrée est affichée ici, la 2e est réservée à l'évaluation
+  // ci-dessous, cf. construireEntreeReserveeEvaluation).
+  let tachesCompletion = [];
+  let avertissementsEntrees = [];
+  let entreeReservee = null;
+  const axesHTML = axes.length
+    ? axes.map((a) => {
+        const { slots, avertissements } = determinerSlotsAxe(a.numero, a.titre, a.entrees, niveau);
+        avertissementsEntrees = avertissementsEntrees.concat(avertissements);
+
+        const slotsAffiches = a.numero === '2' ? slots.filter((s) => s.slot === 1) : slots;
+        slotsAffiches.forEach((s) => { if (s.tache) tachesCompletion.push(s.tache); });
+
+        if (a.numero === '2') {
+          const slotReserve = slots.find((s) => s.slot === 2);
+          if (slotReserve) {
+            entreeReservee = construireEntreeReserveeEvaluation(a.numero, a.titre, niveau, slotReserve);
+            if (entreeReservee.tache) tachesCompletion.push(entreeReservee.tache);
+            if (entreeReservee.avertissement) avertissementsEntrees.push(entreeReservee.avertissement);
+          }
+        }
+
+        return construireTableauAxeHTML(a.numero, a.titre, slotsAffiches);
+      }).join('\n\n')
+    : '';
+
   const libelleAxes = axes.length
     ? axes.map((a) => `Axe ${a.numero} : ${a.titre}`).join(' / ')
     : texteSupportVersHtml(segments.verification).replace(/<\/?p>/g, ' ').trim();
@@ -1709,7 +1774,15 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau) {
   // tableau, quel que soit l'endroit où l'enseignant l'a écrite. Le repère
   // "IV." explicite reste prioritaire s'il existe (cas où l'enseignant aurait
   // rédigé les deux, peu probable mais on ne veut jamais en perdre un).
-  const evaluationEffective = segments.evaluation || situationEvaluation || '';
+  // Règle D : la consigne réservée (ci-dessus) est TOUJOURS présente en tête
+  // -- garantie par le code, jamais laissée à la discrétion de l'enseignant
+  // -- tout contenu d'évaluation qu'il a lui-même rédigé vient s'y AJOUTER,
+  // jamais à sa place (aucun contenu de l'enseignant n'est perdu).
+  const consigneEnseignant = segments.evaluation || situationEvaluation || '';
+  const evaluationEffective = [
+    entreeReservee ? construireConsigneEvaluationReservee(entreeReservee.indicesTexteOuJeton) : '',
+    consigneEnseignant ? texteSupportVersHtml(consigneEnseignant) : ''
+  ].filter(Boolean).join('\n');
 
   // Exception étroite (à partir de la 4e SEULEMENT) : si l'enseignant a
   // fourni la présentation du texte sous forme de champs séparés, le
@@ -1757,21 +1830,14 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau) {
       strategie: evaluationEffective ? 'Travail individuel' : '',
       activiteEnseignant: evaluationEffective ? 'Donne le sujet.' : '',
       activiteEleves: evaluationEffective ? 'Travaillent seuls, à l\'écrit.' : '',
-      // Ligne laissée VIDE si l'enseignant n'a rédigé aucune évaluation
-      // (ni après "IV.", ni via "Situation d'évaluation" dans la partie III)
-      // -- jamais d'exercice inventé pour la compléter.
-      tracesEcrites: evaluationEffective ? texteSupportVersHtml(evaluationEffective) : ''
+      // evaluationEffective contient déjà du HTML pré-construit (consigne
+      // réservée + éventuel contenu enseignant déjà passé par
+      // texteSupportVersHtml ci-dessus) -- ne jamais le repasser dans
+      // texteSupportVersHtml ici (double échappement/encapsulation). Ne peut
+      // plus être vide dès qu'un Axe 2 existe (règle D, garantie par le code).
+      tracesEcrites: evaluationEffective
     })
   ].join('\n');
-
-  let tachesCompletion = [];
-  const axesHTML = axes.length
-    ? axes.map((a) => {
-        const { html, taches } = construireTableauAxeHTML(a.numero, a.titre, a.entrees, niveau);
-        tachesCompletion = tachesCompletion.concat(taches);
-        return html;
-      }).join('\n\n')
-    : '';
 
   return {
     lignesHTML,
@@ -2031,28 +2097,32 @@ function extraireCompletionsEntrees(contenuHTML, taches) {
   return { contenuHTML: html, valeurs };
 }
 
-// Résout, dans le HTML des tableaux d'axes déjà construit, les jetons internes
-// réservés à chaque champ à compléter -- repli sûr et avertissement explicite
-// si le modèle n'a pas fourni un élément (jamais un jeton laissé visible,
-// jamais un échec silencieux) : le nom manquant devient un libellé générique,
-// les 3 autres colonnes une mention explicite d'absence, jamais une case
-// vide sans explication ni un contenu inventé pour la combler.
-function resoudreCompletionsEntrees(injectionAxes, taches, valeurs) {
-  let html = injectionAxes;
+// Résout, dans UN bloc HTML déjà construit (tableaux d'axes OU tableau
+// déroulement -- un jeton donné ne vit jamais que dans un seul des deux, cf.
+// construireEntreeReserveeEvaluation pour le cas de la ligne ÉVALUATION), les
+// jetons internes réservés à chaque champ à compléter -- repli sûr et
+// avertissement explicite si le modèle n'a pas fourni un élément (jamais un
+// jeton laissé visible, jamais un échec silencieux) : le nom manquant devient
+// un libellé générique, les autres colonnes une mention explicite d'absence,
+// jamais une case vide sans explication ni un contenu inventé pour la
+// combler. Générique (un simple bloc HTML en entrée) pour être appelée sur
+// chaque bloc concerné, plutôt qu'une fonction dédiée par bloc.
+function resoudreCompletionsEntrees(html, taches, valeurs) {
+  let resultat = html;
   const avertissements = [];
   taches.forEach((t) => {
     t.champsAGenerer.forEach((champ) => {
       const jeton = `@@${t.id}_${ABREV_CHAMP_ENTREE[champ]}@@`;
-      if (!html.includes(jeton)) return;
+      if (!resultat.includes(jeton)) return;
       const valeur = valeurs[`${t.id}_${champ}`];
       const repli = champ === 'nom' ? 'Entrée à préciser' : '(non complété automatiquement -- vérifiez le plan ou régénérez la fiche)';
-      html = html.split(jeton).join(valeur || repli);
+      resultat = resultat.split(jeton).join(valeur || repli);
       if (!valeur) {
         avertissements.push(`Axe ${t.axeNumero} (« ${t.axeTitre} ») : le modèle n'a pas fourni ${LIBELLES_CHAMP_ENTREE_LONG[champ]} pour une entrée à compléter automatiquement -- vérifiez cette entrée dans la fiche générée.`);
       }
     });
   });
-  return { injectionAxes: html, avertissements };
+  return { html: resultat, avertissements };
 }
 
 function construireInstructionsExpressionEcriture(referentiel) {
@@ -2976,16 +3046,21 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         }
       }
       // Auto-complétion des entrées du tableau de vérification (axes/entrées
-      // non détaillés par l'enseignant) : extrait ce que le modèle a rédigé
+      // non détaillés par l'enseignant, y compris la consigne d'évaluation de
+      // l'entrée réservée Axe 2/Entrée 2) : extrait ce que le modèle a rédigé
       // entre les marqueurs dédiés, AVANT l'injection des tableaux déjà
       // construits -- repli sûr + avertissement explicite si le modèle n'a
-      // pas fourni un élément (jamais un jeton laissé visible).
+      // pas fourni un élément (jamais un jeton laissé visible). Un jeton donné
+      // ne vivant que dans UN SEUL des 2 blocs (déroulement OU axes, jamais
+      // les deux), résoudre séparément chaque bloc ne double jamais un
+      // avertissement.
       if (planFourniInjection && planFourniInjection.tachesCompletion && planFourniInjection.tachesCompletion.length) {
         const { contenuHTML: contenuNettoyeCompletion, valeurs } = extraireCompletionsEntrees(contenuHTML, planFourniInjection.tachesCompletion);
         contenuHTML = contenuNettoyeCompletion;
-        const { injectionAxes, avertissements: avertissementsCompletion } = resoudreCompletionsEntrees(planFourniInjection.injectionAxes, planFourniInjection.tachesCompletion, valeurs);
-        planFourniInjection = { ...planFourniInjection, injectionAxes };
-        for (const avertissementCompletion of avertissementsCompletion) {
+        const resDeroulement = resoudreCompletionsEntrees(planFourniInjection.injectionDeroulement, planFourniInjection.tachesCompletion, valeurs);
+        const resAxes = resoudreCompletionsEntrees(planFourniInjection.injectionAxes, planFourniInjection.tachesCompletion, valeurs);
+        planFourniInjection = { ...planFourniInjection, injectionDeroulement: resDeroulement.html, injectionAxes: resAxes.html };
+        for (const avertissementCompletion of resDeroulement.avertissements.concat(resAxes.avertissements)) {
           res.write(`data: ${JSON.stringify({ avertissement: avertissementCompletion })}\n\n`);
         }
       }
