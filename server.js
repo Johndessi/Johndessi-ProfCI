@@ -390,10 +390,26 @@ function titrePar(text, taille) {
 
 function contenuToDocxChildren(html) {
   const $ = cheerio.load(html || '');
-  const root = $('.fiche-cours').first().length ? $('.fiche-cours').first() : $('body');
+  const ficheCours = $('.fiche-cours').first();
+  // Bug réel corrigé le 08/08 : le gabarit HTML donné au modèle
+  // (construirePromptSecondaire) ferme "</div>" (.fiche-cours) juste après
+  // le tableau DÉROULEMENT -- rien n'indique explicitement au modèle que
+  // les marqueurs {{AXES_PLAN_ENSEIGNANT}}/{{TEXTE_SUPPORT}} (Lecture
+  // méthodique) doivent être placés AVANT cette fermeture. Le modèle les
+  // place donc souvent juste APRÈS, comme de simples frères de .fiche-cours
+  // au niveau du <body> -- invisible pour cette fonction qui ne parcourait
+  // jusqu'ici QUE les enfants directs de .fiche-cours. Le rendu navigateur
+  // ne s'en souciait pas (il affiche tout le HTML sans se limiter à
+  // .fiche-cours), d'où le tableau visible et correct dans l'appli mais
+  // absent de l'export Word. On inclut donc aussi tout ce qui suit
+  // .fiche-cours au même niveau (nextAll()) -- robuste au placement réel du
+  // modèle plutôt que de dépendre d'une consigne de prompt supplémentaire.
+  const items = ficheCours.length
+    ? [...ficheCours.children().toArray(), ...ficheCours.nextAll().toArray()]
+    : $('body').children().toArray();
   const elements = [];
 
-  root.children().each((_, node) => {
+  $(items).each((_, node) => {
     const tag = node.name.toLowerCase();
     const $node = $(node);
     const cls = $node.attr('class') || '';
