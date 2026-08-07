@@ -1109,6 +1109,17 @@ const REFERENTIEL_TYPES_TEXTE = {
     ]
   },
   'texte descriptif (objet)': {
+    // Bug réel corrigé le 08/08 : la leçon officielle DPFC 6e correspondante
+    // est couramment intitulée "La description" (nom), jamais "texte
+    // descriptif" (adjectif) -- la recherche floue par simple inclusion de
+    // sous-chaîne (cf. trouverReferentielTypeTexte) ne pouvait pas les
+    // rapprocher (lemmes différents), ce qui bloquait à tort une leçon
+    // pourtant couverte, sans qu'aucun message d'erreur ne remonte à
+    // l'enseignant (bug distinct, également corrigé le 08/08, côté client :
+    // public/index.html avalait json.error en silence). "alias" liste les
+    // autres formulations réelles à reconnaître explicitement, en plus de la
+    // clé elle-même.
+    alias: ['description', 'la description'],
     caracteristiques: [
       { categorie: 'enumeration', axe: 1, libelle: "L'énumération", description: 'énumération organisée (spatiale : extérieur→intérieur, haut→bas)' },
       { categorie: 'procedes_stylistiques', axe: 1, libelle: 'Les procédés stylistiques', description: "exclamations, apostrophe, hyperbole selon l'effet recherché" },
@@ -1182,7 +1193,17 @@ function trouverReferentielTypeTexte(typeTexteDemande, classe) {
     // retire les qualificatifs entre parenthèses (ex. "texte descriptif (objet)" ->
     // "texte descriptif") pour matcher même quand l'enseignant ne les précise pas.
     const cleCoeur = cleNorm.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
-    return cleNorm.includes(cible) || cible.includes(cleNorm) || cible.includes(cleCoeur);
+    if (cleNorm.includes(cible) || cible.includes(cleNorm) || cible.includes(cleCoeur)) return true;
+    // "alias" (cf. REFERENTIEL_TYPES_TEXTE) : autres formulations réelles
+    // (souvent l'intitulé officiel DPFC) qu'une simple inclusion de
+    // sous-chaîne ne peut pas rapprocher de la clé (lemmes différents, ex.
+    // "description" vs "descriptif") -- vérifiées avec la même logique
+    // d'inclusion bidirectionnelle, jamais une correspondance stricte.
+    const alias = REFERENTIEL_TYPES_TEXTE[cle].alias || [];
+    return alias.some((a) => {
+      const aliasNorm = normaliserTexte(a);
+      return cible.includes(aliasNorm) || aliasNorm.includes(cible);
+    });
   });
   if (!cleTrouvee) return null;
 
