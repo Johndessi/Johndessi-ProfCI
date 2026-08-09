@@ -955,6 +955,41 @@ function analyserComptageResume(texte) {
   };
 }
 
+// Preuve obtenue le 09/08 (diagnostic analyserComptageResume, fiche
+// L'Harmattan) : le modèle avait inclus, À L'INTÉRIEUR du bloc
+// {{TEXTE_SUPPORT}}...{{FIN_TEXTE_SUPPORT}}, un en-tête scolaire complet
+// PUIS le vrai texte PUIS un bloc "QUESTIONS" (questions de compréhension
+// + consigne de résumé + mention de marge tolérée) -- en-tête (~18 mots) +
+// texte réel (163 mots) + questions (~32 mots) = 213, exactement le chiffre
+// buggé constaté. Filet de sécurité SERVEUR (le prompt seul ne suffit pas,
+// cf. construireInstructionsResume déjà renforcé pour ce cas précis) :
+// retire tout ce qui suit un titre "QUESTIONS" isolé sur sa propre ligne --
+// motif exact et non ambigu, jamais présent dans un vrai corps de texte à
+// résumer, contrairement au mot "questions" en minuscule qui PEUT
+// légitimement apparaître dans une phrase (ex. "il posa plusieurs
+// questions") -- comparaison volontairement SENSIBLE À LA CASSE pour ne
+// jamais tronquer un texte légitime par erreur.
+function retirerBlocQuestionsFinal(texte) {
+  const t = (texte || '').toString();
+  const re = /(^|\n)[ \t]*QUESTIONS[ \t]*(\n|$)/;
+  const m = re.exec(t);
+  if (!m) return { texte: t, tronque: false };
+  return { texte: t.slice(0, m.index).trim(), tronque: true };
+}
+
+// Même preuve : un en-tête scolaire (École, Année scolaire, Classe...) en
+// tête du texte extrait est un signe d'inclusion en trop, mais contrairement
+// au bloc QUESTIONS (motif exact et sûr à retirer automatiquement), un
+// début de texte en capitales ou mentionnant "classe"/"année" peut aussi
+// être un TITRE légitime du texte lui-même (cf. fiches de référence : "La
+// vie au collège" en tête du texte réel) -- retirer automatiquement
+// risquerait de tronquer un titre authentique. Avertissement seulement,
+// jamais une suppression automatique ici.
+function ressembleAUnEnTeteScolaire(texte) {
+  const premiereLigne = (texte || '').trim().split(/\n/)[0] || '';
+  return /ann[ée]e scolaire|lyc[ée]e|coll[eè]ge\s|classe\s*:|r[ée]sum[ée]\s+de\s+texte/i.test(premiereLigne);
+}
+
 // Seuil de duplication du texte support (2ᵉ exemplaire en police réduite sur
 // la même page, pour permettre à l'enseignant de photocopier une seule feuille
 // et distribuer deux exemplaires — économie de papier avec des effectifs
@@ -2803,7 +2838,7 @@ function construireInstructionsResume(classe, texteSupportFourni, modeEvaluation
 
   const consigneTexteSupport = texteSupportFourni
     ? `Le texte support (${donnees.typeSourceLabel}) a été fourni par l'enseignant -- utilise-le EXACTEMENT tel quel (jamais recopié dans ta réponse), à l'endroit où il doit apparaître dans le HTML : utilise le marqueur {{TEXTE_SUPPORT}} UNE SEULE FOIS, à un seul endroit de la fiche.`
-    : `Aucun texte support n'a été fourni : tu dois toi-même rédiger un ${donnees.typeSourceLabel} ORIGINAL, adapté au niveau ${classe} (${donnees.definitionTypeSource}), d'environ 180 à 260 mots (assez long pour que le calibrage au 1/3 ait un sens pédagogique). Place ce texte, et UNIQUEMENT lui (avec son auteur/sa source, comme dans un vrai texte publié), entre les marqueurs {{TEXTE_SUPPORT}} et {{FIN_TEXTE_SUPPORT}}, N'IMPORTE OÙ dans ta réponse -- ce bloc sera extrait puis retiré du document final, il ne doit apparaître nulle part ailleurs. NE RECOPIE PAS ce texte à l'endroit du marqueur {{TEXTE_SUPPORT}} : le serveur l'y insérera automatiquement, intégralement.`;
+    : `Aucun texte support n'a été fourni : tu dois toi-même rédiger un ${donnees.typeSourceLabel} ORIGINAL, adapté au niveau ${classe} (${donnees.definitionTypeSource}), d'environ 180 à 260 mots (assez long pour que le calibrage au 1/3 ait un sens pédagogique). RÈGLE STRICTE (bug réel constaté le 09/08, ne JAMAIS reproduire) : entre {{TEXTE_SUPPORT}} et {{FIN_TEXTE_SUPPORT}}, place EXCLUSIVEMENT le corps du texte lui-même -- les paragraphes rédigés par l'auteur, rien d'autre. N'inclus JAMAIS, à l'intérieur de ces 2 marqueurs : ni un en-tête scolaire (École, Année scolaire, Classe, titre de séance -- déjà présents dans l'entête de la fiche, ne les répète jamais ici), ni la mention de l'auteur/la source (pas de "Nom, Journal, date" à la fin), ni un titre d'article, ni des questions ou consignes d'exercice (jamais de section "QUESTIONS", de question de compréhension/vocabulaire, ni de consigne "Résumez ce texte..."/mention de marge tolérée). Le nombre de mots exact de CE texte-là, et UNIQUEMENT lui, sert de base au calibrage automatique -- tout élément supplémentaire fausserait ce calcul. Place ce texte, et UNIQUEMENT lui, entre les marqueurs {{TEXTE_SUPPORT}} et {{FIN_TEXTE_SUPPORT}}, N'IMPORTE OÙ dans ta réponse -- ce bloc sera extrait puis retiré du document final, il ne doit apparaître nulle part ailleurs. NE RECOPIE PAS ce texte à l'endroit du marqueur {{TEXTE_SUPPORT}} : le serveur l'y insérera automatiquement, intégralement.`;
 
   const instructions = `
 
@@ -2835,7 +2870,7 @@ IV. APPLICATION AU TEXTE-SUPPORT :
 
 ${modeEvaluation === 'continuation'
   ? `ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : cette évaluation NE PORTE PAS sur un texte nouveau -- elle réutilise le MÊME texte support déjà rédigé plus haut (celui du marqueur {{TEXTE_SUPPORT}}), selon la démarche suivante : le professeur résume lui-même, en classe, une première partie du texte à titre d'exemple/de modèle -- tu n'as PAS à rédiger ce résumé modèle ni à le mentionner dans la fiche. Choisis un point de coupure net dans le texte support (fin d'un paragraphe), après lequel commence la portion laissée à l'élève. Copie EXACTEMENT, MOT POUR MOT (aucune reformulation, aucune coupure de phrase, aucun ajout ni omission), cette portion restante -- et UNIQUEMENT elle -- entre les marqueurs {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, N'IMPORTE OÙ dans ta réponse -- NE LA RECOPIE PAS ailleurs, elle sera insérée automatiquement à l'endroit prévu pour l'Évaluation, sous un titre indiquant qu'il s'agit de la suite du texte support. Consigne : l'élève doit résumer SEUL cette portion restante, au 1/3 de son volume avec une marge de ±10% (calibrage calculé automatiquement sur le nombre de mots réel de CETTE PORTION SEULE, jamais sur le texte support entier). Comme en IV, place EXACTEMENT le marqueur {{CALIBRAGE_EVALUATION}} juste avant le résumé corrigé de cette portion (jamais de calcul ni de chiffre inventé par toi), et place ce résumé corrigé entre {{RESUME_EVALUATION_FINAL}} et {{FIN_RESUME_EVALUATION_FINAL}}.`
-  : `ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose TOUJOURS un texte NOUVEAU, JAMAIS le texte support principal ni un extrait de celui-ci (règle vérifiée dans les 2 fiches de référence) -- un ${donnees.typeSourceLabel} différent, sur un autre sujet, de longueur comparable (150 à 220 mots), avec son auteur/sa source. Consigne : demander à l'élève de répondre à 1-2 questions de compréhension puis de résumer ce nouveau texte au 1/3 de son volume avec une marge de ±10%. Fournis aussi la correction attendue (traitement de la situation d'évaluation), avec la même démarche qu'en IV ci-dessus. Place ce nouveau texte, et UNIQUEMENT lui, entre les marqueurs {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, N'IMPORTE OÙ dans ta réponse -- NE LE RECOPIE PAS ailleurs, il sera inséré automatiquement à l'endroit prévu pour l'Évaluation. Comme en IV, place EXACTEMENT le marqueur {{CALIBRAGE_EVALUATION}} juste avant le résumé corrigé de ce nouveau texte (jamais de calcul ni de chiffre inventé par toi), et place ce résumé corrigé entre {{RESUME_EVALUATION_FINAL}} et {{FIN_RESUME_EVALUATION_FINAL}}.`
+  : `ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose TOUJOURS un texte NOUVEAU, JAMAIS le texte support principal ni un extrait de celui-ci (règle vérifiée dans les 2 fiches de référence) -- un ${donnees.typeSourceLabel} différent, sur un autre sujet, de longueur comparable (150 à 220 mots). RÈGLE STRICTE (même bug que pour le texte support principal, ne JAMAIS reproduire) : entre {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, place EXCLUSIVEMENT le corps de ce nouveau texte -- jamais d'en-tête scolaire, jamais de mention auteur/source, jamais de titre, et surtout jamais les questions de compréhension ni la consigne de résumé décrites ci-dessous : ces éléments (questions de compréhension, consigne "résumer au 1/3 avec une marge de ±10%") vont dans les colonnes du tableau DÉROULEMENT (Activités de l'enseignant/des élèves), PAS entre les marqueurs {{TEXTE_EVALUATION}}/{{FIN_TEXTE_EVALUATION}} -- seul le texte à résumer y va. Consigne : demander à l'élève de répondre à 1-2 questions de compréhension puis de résumer ce nouveau texte au 1/3 de son volume avec une marge de ±10%. Fournis aussi la correction attendue (traitement de la situation d'évaluation), avec la même démarche qu'en IV ci-dessus. Place ce nouveau texte, et UNIQUEMENT lui, entre les marqueurs {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, N'IMPORTE OÙ dans ta réponse -- NE LE RECOPIE PAS ailleurs, il sera inséré automatiquement à l'endroit prévu pour l'Évaluation. Comme en IV, place EXACTEMENT le marqueur {{CALIBRAGE_EVALUATION}} juste avant le résumé corrigé de ce nouveau texte (jamais de calcul ni de chiffre inventé par toi), et place ce résumé corrigé entre {{RESUME_EVALUATION_FINAL}} et {{FIN_RESUME_EVALUATION_FINAL}}.`
 }
 
 FORMAT DU TABLEAU 5 COLONNES : aucune exception -- 5 colonnes partout (Moments didactiques/Durée | Stratégies pédagogiques | Activités de l'enseignant | Activités des élèves | Trace écrite), y compris pour les étapes ci-dessus : ne réduis JAMAIS à 2 ou 4 colonnes.`;
@@ -3931,6 +3966,24 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           }
         }
 
+        // Filet de sécurité SERVEUR (09/08, cf. retirerBlocQuestionsFinal) --
+        // preuve obtenue via analyserComptageResume : le modèle avait inclus
+        // un bloc "QUESTIONS" (questions de compréhension + consigne de
+        // résumé) À L'INTÉRIEUR du texte support extrait, gonflant le
+        // calibrage de ~32 mots en trop. Retrait automatique (motif exact et
+        // sûr, cf. la fonction), avec avertissement si ça se produit --
+        // jamais un échec silencieux de la correction elle-même.
+        if (texteSupport) {
+          const { texte: texteSupportSansQuestions, tronque } = retirerBlocQuestionsFinal(texteSupport);
+          if (tronque) {
+            texteSupport = texteSupportSansQuestions;
+            avertissementsResume.push("Le modèle avait inclus un bloc « QUESTIONS » (questions de compréhension, consigne de résumé...) à l'intérieur du texte support -- retiré automatiquement avant impression et calibrage, seul le texte réel a été conservé. Vérifiez le texte support imprimé.");
+          }
+          if (ressembleAUnEnTeteScolaire(texteSupport)) {
+            avertissementsResume.push("Le début du texte support extrait ressemble à un en-tête scolaire (École/Année scolaire/Classe...) plutôt qu'au texte lui-même -- il n'a PAS été retiré automatiquement (risque de tronquer un titre légitime), mais le calibrage en tiendrait compte s'il s'agit bien d'un en-tête en trop. Vérifiez le début du texte support imprimé et régénérez si besoin.");
+          }
+        }
+
         // Filet de sécurité (09/08) : un texte extrait qui contient encore un
         // marqueur ({{...}}) ou une balise de tableau (<table, <tr, <td) est
         // un signe quasi certain que l'extraction a capturé TROP de contenu
@@ -3950,23 +4003,38 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // construireInstructionsResume) -- extraireTexteEnPlace laisse
         // {{TEXTE_EVALUATION}} intact à sa place pour injecterTexteSupport,
         // appelé plus bas avec ce marqueur dédié, quel que soit le mode.
-        const { texte: texteEvaluationResume, contenuHTML: contenuApresExtractionEvaluation } = extraireTexteEnPlace(contenuHTML, '{{TEXTE_EVALUATION}}', '{{FIN_TEXTE_EVALUATION}}');
+        let { texte: texteEvaluationResume, contenuHTML: contenuApresExtractionEvaluation } = extraireTexteEnPlace(contenuHTML, '{{TEXTE_EVALUATION}}', '{{FIN_TEXTE_EVALUATION}}');
         contenuHTML = contenuApresExtractionEvaluation;
         if (!texteEvaluationResume) {
           contenuHTML = contenuHTML.split('{{TEXTE_EVALUATION}}').join('');
           avertissementsResume.push(modeEvaluationResumeEffectif === 'continuation'
             ? "Le modèle n'a pas fourni la portion du texte support à résumer par l'élève (marqueurs {{TEXTE_EVALUATION}}...{{FIN_TEXTE_EVALUATION}} absents ou vides) -- vérifiez la ligne ÉVALUATION de la fiche générée."
             : "Le modèle n'a pas fourni de texte nouveau pour l'Évaluation du résumé (marqueurs {{TEXTE_EVALUATION}}...{{FIN_TEXTE_EVALUATION}} absents ou vides) -- vérifiez la ligne ÉVALUATION de la fiche générée.");
-        } else if (modeEvaluationResumeEffectif === 'continuation' && texteSupport
-          && !normaliserTexte(texteSupport).includes(normaliserTexte(texteEvaluationResume))) {
-          // Filet de sécurité (jamais un blocage, juste un avertissement) :
-          // en mode 'continuation', le texte de l'Évaluation DOIT être une
-          // portion copiée mot pour mot du texte support -- si le modèle a
-          // reformulé ou inventé du contenu à la place, le calibrage
-          // resterait techniquement correct (calculé sur ce texte) mais ne
-          // porterait plus sur "la portion restante du texte support" comme
-          // demandé -- signalé pour vérification par l'enseignant.
-          avertissementsResume.push("En mode « continuation du texte support », le texte de l'Évaluation ne semble pas être une portion copiée mot pour mot du texte support généré -- vérifiez que le modèle n'a pas reformulé ou inventé du contenu au lieu de recopier la suite exacte du texte.");
+        } else {
+          // Même filet de sécurité SERVEUR que pour le texte support
+          // principal (09/08, cf. retirerBlocQuestionsFinal) -- le texte de
+          // l'Évaluation (mode 'nouveau') est rédigé par le modèle de la
+          // même façon ("comme dans un vrai texte publié"), donc exposé au
+          // même risque d'inclusion d'un bloc QUESTIONS en trop.
+          const { texte: texteEvaluationSansQuestions, tronque: evaluationTronquee } = retirerBlocQuestionsFinal(texteEvaluationResume);
+          if (evaluationTronquee) {
+            texteEvaluationResume = texteEvaluationSansQuestions;
+            avertissementsResume.push("Le modèle avait inclus un bloc « QUESTIONS » à l'intérieur du texte de l'Évaluation -- retiré automatiquement avant impression et calibrage. Vérifiez le texte de l'Évaluation imprimé.");
+          }
+          if (ressembleAUnEnTeteScolaire(texteEvaluationResume)) {
+            avertissementsResume.push("Le début du texte de l'Évaluation extrait ressemble à un en-tête scolaire plutôt qu'au texte lui-même -- il n'a PAS été retiré automatiquement (risque de tronquer un titre légitime). Vérifiez le début du texte imprimé et régénérez si besoin.");
+          }
+          if (modeEvaluationResumeEffectif === 'continuation' && texteSupport
+            && !normaliserTexte(texteSupport).includes(normaliserTexte(texteEvaluationResume))) {
+            // Filet de sécurité (jamais un blocage, juste un avertissement) :
+            // en mode 'continuation', le texte de l'Évaluation DOIT être une
+            // portion copiée mot pour mot du texte support -- si le modèle a
+            // reformulé ou inventé du contenu à la place, le calibrage
+            // resterait techniquement correct (calculé sur ce texte) mais ne
+            // porterait plus sur "la portion restante du texte support" comme
+            // demandé -- signalé pour vérification par l'enseignant.
+            avertissementsResume.push("En mode « continuation du texte support », le texte de l'Évaluation ne semble pas être une portion copiée mot pour mot du texte support généré -- vérifiez que le modèle n'a pas reformulé ou inventé du contenu au lieu de recopier la suite exacte du texte.");
+          }
         }
         if (contientArtefactSuspect(texteEvaluationResume)) {
           avertissementsResume.push("Le texte de l'Évaluation extrait contient des éléments qui ne devraient pas s'y trouver (marqueur ou balise de tableau) -- l'extraction a probablement capturé du contenu en trop, ce qui fausserait son calibrage. Vérifiez le texte imprimé et régénérez si besoin.");
