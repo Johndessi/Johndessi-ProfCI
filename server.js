@@ -915,6 +915,46 @@ function compterMotsResume(texte) {
   return total;
 }
 
+// INSTRUMENTATION TEMPORAIRE (09/08) : l'enseignant a constaté, sur 2 tests
+// consécutifs, un calibrage IV-4 tourné vers ~213-215 mots pour un texte
+// support réel de 163 mots -- persistant même sans annotation "(N mots)"
+// dans le texte collé, ce qui écarte l'hypothèse de contamination par
+// annotation. Cette fonction sépare, dans l'écart observé, la part
+// imputable aux élisions (comportement VOULU de compterMotsResume : "c'est"
+// = 2 mots) de toute part qui resterait inexpliquée (signe possible d'une
+// sur-capture : contenu en trop dans le texte réellement extrait, invisible
+// tant qu'on ne voit pas le texte compté lui-même) -- fournit un aperçu
+// début/fin du texte RÉELLEMENT soumis au comptage, pour comparaison
+// directe avec ce qui est visible dans la fiche imprimée. À RETIRER une
+// fois l'écart définitivement expliqué et corrigé (cf. avertissementsResume
+// dans stream.on('finalMessage', ...)).
+function analyserComptageResume(texte) {
+  const t = (texte || '').toString();
+  const motsBasique = compterMots(t);
+  const motsResume = compterMotsResume(t);
+  const sansAnnotation = t.replace(/\(\s*\d[\d\s]*\s*mots?\s*\)/gi, ' ').trim();
+  let elisions = 0;
+  for (const brut of sansAnnotation.split(/\s+/)) {
+    if (!brut) continue;
+    const mot = brut.normalize('NFC').replace(/^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu, '');
+    if (!mot) continue;
+    const motNorm = normaliserTexte(mot);
+    if (MOTS_APOSTROPHE_UN_SEUL_MOT.some((m) => normaliserTexte(m) === motNorm)) continue;
+    const parties = mot.split(/['’]/).filter(Boolean);
+    if (parties.length > 1) elisions += parties.length - 1;
+  }
+  const tokens = t.trim().split(/\s+/).filter(Boolean);
+  return {
+    motsBasique,
+    motsResume,
+    elisions,
+    ecartInexplique: (motsResume - motsBasique) - elisions,
+    longueurCaracteres: t.length,
+    apercuDebut: tokens.slice(0, 12).join(' '),
+    apercuFin: tokens.slice(-12).join(' ')
+  };
+}
+
 // Seuil de duplication du texte support (2ᵉ exemplaire en police réduite sur
 // la même page, pour permettre à l'enseignant de photocopier une seule feuille
 // et distribuer deux exemplaires — économie de papier avec des effectifs
@@ -3941,6 +3981,10 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // marqueurs {{RESUME_FINAL}}/{{FIN_RESUME_FINAL}} sont retirés, pour
         // pouvoir vérifier après coup que sa longueur reste dans l'encadrement.
         if (texteSupport) {
+          // INSTRUMENTATION TEMPORAIRE (09/08, cf. analyserComptageResume) --
+          // à retirer une fois l'écart constaté en prod expliqué et corrigé.
+          const diagSupport = analyserComptageResume(texteSupport);
+          avertissementsResume.push(`🔍 Diagnostic calibrage (temporaire) — texte support : ${diagSupport.motsResume} mots [règle résumé] vs ${diagSupport.motsBasique} mots [découpe brute] (écart total ${diagSupport.motsResume - diagSupport.motsBasique}, dont ${diagSupport.elisions} attribuable(s) à des élisions détectées, écart inexpliqué ${diagSupport.ecartInexplique}). Longueur du texte réellement compté : ${diagSupport.longueurCaracteres} caractères. Début : « ${diagSupport.apercuDebut}... ». Fin : « ...${diagSupport.apercuFin} ».`);
           const calibragePrincipal = calculerCalibrageResume(compterMotsResume(texteSupport));
           contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{CALIBRAGE_RESUME}}', texteCalibrageResume(calibragePrincipal));
           const { texte: resumeFinal, contenuHTML: contenuApresResumeFinal } = extraireEtDemasquerTexte(contenuHTML, '{{RESUME_FINAL}}', '{{FIN_RESUME_FINAL}}');
@@ -3955,8 +3999,18 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
 
         // Même logique pour le résumé corrigé de l'Évaluation, à partir du
         // nombre de mots RÉEL du texte NOUVEAU généré pour l'Évaluation --
-        // jamais celui du texte support principal.
+        // jamais celui du texte support principal. Les marqueurs
+        // {{CALIBRAGE_EVALUATION}}/{{RESUME_EVALUATION_FINAL}}/
+        // {{FIN_RESUME_EVALUATION_FINAL}} sont TOUJOURS résolus ci-dessous,
+        // même quand texteEvaluationResume n'a pas pu être extrait (sinon
+        // ils restent visibles tels quels dans la fiche finale -- régression
+        // constatée le 09/08 quand {{FIN_TEXTE_EVALUATION}} est absent/mal
+        // placé par le modèle : l'échec de CETTE extraction ne doit jamais
+        // laisser les marqueurs SUIVANTS, eux, orphelins).
         if (texteEvaluationResume) {
+          // INSTRUMENTATION TEMPORAIRE (09/08, cf. analyserComptageResume).
+          const diagEvaluation = analyserComptageResume(texteEvaluationResume);
+          avertissementsResume.push(`🔍 Diagnostic calibrage (temporaire) — texte Évaluation : ${diagEvaluation.motsResume} mots [règle résumé] vs ${diagEvaluation.motsBasique} mots [découpe brute] (écart total ${diagEvaluation.motsResume - diagEvaluation.motsBasique}, dont ${diagEvaluation.elisions} attribuable(s) à des élisions détectées, écart inexpliqué ${diagEvaluation.ecartInexplique}). Longueur du texte réellement compté : ${diagEvaluation.longueurCaracteres} caractères. Début : « ${diagEvaluation.apercuDebut}... ». Fin : « ...${diagEvaluation.apercuFin} ».`);
           const calibrageEvaluation = calculerCalibrageResume(compterMotsResume(texteEvaluationResume));
           contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{CALIBRAGE_EVALUATION}}', texteCalibrageResume(calibrageEvaluation));
           const { texte: resumeEvaluationFinal, contenuHTML: contenuApresResumeEvaluationFinal } = extraireEtDemasquerTexte(contenuHTML, '{{RESUME_EVALUATION_FINAL}}', '{{FIN_RESUME_EVALUATION_FINAL}}');
@@ -3967,6 +4021,17 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
               avertissementsResume.push(`Le résumé corrigé de l'Évaluation fait ${motsResumeEvaluationFinal} mots, hors de l'encadrement calculé [${calibrageEvaluation.min}-${calibrageEvaluation.max}] pour ce texte (${calibrageEvaluation.nmt} mots) -- vérifiez la correction produite dans la fiche.`);
             }
           }
+        } else {
+          // Aucun calibrage possible (texte de l'Évaluation absent, cf.
+          // avertissement déjà émis plus haut) -- retire quand même
+          // {{CALIBRAGE_EVALUATION}} (rien de fiable à y injecter) et
+          // démasque {{RESUME_EVALUATION_FINAL}}/{{FIN_RESUME_EVALUATION_FINAL}}
+          // (garde visible tout contenu que le modèle aurait quand même
+          // rédigé à cet endroit, sans calibrage à son sujet) -- jamais un
+          // marqueur laissé visible tel quel, avec ou sans contenu calibrable.
+          contenuHTML = contenuHTML.split('{{CALIBRAGE_EVALUATION}}').join('');
+          const { contenuHTML: contenuDemasqueEvaluation } = extraireEtDemasquerTexte(contenuHTML, '{{RESUME_EVALUATION_FINAL}}', '{{FIN_RESUME_EVALUATION_FINAL}}');
+          contenuHTML = contenuDemasqueEvaluation;
         }
 
         for (const avertissementResume of avertissementsResume) {
