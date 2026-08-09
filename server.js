@@ -2672,10 +2672,23 @@ const REFERENTIEL_RESUME = {
 // jamais un mélange des deux. Structure imposée : I. Définition / II.
 // Analyse du texte-support et étapes du résumé / III. Outils de la langue /
 // IV. Application au texte-support (sélection, reformulation, rédaction
-// collective, calibrage). L'Évaluation utilise TOUJOURS un texte NOUVEAU,
-// jamais le texte support principal (confirmé dans les 2 fiches de
-// référence -- à la différence de la Lecture méthodique).
-function construireInstructionsResume(classe, texteSupportFourni) {
+// collective, calibrage). L'Évaluation admet 2 démarches valables, au choix
+// de l'enseignant (précision du 09/08, pas de fiche de référence dédiée :
+// instruction directe de l'enseignant, à appliquer telle quelle comme les
+// autres règles non négociables de cette section) -- jamais une 3e démarche
+// improvisée :
+//   - 'nouveau' (comportement historique, seul testé en prod jusqu'ici) : un
+//     texte NOUVEAU et distinct, entièrement à résumer par l'élève seul.
+//   - 'continuation' : le MÊME texte support déjà rédigé plus haut, dont le
+//     professeur résume lui-même une première partie (en classe, hors fiche)
+//     à titre de modèle, et dont l'élève doit résumer seul la portion
+//     restante -- aucun 2nd texte n'est généré, seule la portion restante
+//     (copiée mot pour mot, jamais reformulée) est extraite et calibrée.
+// Dans les 2 cas, le calibrage reste calculé côté serveur à partir du nombre
+// de mots RÉEL du texte effectivement à résumer par l'élève (le texte
+// nouveau entier, ou la seule portion restante selon le mode) -- jamais une
+// valeur copiée d'un autre texte ni calculée par le modèle.
+function construireInstructionsResume(classe, texteSupportFourni, modeEvaluationResume) {
   const type = niveauResume(classe);
   if (!type) {
     return {
@@ -2687,6 +2700,7 @@ function construireInstructionsResume(classe, texteSupportFourni) {
 
   const donnees = REFERENTIEL_RESUME[type];
   const outilsTexte = donnees.outils.map((o) => `- ${o}`).join('\n');
+  const modeEvaluation = modeEvaluationResume === 'continuation' ? 'continuation' : 'nouveau';
 
   const consigneTexteSupport = texteSupportFourni
     ? `Le texte support (${donnees.typeSourceLabel}) a été fourni par l'enseignant -- utilise-le EXACTEMENT tel quel (jamais recopié dans ta réponse), à l'endroit où il doit apparaître dans le HTML : utilise le marqueur {{TEXTE_SUPPORT}} UNE SEULE FOIS, à un seul endroit de la fiche.`
@@ -2720,11 +2734,14 @@ IV. APPLICATION AU TEXTE-SUPPORT :
    3. Enchaînement logique entre les idées reformulées (connecteurs logiques explicites entre chaque idée).
    4. Rédaction collective du résumé final, en UN SEUL paragraphe (jamais de titre, jamais d'introduction/développement/conclusion séparés, jamais de jugement personnel ni d'idée ajoutée). Place EXACTEMENT le marqueur {{CALIBRAGE_RESUME}} juste AVANT le résumé final, sur sa propre ligne -- il sera remplacé automatiquement par le calcul du calibrage (NE CALCULE RIEN toi-même, ne recopie AUCUN chiffre : le calibrage exact sera inséré automatiquement à partir du nombre de mots réel du texte support). Place le résumé final que tu rédiges entre les marqueurs {{RESUME_FINAL}} et {{FIN_RESUME_FINAL}}, N'IMPORTE OÙ après {{CALIBRAGE_RESUME}} -- ces 2 marqueurs seront retirés du document final, seul ton résumé restera visible à leur place.
 
-ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose TOUJOURS un texte NOUVEAU, JAMAIS le texte support principal ni un extrait de celui-ci (règle vérifiée dans les 2 fiches de référence) -- un ${donnees.typeSourceLabel} différent, sur un autre sujet, de longueur comparable (150 à 220 mots), avec son auteur/sa source. Consigne : demander à l'élève de répondre à 1-2 questions de compréhension puis de résumer ce nouveau texte au 1/3 de son volume avec une marge de ±10%. Fournis aussi la correction attendue (traitement de la situation d'évaluation), avec la même démarche qu'en IV ci-dessus. Place ce nouveau texte, et UNIQUEMENT lui, entre les marqueurs {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, N'IMPORTE OÙ dans ta réponse -- NE LE RECOPIE PAS ailleurs, il sera inséré automatiquement à l'endroit prévu pour l'Évaluation. Comme en IV, place EXACTEMENT le marqueur {{CALIBRAGE_EVALUATION}} juste avant le résumé corrigé de ce nouveau texte (jamais de calcul ni de chiffre inventé par toi), et place ce résumé corrigé entre {{RESUME_EVALUATION_FINAL}} et {{FIN_RESUME_EVALUATION_FINAL}}.
+${modeEvaluation === 'continuation'
+  ? `ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : cette évaluation NE PORTE PAS sur un texte nouveau -- elle réutilise le MÊME texte support déjà rédigé plus haut (celui du marqueur {{TEXTE_SUPPORT}}), selon la démarche suivante : le professeur résume lui-même, en classe, une première partie du texte à titre d'exemple/de modèle -- tu n'as PAS à rédiger ce résumé modèle ni à le mentionner dans la fiche. Choisis un point de coupure net dans le texte support (fin d'un paragraphe), après lequel commence la portion laissée à l'élève. Copie EXACTEMENT, MOT POUR MOT (aucune reformulation, aucune coupure de phrase, aucun ajout ni omission), cette portion restante -- et UNIQUEMENT elle -- entre les marqueurs {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, N'IMPORTE OÙ dans ta réponse -- NE LA RECOPIE PAS ailleurs, elle sera insérée automatiquement à l'endroit prévu pour l'Évaluation, sous un titre indiquant qu'il s'agit de la suite du texte support. Consigne : l'élève doit résumer SEUL cette portion restante, au 1/3 de son volume avec une marge de ±10% (calibrage calculé automatiquement sur le nombre de mots réel de CETTE PORTION SEULE, jamais sur le texte support entier). Comme en IV, place EXACTEMENT le marqueur {{CALIBRAGE_EVALUATION}} juste avant le résumé corrigé de cette portion (jamais de calcul ni de chiffre inventé par toi), et place ce résumé corrigé entre {{RESUME_EVALUATION_FINAL}} et {{FIN_RESUME_EVALUATION_FINAL}}.`
+  : `ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose TOUJOURS un texte NOUVEAU, JAMAIS le texte support principal ni un extrait de celui-ci (règle vérifiée dans les 2 fiches de référence) -- un ${donnees.typeSourceLabel} différent, sur un autre sujet, de longueur comparable (150 à 220 mots), avec son auteur/sa source. Consigne : demander à l'élève de répondre à 1-2 questions de compréhension puis de résumer ce nouveau texte au 1/3 de son volume avec une marge de ±10%. Fournis aussi la correction attendue (traitement de la situation d'évaluation), avec la même démarche qu'en IV ci-dessus. Place ce nouveau texte, et UNIQUEMENT lui, entre les marqueurs {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, N'IMPORTE OÙ dans ta réponse -- NE LE RECOPIE PAS ailleurs, il sera inséré automatiquement à l'endroit prévu pour l'Évaluation. Comme en IV, place EXACTEMENT le marqueur {{CALIBRAGE_EVALUATION}} juste avant le résumé corrigé de ce nouveau texte (jamais de calcul ni de chiffre inventé par toi), et place ce résumé corrigé entre {{RESUME_EVALUATION_FINAL}} et {{FIN_RESUME_EVALUATION_FINAL}}.`
+}
 
 FORMAT DU TABLEAU 5 COLONNES : aucune exception -- 5 colonnes partout (Moments didactiques/Durée | Stratégies pédagogiques | Activités de l'enseignant | Activités des élèves | Trace écrite), y compris pour les étapes ci-dessus : ne réduis JAMAIS à 2 ou 4 colonnes.`;
 
-  return { instructions, bloque: false, messageBlocage: null, type };
+  return { instructions, bloque: false, messageBlocage: null, type, modeEvaluation };
 }
 
 function construireInstructionsExpressionEcriture(referentiel) {
@@ -3352,7 +3369,7 @@ function envoyerBlocageSSE(res, message) {
       classe, lecon, seance = '1', duree = '1 heure',
       theme = '', planCours = '', approche = 'APC',
       leconOfficielleId = '', seanceOfficielleId = '', optionChoisie = '', optionLibre = '',
-      activite = '', seanceIntitule = ''
+      activite = '', seanceIntitule = '', modeEvaluationResume = 'nouveau'
     } = req.body;
 
     const approcheNormalisee = (approche || 'APC').toString().trim().toUpperCase() || 'APC';
@@ -3388,6 +3405,11 @@ function envoyerBlocageSSE(res, message) {
     // stream.on('finalMessage', ...) pour l'extraction + le calibrage
     // server-side des 2 textes (jamais un calcul par le modèle).
     let modeResume = false;
+    // Mode de l'Évaluation du résumé effectivement appliqué ('nouveau' ou
+    // 'continuation', cf. construireInstructionsResume) -- déterminé une
+    // seule fois ici, réutilisé tel quel dans stream.on('finalMessage', ...)
+    // pour adapter le libellé imprimé et la validation de la portion.
+    let modeEvaluationResumeEffectif = 'nouveau';
 
     if (niveau !== 'primaire') {
       const estLM = estLectureMethodique({ discipline, lecon, theme, activite });
@@ -3444,12 +3466,13 @@ function envoyerBlocageSSE(res, message) {
         // générique -- bloque explicitement si le niveau n'est pas 4e/3e
         // (seuls niveaux couverts par une source vérifiée), jamais une
         // démarche improvisée pour un autre niveau.
-        const resultatResume = construireInstructionsResume(classe, !!texteSupport);
+        const resultatResume = construireInstructionsResume(classe, !!texteSupport, modeEvaluationResume);
         if (resultatResume.bloque) {
           return envoyerBlocageSSE(res, resultatResume.messageBlocage);
         }
         systemPrompt += resultatResume.instructions;
         modeResume = true;
+        modeEvaluationResumeEffectif = resultatResume.modeEvaluation;
       } else if (estEE) {
         // Même principe de blocage (07/08) que pour Lecture méthodique : la
         // section "Caractéristiques du texte"/outils de la langue ne doit
@@ -3809,16 +3832,29 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           }
         }
 
-        // Le texte de l'Évaluation est TOUJOURS généré par le modèle (jamais
-        // fourni par l'enseignant, jamais le texte support principal, règle
-        // vérifiée dans les 2 fiches de référence) -- extraireTexteEnPlace
-        // laisse {{TEXTE_EVALUATION}} intact à sa place pour injecterTexteSupport,
-        // appelé plus bas avec ce marqueur dédié.
+        // Le texte de l'Évaluation vient soit d'un texte NOUVEAU rédigé par le
+        // modèle (mode 'nouveau'), soit d'une portion copiée mot pour mot du
+        // texte support déjà rédigé (mode 'continuation', cf.
+        // construireInstructionsResume) -- extraireTexteEnPlace laisse
+        // {{TEXTE_EVALUATION}} intact à sa place pour injecterTexteSupport,
+        // appelé plus bas avec ce marqueur dédié, quel que soit le mode.
         const { texte: texteEvaluationResume, contenuHTML: contenuApresExtractionEvaluation } = extraireTexteEnPlace(contenuHTML, '{{TEXTE_EVALUATION}}', '{{FIN_TEXTE_EVALUATION}}');
         contenuHTML = contenuApresExtractionEvaluation;
         if (!texteEvaluationResume) {
           contenuHTML = contenuHTML.split('{{TEXTE_EVALUATION}}').join('');
-          avertissementsResume.push("Le modèle n'a pas fourni de texte nouveau pour l'Évaluation du résumé (marqueurs {{TEXTE_EVALUATION}}...{{FIN_TEXTE_EVALUATION}} absents ou vides) -- vérifiez la ligne ÉVALUATION de la fiche générée.");
+          avertissementsResume.push(modeEvaluationResumeEffectif === 'continuation'
+            ? "Le modèle n'a pas fourni la portion du texte support à résumer par l'élève (marqueurs {{TEXTE_EVALUATION}}...{{FIN_TEXTE_EVALUATION}} absents ou vides) -- vérifiez la ligne ÉVALUATION de la fiche générée."
+            : "Le modèle n'a pas fourni de texte nouveau pour l'Évaluation du résumé (marqueurs {{TEXTE_EVALUATION}}...{{FIN_TEXTE_EVALUATION}} absents ou vides) -- vérifiez la ligne ÉVALUATION de la fiche générée.");
+        } else if (modeEvaluationResumeEffectif === 'continuation' && texteSupport
+          && !normaliserTexte(texteSupport).includes(normaliserTexte(texteEvaluationResume))) {
+          // Filet de sécurité (jamais un blocage, juste un avertissement) :
+          // en mode 'continuation', le texte de l'Évaluation DOIT être une
+          // portion copiée mot pour mot du texte support -- si le modèle a
+          // reformulé ou inventé du contenu à la place, le calibrage
+          // resterait techniquement correct (calculé sur ce texte) mais ne
+          // porterait plus sur "la portion restante du texte support" comme
+          // demandé -- signalé pour vérification par l'enseignant.
+          avertissementsResume.push("En mode « continuation du texte support », le texte de l'Évaluation ne semble pas être une portion copiée mot pour mot du texte support généré -- vérifiez que le modèle n'a pas reformulé ou inventé du contenu au lieu de recopier la suite exacte du texte.");
         }
 
         // Calibrage du texte support principal -- calculé UNIQUEMENT à partir
@@ -3863,10 +3899,19 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         }
 
         // Impression intégrale du texte de l'Évaluation (marqueur dédié,
-        // jamais le même que le texte support principal) -- réutilise
+        // distinct du marqueur du texte support principal même quand son
+        // CONTENU en est extrait, mode 'continuation') -- réutilise
         // injecterTexteSupport SANS modification de sa logique, juste avec
-        // un marqueur/titre différents (cf. généralisation du 08/08).
-        contenuHTML = injecterTexteSupport(contenuHTML, texteEvaluationResume, { marqueur: '{{TEXTE_EVALUATION}}', titreRepli: "Texte de l'Évaluation", unePage: true });
+        // un marqueur/titre différents (cf. généralisation du 08/08). Le
+        // titre affiché précise au lecteur s'il s'agit d'un texte nouveau ou
+        // de la suite du texte support déjà lu plus haut dans la fiche.
+        contenuHTML = injecterTexteSupport(contenuHTML, texteEvaluationResume, {
+          marqueur: '{{TEXTE_EVALUATION}}',
+          titreRepli: modeEvaluationResumeEffectif === 'continuation'
+            ? "Portion du texte support à résumer par l'élève (Évaluation)"
+            : "Texte de l'Évaluation",
+          unePage: true
+        });
       }
       contenuHTML = injecterTexteSupport(contenuHTML, texteSupport, { unePage: estFicheExpressionEcrite });
       const fiche = await Fiche.create({

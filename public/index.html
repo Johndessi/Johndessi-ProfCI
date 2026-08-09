@@ -211,7 +211,7 @@ textarea { resize: vertical; min-height: 90px; }
         </div>
         <div class="form-group" id="activiteGroup" style="display:none">
           <label>Activité *</label>
-          <select id="activite" onchange="verifierCatalogueOfficiel()">
+          <select id="activite" onchange="verifierCatalogueOfficiel();mettreAJourVisibiliteResume()">
             <option value="">-- Choisir une activité --</option>
             <option>Expression écrite</option>
             <option>Lecture méthodique</option>
@@ -227,12 +227,12 @@ textarea { resize: vertical; min-height: 90px; }
         <div class="form-group" id="leconLibreBox">
           <label>Leçon / Thème *</label>
           <input id="lecon" type="text" autocomplete="off" placeholder="Ex: Les modalités verbales de l'indicatif"
-            oninput="filtrerSuggestionsLecons()" onfocus="filtrerSuggestionsLecons()"/>
+            oninput="filtrerSuggestionsLecons();mettreAJourVisibiliteResume()" onfocus="filtrerSuggestionsLecons()"/>
           <div id="leconSuggestionsBox" class="lecon-suggestions"></div>
         </div>
         <div class="form-group" id="catalogueLeconGroup" style="display:none">
           <label>Leçon *</label>
-          <select id="catalogueLecon" onchange="choisirLeconCatalogue()">
+          <select id="catalogueLecon" onchange="choisirLeconCatalogue();mettreAJourVisibiliteResume()">
             <option value="">-- Choisir une leçon --</option>
           </select>
         </div>
@@ -287,6 +287,14 @@ textarea { resize: vertical; min-height: 90px; }
         <textarea id="texteSupport" style="min-height:120px"
           placeholder="Collez ici le texte support (jusqu'à environ 600 mots)..."></textarea>
         <input id="texteSupportFichier" type="file" accept=".pdf,.doc,.docx" style="margin-top:8px"/>
+      </div>
+
+      <div class="form-group" id="modeEvaluationResumeGroup" style="display:none;margin-bottom:14px">
+        <label>Évaluation du résumé</label>
+        <select id="modeEvaluationResume">
+          <option value="nouveau" selected>Un nouveau texte, entièrement à résumer par l'élève seul</option>
+          <option value="continuation">Le même texte support : je résume moi-même une partie en classe, l'élève résume le reste</option>
+        </select>
       </div>
 
       <button class="btn" id="btnGenerer" onclick="genererFiche()">
@@ -447,6 +455,24 @@ function mettreAJourVisibiliteActivite() {
   const visible = niveauActuel === 'secondaire' && estFrancais;
   document.getElementById('activiteGroup').style.display = visible ? 'block' : 'none';
   if (!visible) document.getElementById('activite').value = '';
+  mettreAJourVisibiliteResume();
+}
+
+// Miroir client (affichage uniquement) de estResume() côté serveur : Expression
+// écrite + "résumé" quelque part dans la Leçon -- le serveur reste la seule
+// source de vérité pour le routage réel, ce contrôle ne fait qu'afficher le
+// choix du mode d'évaluation quand il est pertinent (précision du 09/08 :
+// 2 démarches d'évaluation valables pour un résumé, au choix de l'enseignant).
+function mettreAJourVisibiliteResume() {
+  const activite = document.getElementById('activiteGroup').style.display !== 'none'
+    ? document.getElementById('activite').value
+    : '';
+  const lecon = catalogueActif
+    ? (document.getElementById('catalogueLecon').selectedOptions[0]?.textContent || '')
+    : document.getElementById('lecon').value;
+  const estExpressionEcrite = normaliserTexteSimple(activite) === 'expression ecrite';
+  const estResume = estExpressionEcrite && /\bresume\b/.test(normaliserTexteSimple(lecon));
+  document.getElementById('modeEvaluationResumeGroup').style.display = estResume ? 'block' : 'none';
 }
 
 // Le natif <datalist> n'affiche aucune suggestion sur Safari (iOS/iPadOS/macOS),
@@ -681,6 +707,7 @@ async function genererFiche() {
         planCours   : document.getElementById('planCours').value.trim(),
         texteSupport: document.getElementById('texteSupport').value.trim(),
         seanceIntitule: document.getElementById('seanceIntitule').value.trim(),
+        modeEvaluationResume: document.getElementById('modeEvaluationResume').value,
         leconOfficielleId, seanceOfficielleId, optionChoisie, optionLibre
       };
       const fichierSupport = document.getElementById('texteSupportFichier').files[0];
