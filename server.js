@@ -856,6 +856,65 @@ function compterMots(texte) {
   return (texte || '').trim().split(/\s+/).filter(Boolean).length;
 }
 
+// Mots composés à apostrophe qui comptent pour 1 SEUL mot (élision figée,
+// jamais 2 mots distincts contrairement à la règle générale) -- précision
+// du 09/08. Liste NON EXHAUSTIVE : à COMPLÉTER si un cas litigieux
+// apparaît, jamais à deviner au cas par cas dans le code d'appel.
+// Comparée insensible à la casse/aux accents (cf. normaliserTexte).
+const MOTS_APOSTROPHE_UN_SEUL_MOT = [
+  "aujourd'hui",
+  "quelqu'un", "quelqu'une",
+  "presqu'île",
+  "entr'ouvert", "entr'ouverte", "entr'ouverts", "entr'ouvertes",
+  "entr'aide", "entr'aider", "entr'apercevoir"
+];
+
+// Comptage du nombre de mots d'un texte à résumer, selon les règles
+// françaises standard de l'exercice de résumé (précision du 09/08) --
+// SEULE fonction utilisée pour TOUT calibrage de résumé (IV-4 comme
+// Évaluation, quel que soit le mode) : jamais compterMots() (comptage
+// générique par simple découpe sur les espaces, encore utilisé ailleurs
+// dans l'app pour des heuristiques de mise en page sans enjeu pédagogique,
+// ex. texteSupportDoitEtreDuplique -- volontairement INCHANGÉ, ce n'est pas
+// un calibrage de résumé). Règles appliquées :
+//  - une éventuelle annotation de nombre de mots collée dans le texte
+//    (ex. "(163 mots)") est TOUJOURS retirée avant comptage -- jamais lue
+//    comme une valeur de confiance, juste ou fausse : le texte réellement
+//    soumis est toujours recompté en entier, à partir de son contenu réel ;
+//  - l'apostrophe (dactylographique ' ou typographique ’) sépare 2 mots
+//    (c'est = 2, l'harmattan = 2, n'est = 2), SAUF pour les mots composés
+//    figés de MOTS_APOSTROPHE_UN_SEUL_MOT (aujourd'hui = 1) ;
+//  - le trait d'union NE sépare PAS (porte-monnaie = 1 mot, toki-toka = 1
+//    mot) -- comportement déjà celui de la découpe sur espaces, inchangé ;
+//  - un nombre écrit en chiffres compte pour 1 mot, quel que soit son
+//    nombre de chiffres (10, 2000, 10000 = 1 mot chacun) -- même
+//    comportement naturel de la découpe sur espaces, inchangé.
+function compterMotsResume(texte) {
+  let t = (texte || '').toString();
+  // Annotation parenthétique de nombre de mots (ex. "(163 mots)",
+  // "( 163  mots )") -- jamais comptée, quelle que soit sa justesse.
+  t = t.replace(/\(\s*\d[\d\s]*\s*mots?\s*\)/gi, ' ').trim();
+  if (!t) return 0;
+
+  let total = 0;
+  for (const brut of t.split(/\s+/)) {
+    if (!brut) continue;
+    // Retire la ponctuation de bord (virgule, point, guillemets...) sans
+    // toucher aux apostrophes internes ni aux chiffres -- unicode-aware
+    // pour couvrir les lettres accentuées.
+    const mot = brut.normalize('NFC').replace(/^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu, '');
+    if (!mot) continue;
+    const motNorm = normaliserTexte(mot);
+    if (MOTS_APOSTROPHE_UN_SEUL_MOT.some((m) => normaliserTexte(m) === motNorm)) {
+      total += 1;
+      continue;
+    }
+    const parties = mot.split(/['’]/).filter(Boolean);
+    total += parties.length || 1;
+  }
+  return total;
+}
+
 // Seuil de duplication du texte support (2ᵉ exemplaire en police réduite sur
 // la même page, pour permettre à l'enseignant de photocopier une seule feuille
 // et distribuer deux exemplaires — économie de papier avec des effectifs
@@ -3832,6 +3891,19 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           }
         }
 
+        // Filet de sécurité (09/08) : un texte extrait qui contient encore un
+        // marqueur ({{...}}) ou une balise de tableau (<table, <tr, <td) est
+        // un signe quasi certain que l'extraction a capturé TROP de contenu
+        // (marqueur de fermeture mal placé/dupliqué par le modèle, span
+        // débordant sur une autre section) -- le calibrage serait alors
+        // calculé sur un texte gonflé, jamais sur le texte support réel.
+        // Jamais un blocage (le texte reste imprimé tel quel, l'enseignant
+        // reste juge), juste un avertissement explicite et immédiat.
+        const contientArtefactSuspect = (texte) => /\{\{[A-Z_]+\}\}|<table|<tr[\s>]|<td[\s>]/i.test(texte || '');
+        if (contientArtefactSuspect(texteSupport)) {
+          avertissementsResume.push("Le texte support extrait contient des éléments qui ne devraient pas s'y trouver (marqueur ou balise de tableau) -- l'extraction a probablement capturé du contenu en trop, ce qui fausserait le calibrage. Vérifiez le texte support imprimé et régénérez si besoin.");
+        }
+
         // Le texte de l'Évaluation vient soit d'un texte NOUVEAU rédigé par le
         // modèle (mode 'nouveau'), soit d'une portion copiée mot pour mot du
         // texte support déjà rédigé (mode 'continuation', cf.
@@ -3856,6 +3928,9 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           // demandé -- signalé pour vérification par l'enseignant.
           avertissementsResume.push("En mode « continuation du texte support », le texte de l'Évaluation ne semble pas être une portion copiée mot pour mot du texte support généré -- vérifiez que le modèle n'a pas reformulé ou inventé du contenu au lieu de recopier la suite exacte du texte.");
         }
+        if (contientArtefactSuspect(texteEvaluationResume)) {
+          avertissementsResume.push("Le texte de l'Évaluation extrait contient des éléments qui ne devraient pas s'y trouver (marqueur ou balise de tableau) -- l'extraction a probablement capturé du contenu en trop, ce qui fausserait son calibrage. Vérifiez le texte imprimé et régénérez si besoin.");
+        }
 
         // Calibrage du texte support principal -- calculé UNIQUEMENT à partir
         // du nombre de mots RÉEL de ce texte précis (jamais une valeur
@@ -3866,12 +3941,12 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // marqueurs {{RESUME_FINAL}}/{{FIN_RESUME_FINAL}} sont retirés, pour
         // pouvoir vérifier après coup que sa longueur reste dans l'encadrement.
         if (texteSupport) {
-          const calibragePrincipal = calculerCalibrageResume(compterMots(texteSupport));
+          const calibragePrincipal = calculerCalibrageResume(compterMotsResume(texteSupport));
           contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{CALIBRAGE_RESUME}}', texteCalibrageResume(calibragePrincipal));
           const { texte: resumeFinal, contenuHTML: contenuApresResumeFinal } = extraireEtDemasquerTexte(contenuHTML, '{{RESUME_FINAL}}', '{{FIN_RESUME_FINAL}}');
           contenuHTML = contenuApresResumeFinal;
           if (resumeFinal) {
-            const motsResumeFinal = compterMots(resumeFinal);
+            const motsResumeFinal = compterMotsResume(resumeFinal);
             if (motsResumeFinal < calibragePrincipal.min || motsResumeFinal > calibragePrincipal.max) {
               avertissementsResume.push(`Le résumé rédigé fait ${motsResumeFinal} mots, hors de l'encadrement calculé [${calibragePrincipal.min}-${calibragePrincipal.max}] pour ce texte support (${calibragePrincipal.nmt} mots) -- vérifiez le résumé produit dans la fiche.`);
             }
@@ -3882,12 +3957,12 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // nombre de mots RÉEL du texte NOUVEAU généré pour l'Évaluation --
         // jamais celui du texte support principal.
         if (texteEvaluationResume) {
-          const calibrageEvaluation = calculerCalibrageResume(compterMots(texteEvaluationResume));
+          const calibrageEvaluation = calculerCalibrageResume(compterMotsResume(texteEvaluationResume));
           contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{CALIBRAGE_EVALUATION}}', texteCalibrageResume(calibrageEvaluation));
           const { texte: resumeEvaluationFinal, contenuHTML: contenuApresResumeEvaluationFinal } = extraireEtDemasquerTexte(contenuHTML, '{{RESUME_EVALUATION_FINAL}}', '{{FIN_RESUME_EVALUATION_FINAL}}');
           contenuHTML = contenuApresResumeEvaluationFinal;
           if (resumeEvaluationFinal) {
-            const motsResumeEvaluationFinal = compterMots(resumeEvaluationFinal);
+            const motsResumeEvaluationFinal = compterMotsResume(resumeEvaluationFinal);
             if (motsResumeEvaluationFinal < calibrageEvaluation.min || motsResumeEvaluationFinal > calibrageEvaluation.max) {
               avertissementsResume.push(`Le résumé corrigé de l'Évaluation fait ${motsResumeEvaluationFinal} mots, hors de l'encadrement calculé [${calibrageEvaluation.min}-${calibrageEvaluation.max}] pour ce texte (${calibrageEvaluation.nmt} mots) -- vérifiez la correction produite dans la fiche.`);
             }
