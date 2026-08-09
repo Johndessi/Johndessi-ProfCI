@@ -906,10 +906,34 @@ function envelopperTexteSupportUnePage(texteHtml, motsTexteSupport) {
   return `<div class="texte-support-page-unique" style="font-size:${taille}px;line-height:1.25;page-break-inside:avoid;break-inside:avoid;">${texteHtml}</div>`;
 }
 
+// Injecte le contenu déjà construit à la place d'UN marqueur (unique
+// occurrence réelle -- toute occurrence surnuméraire du modèle est
+// simplement retirée, jamais dupliquée). Factorisée ici (auparavant locale à
+// injecterDeroulementPlanEnseignant) pour être réutilisable partout où un
+// contenu déjà construit doit remplacer un marqueur unique -- notamment le
+// calibrage du résumé (cf. injecterCalibrageResume), qui n'a besoin d'aucune
+// des règles spécifiques au texte support (police/duplication) ci-dessous.
+function injecterMarqueurUneFois(html, marqueur, contenu) {
+  if (contenu === null || contenu === undefined || !html.includes(marqueur)) return html;
+  const morceaux = html.split(marqueur);
+  return morceaux[0] + contenu + morceaux.slice(1).join('');
+}
+
+// marqueur/marqueurCopie/titreRepli paramétrables (défauts = comportement
+// historique, {{TEXTE_SUPPORT}}/{{TEXTE_SUPPORT_COPIE}}/"Texte support") pour
+// pouvoir imprimer, avec la MÊME logique, un 2e texte intégral distinct à un
+// autre endroit du document -- cas du résumé (04/08→08/08) : le texte
+// support principal ET le texte de l'Évaluation (toujours différent, jamais
+// le même texte, cf. construireInstructionsResume) sont chacun un texte
+// complet à imprimer, avec son propre marqueur.
 function injecterTexteSupport(contenuHTML, texteSupport, options = {}) {
   if (!texteSupport) return contenuHTML;
   const texteHtml = texteSupportVersHtml(texteSupport);
   if (!texteHtml) return contenuHTML;
+
+  const marqueur = options.marqueur || '{{TEXTE_SUPPORT}}';
+  const marqueurCopie = options.marqueurCopie || '{{TEXTE_SUPPORT_COPIE}}';
+  const titreRepli = options.titreRepli || 'Texte support';
 
   const motsTexteSupport = compterMots(texteSupport);
   const texteAInserer = options.unePage
@@ -917,18 +941,19 @@ function injecterTexteSupport(contenuHTML, texteSupport, options = {}) {
     : texteHtml;
 
   let resultat;
-  if (contenuHTML.includes('{{TEXTE_SUPPORT}}')) {
+  if (contenuHTML.includes(marqueur)) {
     // Une seule insertion réelle même si le modèle a répété le marqueur par
     // erreur (ex. une deuxième fois entre les tableaux de vérification des 2
     // axes en Lecture méthodique) : seule la 1ère occurrence reçoit le texte,
-    // les occurrences suivantes du marqueur sont simplement retirées.
-    const morceaux = contenuHTML.split('{{TEXTE_SUPPORT}}');
-    resultat = morceaux[0] + texteAInserer + morceaux.slice(1).join('');
+    // les occurrences suivantes du marqueur sont simplement retirées (déjà
+    // garanti par injecterMarqueurUneFois : split() sur TOUTES les
+    // occurrences, mais le marqueur n'est réinséré nulle part).
+    resultat = injecterMarqueurUneFois(contenuHTML, marqueur, texteAInserer);
   } else {
     // Le modèle a oublié le marqueur : insère une section dédiée juste avant le
     // tableau de déroulement (qui contient les questions), donc en fin de fiche
     // mais avant la partie questions.
-    const section = `<div class="texte-support"><h3>Texte support</h3>${texteAInserer}</div>\n`;
+    const section = `<div class="texte-support"><h3>${titreRepli}</h3>${texteAInserer}</div>\n`;
     const derniereTable = contenuHTML.lastIndexOf('<table');
     resultat = derniereTable !== -1
       ? contenuHTML.slice(0, derniereTable) + section + contenuHTML.slice(derniereTable)
@@ -938,8 +963,8 @@ function injecterTexteSupport(contenuHTML, texteSupport, options = {}) {
   if (options.unePage) {
     // Pas de duplication en Expression écrite (contrainte : une seule page) --
     // si le modèle a quand même ajouté le marqueur par erreur, on le retire.
-    resultat = resultat.split('{{TEXTE_SUPPORT_COPIE}}').join('');
-  } else if (resultat.includes('{{TEXTE_SUPPORT_COPIE}}')) {
+    resultat = resultat.split(marqueurCopie).join('');
+  } else if (resultat.includes(marqueurCopie)) {
     // Duplication conditionnelle : décidée UNIQUEMENT côté serveur (nombre de
     // mots réel), jamais laissée au jugement du modèle — même si le modèle a
     // inclus le marqueur par erreur pour un texte long, il est retiré ici.
@@ -949,7 +974,7 @@ function injecterTexteSupport(contenuHTML, texteSupport, options = {}) {
   ${texteHtml}
 </div>`
       : '';
-    resultat = resultat.split('{{TEXTE_SUPPORT_COPIE}}').join(copieHtml);
+    resultat = resultat.split(marqueurCopie).join(copieHtml);
   }
 
   return resultat;
@@ -998,6 +1023,63 @@ function estLectureMethodique({ discipline, lecon, theme, activite }) {
 function estExpressionEcrite({ discipline, lecon, theme, activite }) {
   const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
   return cible.includes('expression ecrite');
+}
+
+// Le résumé est une activité d'Expression écrite (catalogue DPFC, discipline
+// Français), mais sa démarche réelle (validée le 08/08 contre 2 fiches
+// réelles vérifiées, 3e et 4e) est INCOMPATIBLE avec le squelette générique
+// EE (I. Définition/II. Structure/III. Outils/IV. Recherche-organisation/
+// V. Rédaction collective, cf. construireInstructionsExpressionEcriture) --
+// casser cette démarche pour la faire rentrer de force dans le squelette
+// générique casse la leçon (règle non négociable). estResume() doit donc
+// être vérifié EN PREMIER, avant estExpressionEcrite, pour intercepter le
+// résumé avant qu'il ne tombe dans la branche EE générique.
+function estResume({ discipline, lecon, theme, activite }) {
+  if (!estExpressionEcrite({ discipline, lecon, theme, activite })) return false;
+  const cible = normaliserTexte(`${lecon || ''} ${theme || ''}`);
+  return /\bresume\b/.test(cible);
+}
+
+// Le type de texte à résumer est FIXÉ par le niveau (programme DPFC
+// 2025-2026, confirmé par les 2 fiches de référence 08/08) -- jamais une
+// détection floue comme pour les 8 types de REFERENTIEL_TYPES_TEXTE : 4e
+// résume un texte INFORMATIF, 3e un texte ARGUMENTATIF. Aucune autre classe
+// n'est couverte par une source vérifiée -- bloqué explicitement plutôt que
+// de deviner un type de texte source (cf. construireInstructionsResume).
+function niveauResume(classe) {
+  const c = normaliserTexte(classe);
+  if (/^4/.test(c)) return 'informatif';
+  if (/^3/.test(c)) return 'argumentatif';
+  return null;
+}
+
+// Règle de calcul du résumé (donnée explicitement le 08/08, vérifiée mot
+// pour mot contre les 2 fiches de référence -- 221 mots -> VSR 74, MT 7,
+// encadrement [67,81] ; 96 mots -> VSR 32, MT 3, encadrement [29,35]) :
+// VSR (Volume Standard de Réduction) = NMT × 1/3, MT (Marge Tolérée) =
+// VSR × 10/100, encadrement = [VSR-MT, VSR+MT]. Arrondi standard (Math.round)
+// aux deux étapes -- confirmé par 221/3=73,66 arrondi à 74 dans la fiche de
+// référence. CALCULÉ EN CODE, JAMAIS PAR LE MODÈLE : c'est précisément
+// l'absence de ce garde-fou qui a produit l'erreur réelle signalée le 08/08
+// (calibrage de la séance 2 resté celui de la séance 1, jamais recalculé) --
+// ici, le calcul repart TOUJOURS du nombre de mots RÉEL du texte fourni ou
+// généré pour CETTE séance précise, jamais d'une valeur mémorisée ailleurs.
+function calculerCalibrageResume(nombreMotsTexte) {
+  const nmt = nombreMotsTexte;
+  const vsr = Math.round(nmt / 3);
+  const mt = Math.round(vsr * 0.10);
+  return { nmt, vsr, mt, min: vsr - mt, max: vsr + mt };
+}
+
+// Texte du calibrage tel qu'il doit apparaître dans la fiche -- formulation
+// alignée sur celle des fiches de référence ("221/3=73,66 environ 74 mots...
+// 74x10/100=7,4... Résumé compris entre 74-7 et 74+7 (entre 67 et 81
+// mots)."), injecté par le SERVEUR (cf. injecterMarqueurUneFois) à la place
+// des marqueurs {{CALIBRAGE_RESUME}}/{{CALIBRAGE_EVALUATION}} que le modèle
+// se contente de placer, jamais de calculer lui-même.
+function texteCalibrageResume(calibrage) {
+  const { nmt, vsr, mt, min, max } = calibrage;
+  return `<em>Calibrage : ${nmt} mots ÷ 3 = ${vsr} mots (Volume Standard de Réduction). ${vsr} × 10/100 = ${mt} mots (Marge Tolérée). Résumé attendu entre ${vsr}-${mt} et ${vsr}+${mt}, soit entre ${min} et ${max} mots.</em>`;
 }
 
 // Palier de la classe pour l'adaptation par niveau de la Lecture méthodique
@@ -2378,12 +2460,6 @@ function injecterDeroulementPlanEnseignant(contenuHTML, injection) {
   if (!injection || (injection.injectionDeroulement === null && injection.injectionAxes === null)) return contenuHTML;
   let resultat = contenuHTML;
 
-  const injecterMarqueurUneFois = (html, marqueur, contenu) => {
-    if (contenu === null || contenu === undefined || !html.includes(marqueur)) return html;
-    const morceaux = html.split(marqueur);
-    return morceaux[0] + contenu + morceaux.slice(1).join('');
-  };
-
   resultat = injecterMarqueurUneFois(resultat, '{{DEROULEMENT_PLAN_ENSEIGNANT}}', injection.injectionDeroulement);
   resultat = injecterMarqueurUneFois(resultat, '{{EVALUATION_RESERVEE}}', injection.injectionEvaluation);
   resultat = injecterMarqueurUneFois(resultat, '{{AXES_PLAN_ENSEIGNANT}}', injection.injectionAxes);
@@ -2428,12 +2504,43 @@ function extraireEtRetirerRecompositionPresentation(contenuHTML) {
 // d'injecterTexteSupport. En ne réutilisant plus qu'UN SEUL marqueur (celui
 // déjà exigé partout ailleurs), il n'y a plus qu'une seule consigne à
 // suivre pour le modèle.
-function extraireTexteSupportGenereEnPlace(contenuHTML) {
-  const m = /\{\{TEXTE_SUPPORT\}\}([\s\S]*?)\{\{FIN_TEXTE_SUPPORT\}\}/.exec(contenuHTML);
+// Version générique : extrait le texte placé par le modèle entre 2
+// marqueurs paramétrables, en ne retirant que le CONTENU et le marqueur de
+// FERMETURE -- le marqueur d'OUVERTURE reste intact à sa place, pour
+// qu'injecterTexteSupport (déjà utilisé sans modification pour le cas
+// "texte fourni par l'enseignant") le retrouve et y insère le texte final.
+// Réutilisée telle quelle pour le texte de l'Évaluation du résumé (toujours
+// un texte NOUVEAU, jamais le texte support principal, cf.
+// construireInstructionsResume) via le même mécanisme à marqueur unique.
+function extraireTexteEnPlace(contenuHTML, marqueurOuverture, marqueurFermeture) {
+  const echapper = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`${echapper(marqueurOuverture)}([\\s\\S]*?)${echapper(marqueurFermeture)}`);
+  const m = re.exec(contenuHTML);
   if (!m) return { texte: null, contenuHTML };
   const texte = m[1].trim();
-  const finMarqueurOuverture = m.index + '{{TEXTE_SUPPORT}}'.length;
+  const finMarqueurOuverture = m.index + marqueurOuverture.length;
   const nettoye = contenuHTML.slice(0, finMarqueurOuverture) + contenuHTML.slice(m.index + m[0].length);
+  return { texte: texte || null, contenuHTML: nettoye };
+}
+
+function extraireTexteSupportGenereEnPlace(contenuHTML) {
+  return extraireTexteEnPlace(contenuHTML, '{{TEXTE_SUPPORT}}', '{{FIN_TEXTE_SUPPORT}}');
+}
+
+// À LA DIFFÉRENCE d'extraireTexteEnPlace (qui retire le contenu pour le
+// réinjecter ailleurs via injecterTexteSupport), celle-ci retire UNIQUEMENT
+// les 2 marqueurs et GARDE le texte entre eux exactement à sa place -- cas
+// du résumé rédigé par le modèle (cf. {{RESUME_FINAL}}/{{RESUME_EVALUATION_FINAL}}
+// dans construireInstructionsResume) : ce texte doit rester visible là où le
+// modèle l'a écrit, l'extraction ne sert qu'à en vérifier après coup le
+// nombre de mots réel contre le calibrage calculé (jamais à le déplacer).
+function extraireEtDemasquerTexte(contenuHTML, marqueurOuverture, marqueurFermeture) {
+  const echapper = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`${echapper(marqueurOuverture)}([\\s\\S]*?)${echapper(marqueurFermeture)}`);
+  const m = re.exec(contenuHTML);
+  if (!m) return { texte: null, contenuHTML };
+  const texte = m[1].trim();
+  const nettoye = contenuHTML.slice(0, m.index) + texte + contenuHTML.slice(m.index + m[0].length);
   return { texte: texte || null, contenuHTML: nettoye };
 }
 
@@ -2506,6 +2613,118 @@ function resoudreCompletionsEntrees(html, taches, valeurs) {
     });
   });
   return { html: resultat, avertissements };
+}
+
+// Référentiel du résumé -- SÉPARÉ de REFERENTIEL_TYPES_TEXTE (décision
+// confirmée le 08/08) : le résumé n'est pas un "type de texte" au sens de la
+// Lecture méthodique (pas d'axes, pas de tableau de vérification), c'est une
+// démarche méthodologique propre en 4 étapes, avec sa propre liste d'outils
+// de la langue par niveau. Source : 2 fiches réelles vérifiées (08/08) --
+// Fiche_de_cours_Texte_argumentatif_3e.docx (résumé de texte argumentatif,
+// 3e) et L2_S1_VALIDEE.docx (résumé de texte informatif, 4e). "outils" et
+// "definitionTypeSource" sont repris de ces fiches ; le reste (définition du
+// résumé lui-même, structure I-IV) est commun aux 2 niveaux -- cf.
+// construireInstructionsResume.
+const REFERENTIEL_RESUME = {
+  informatif: {
+    typeSourceLabel: 'texte informatif',
+    definitionTypeSource: "un texte qui transmet des faits, des données ou des explications sur un sujet en vue d'informer le lecteur",
+    outils: [
+      'des mots englobants ou mots-clés pour condenser plusieurs éléments en un seul terme (ex. souris, rat = rongeurs)',
+      'le lexique lié au sujet du texte',
+      'des synonymes pour éviter les répétitions',
+      'la pronominalisation (remplacer un groupe nominal par un pronom)',
+      'la nominalisation (remplacer une proposition par un groupe nominal)',
+      'les adjectifs qualificatifs',
+      'des phrases courtes pour aller à l\'essentiel',
+      'les connecteurs logiques pour lier les idées'
+    ]
+  },
+  argumentatif: {
+    typeSourceLabel: 'texte argumentatif',
+    definitionTypeSource: 'un texte qui défend une thèse à l\'aide d\'arguments et d\'exemples, dans le but de convaincre ou persuader le lecteur',
+    outils: [
+      'le lexique approprié au thème débattu',
+      'la phrase déclarative (dominante dans ce type de texte)',
+      'les expansions du nom (proposition subordonnée relative, adjectifs qualificatifs)',
+      'les pronoms (personnels, possessifs) utilisés par l\'auteur',
+      "l'expression des circonstances (notamment l'opposition, l'concession)",
+      "le système d'énonciation : les temps verbaux, les modalisateurs (verbes d'opinion : estimer, croire, juger...)"
+    ]
+  }
+};
+
+// Mode 1 (automatique) ET Mode 2 (texte support fourni) partagent EXACTEMENT
+// la même structure -- seule différence : si texteSupportFourni est vide, le
+// modèle doit rédiger lui-même le texte principal (marqueurs
+// {{TEXTE_SUPPORT}}/{{FIN_TEXTE_SUPPORT}}, même mécanisme à marqueur unique
+// que la Lecture méthodique, cf. extraireTexteSupportGenereEnPlace) ; sinon
+// le texte fourni est utilisé tel quel (marqueur {{TEXTE_SUPPORT}} nu,
+// résolu par injecterTexteSupport comme partout ailleurs dans l'app). Pas de
+// parseur dédié façon "plan-enseignant" de Lecture méthodique : le résumé ne
+// nécessite pas cette complexité (l'enseignant ne rédige normalement pas
+// lui-même l'analyse/la reformulation, il fournit surtout le texte).
+//
+// RÈGLE NON NÉGOCIABLE (08/08, vérifiée contre 2 fiches réelles) : cette
+// structure REMPLACE INTÉGRALEMENT le squelette générique Expression écrite
+// (I. Définition/II. Structure/III. Outils/IV. Recherche-organisation/
+// V. Rédaction collective) -- jamais une adaptation du squelette générique,
+// jamais un mélange des deux. Structure imposée : I. Définition / II.
+// Analyse du texte-support et étapes du résumé / III. Outils de la langue /
+// IV. Application au texte-support (sélection, reformulation, rédaction
+// collective, calibrage). L'Évaluation utilise TOUJOURS un texte NOUVEAU,
+// jamais le texte support principal (confirmé dans les 2 fiches de
+// référence -- à la différence de la Lecture méthodique).
+function construireInstructionsResume(classe, texteSupportFourni) {
+  const type = niveauResume(classe);
+  if (!type) {
+    return {
+      instructions: '',
+      bloque: true,
+      messageBlocage: `Le résumé de texte n'est actuellement couvert (source vérifiée) que pour la 4e (résumé de texte informatif) et la 3e (résumé de texte argumentatif). Aucune source fiable n'est disponible pour la classe "${classe}" -- génération suspendue plutôt que d'improviser une démarche non vérifiée.`
+    };
+  }
+
+  const donnees = REFERENTIEL_RESUME[type];
+  const outilsTexte = donnees.outils.map((o) => `- ${o}`).join('\n');
+
+  const consigneTexteSupport = texteSupportFourni
+    ? `Le texte support (${donnees.typeSourceLabel}) a été fourni par l'enseignant -- utilise-le EXACTEMENT tel quel (jamais recopié dans ta réponse), à l'endroit où il doit apparaître dans le HTML : utilise le marqueur {{TEXTE_SUPPORT}} UNE SEULE FOIS, à un seul endroit de la fiche.`
+    : `Aucun texte support n'a été fourni : tu dois toi-même rédiger un ${donnees.typeSourceLabel} ORIGINAL, adapté au niveau ${classe} (${donnees.definitionTypeSource}), d'environ 180 à 260 mots (assez long pour que le calibrage au 1/3 ait un sens pédagogique). Place ce texte, et UNIQUEMENT lui (avec son auteur/sa source, comme dans un vrai texte publié), entre les marqueurs {{TEXTE_SUPPORT}} et {{FIN_TEXTE_SUPPORT}}, N'IMPORTE OÙ dans ta réponse -- ce bloc sera extrait puis retiré du document final, il ne doit apparaître nulle part ailleurs. NE RECOPIE PAS ce texte à l'endroit du marqueur {{TEXTE_SUPPORT}} : le serveur l'y insérera automatiquement, intégralement.`;
+
+  const instructions = `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — RÉSUMÉ DE ${donnees.typeSourceLabel.toUpperCase()} (cette fiche est un résumé de texte : les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour CETTE fiche uniquement, le squelette générique d'Expression écrite décrit plus haut -- structure I-V, ordre des tableaux, contenu de l'ÉVALUATION. N'utilise JAMAIS ce squelette générique pour cette fiche : le résumé suit une démarche propre, vérifiée contre des fiches réelles, qui ne doit JAMAIS être cassée ni adaptée. L'entête garde son format standard.) :
+
+ORDRE DES ÉLÉMENTS (identique au squelette générique) : Entête, Tableau Habiletés/Contenus, Situation d'apprentissage, Tableau Supports didactiques/Bibliographie, Tableau 5 colonnes.
+
+SITUATION D'APPRENTISSAGE : contextualise UNIQUEMENT pourquoi la classe résume CE texte précis (concours, exercice, préparation d'examen...) -- elle ne remplace JAMAIS le texte support ni n'en dispense la génération : le texte support (cf. ci-dessous) reste l'élément central et fixe de la fiche, indépendamment de la situation.
+
+${consigneTexteSupport}
+
+TABLEAU 5 COLONNES — DÉVELOPPEMENT, une ligne par étape ci-dessous (jamais fusionnées, jamais réordonnées, jamais remplacées par le squelette générique) :
+
+I. DÉFINITION — définis le résumé de texte (l'exercice lui-même : réduire un texte pour n'en garder que l'essentiel) ET le ${donnees.typeSourceLabel} (${donnees.definitionTypeSource}).
+
+II. ANALYSE DU TEXTE-SUPPORT ET ÉTAPES DU RÉSUMÉ :
+   1. Identification du thème du texte.
+   2. Identification de ${type === 'argumentatif' ? 'la thèse défendue par l\'auteur' : 'idée principale/l\'information essentielle du texte'}.
+   3. Découpage du texte en paragraphes : pour CHAQUE paragraphe, cite les lignes concernées (ex. "L1-L3") et une citation EXACTE du texte support (jamais inventée), puis sélectionne l'idée essentielle correspondante.
+
+III. OUTILS DE LA LANGUE — pour résumer un ${donnees.typeSourceLabel}, les outils appropriés sont IMPOSÉS par le référentiel ci-dessous (reprends EXACTEMENT ces catégories, ni plus ni moins) :
+${outilsTexte}
+
+IV. APPLICATION AU TEXTE-SUPPORT :
+   1. Sélection des idées essentielles (reprend la sélection faite en II.3, une entrée par paragraphe, avec citation exacte).
+   2. Reformulation de chaque idée essentielle (dire autrement, simplement, ce que dit l'auteur -- jamais une citation recopiée).
+   3. Enchaînement logique entre les idées reformulées (connecteurs logiques explicites entre chaque idée).
+   4. Rédaction collective du résumé final, en UN SEUL paragraphe (jamais de titre, jamais d'introduction/développement/conclusion séparés, jamais de jugement personnel ni d'idée ajoutée). Place EXACTEMENT le marqueur {{CALIBRAGE_RESUME}} juste AVANT le résumé final, sur sa propre ligne -- il sera remplacé automatiquement par le calcul du calibrage (NE CALCULE RIEN toi-même, ne recopie AUCUN chiffre : le calibrage exact sera inséré automatiquement à partir du nombre de mots réel du texte support). Place le résumé final que tu rédiges entre les marqueurs {{RESUME_FINAL}} et {{FIN_RESUME_FINAL}}, N'IMPORTE OÙ après {{CALIBRAGE_RESUME}} -- ces 2 marqueurs seront retirés du document final, seul ton résumé restera visible à leur place.
+
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose TOUJOURS un texte NOUVEAU, JAMAIS le texte support principal ni un extrait de celui-ci (règle vérifiée dans les 2 fiches de référence) -- un ${donnees.typeSourceLabel} différent, sur un autre sujet, de longueur comparable (150 à 220 mots), avec son auteur/sa source. Consigne : demander à l'élève de répondre à 1-2 questions de compréhension puis de résumer ce nouveau texte au 1/3 de son volume avec une marge de ±10%. Fournis aussi la correction attendue (traitement de la situation d'évaluation), avec la même démarche qu'en IV ci-dessus. Place ce nouveau texte, et UNIQUEMENT lui, entre les marqueurs {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, N'IMPORTE OÙ dans ta réponse -- NE LE RECOPIE PAS ailleurs, il sera inséré automatiquement à l'endroit prévu pour l'Évaluation. Comme en IV, place EXACTEMENT le marqueur {{CALIBRAGE_EVALUATION}} juste avant le résumé corrigé de ce nouveau texte (jamais de calcul ni de chiffre inventé par toi), et place ce résumé corrigé entre {{RESUME_EVALUATION_FINAL}} et {{FIN_RESUME_EVALUATION_FINAL}}.
+
+FORMAT DU TABLEAU 5 COLONNES : aucune exception -- 5 colonnes partout (Moments didactiques/Durée | Stratégies pédagogiques | Activités de l'enseignant | Activités des élèves | Trace écrite), y compris pour les étapes ci-dessus : ne réduis JAMAIS à 2 ou 4 colonnes.`;
+
+  return { instructions, bloque: false, messageBlocage: null, type };
 }
 
 function construireInstructionsExpressionEcriture(referentiel) {
@@ -3163,9 +3382,21 @@ function envoyerBlocageSSE(res, message) {
     // référentiel du type de texte demandé (conformité structurelle exigée).
     let modeAutoLM = false;
     let referentielTypeTexteLM = null;
+    // Résumé (08/08) : démarche dédiée, distincte du squelette générique EE
+    // (cf. construireInstructionsResume) -- utilisé plus bas pour le
+    // userMessage (texte support/évaluation à générer) et dans
+    // stream.on('finalMessage', ...) pour l'extraction + le calibrage
+    // server-side des 2 textes (jamais un calcul par le modèle).
+    let modeResume = false;
 
     if (niveau !== 'primaire') {
       const estLM = estLectureMethodique({ discipline, lecon, theme, activite });
+      // estResume est un sous-ensemble d'estEE (résumé = activité
+      // Expression écrite au sens DPFC) -- vérifié EN PREMIER pour
+      // intercepter le résumé AVANT qu'il ne tombe dans la branche EE
+      // générique ci-dessous (règle non négociable du 08/08 : jamais le
+      // squelette générique pour un résumé).
+      const estResumeDetecte = estResume({ discipline, lecon, theme, activite });
       const estEE = estExpressionEcrite({ discipline, lecon, theme, activite });
       // Appel SANS classe : comportement inchangé (référentiel complet, non
       // filtré par niveau), utilisé par Expression écrite ci-dessous. Lecture
@@ -3208,6 +3439,17 @@ function envoyerBlocageSSE(res, message) {
           planFourniInjection = resultatAuto;
           modeAutoLM = true;
         }
+      } else if (estResumeDetecte) {
+        // Résumé (08/08) : structure dédiée, jamais le squelette EE
+        // générique -- bloque explicitement si le niveau n'est pas 4e/3e
+        // (seuls niveaux couverts par une source vérifiée), jamais une
+        // démarche improvisée pour un autre niveau.
+        const resultatResume = construireInstructionsResume(classe, !!texteSupport);
+        if (resultatResume.bloque) {
+          return envoyerBlocageSSE(res, resultatResume.messageBlocage);
+        }
+        systemPrompt += resultatResume.instructions;
+        modeResume = true;
       } else if (estEE) {
         // Même principe de blocage (07/08) que pour Lecture méthodique : la
         // section "Caractéristiques du texte"/outils de la langue ne doit
@@ -3417,6 +3659,13 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           : `Ce texte support fait environ ${motsTexteSupport} mots : trop long pour être dupliqué sur la même page. N'ajoute PAS de second exemplaire — utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois, sans {{TEXTE_SUPPORT_COPIE}}.`;
       }
       userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} UNE SEULE FOIS, à l'endroit où le texte doit apparaître dans le HTML (jamais une deuxième fois ailleurs dans le document, par exemple jamais entre deux tableaux d'analyse). ${instructionMiseEnPage}\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
+    } else if (modeResume) {
+      // Rien à ajouter ici : construireInstructionsResume (déjà intégré au
+      // systemPrompt) couvre intégralement le cas "aucun texte support"
+      // (marqueurs {{TEXTE_SUPPORT}}/{{FIN_TEXTE_SUPPORT}}) -- cette branche
+      // vide empêche seulement la branche EE générique ci-dessous (exemple
+      // ≤250 mots, texte-support-page-unique) de s'appliquer AUSSI et de
+      // contredire ces instructions dédiées au résumé.
     } else if (estFicheExpressionEcrite) {
       userMessage += `\n\nAucun texte support n'a été fourni par l'enseignant : si tu dois toi-même rédiger un exemple de texte (lettre, etc.) à titre de modèle, reste sous les 250 mots afin qu'il tienne sur une seule page (mise en forme observable d'un coup d'œil par les élèves), et places-le dans une balise <div class="texte-support-page-unique">...</div> pour qu'il bénéficie du même traitement de mise en page qu'un texte support fourni par l'enseignant.`;
     } else if (modeAutoLM) {
@@ -3540,6 +3789,84 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           contenuHTML = contenuHTML.split('{{TEXTE_SUPPORT}}').join('');
           res.write(`data: ${JSON.stringify({ avertissement: "Le modèle n'a pas fourni de texte support généré automatiquement (marqueurs {{TEXTE_SUPPORT}}...{{FIN_TEXTE_SUPPORT}} absents ou vides) -- aucun texte support n'a pu être imprimé dans la fiche. Régénérez la fiche, ou fournissez vous-même un texte support." })}\n\n`);
         }
+      }
+      // Résumé (08/08) : extraction + calibrage server-side des 2 textes
+      // (support principal + Évaluation, TOUJOURS distincts, cf.
+      // construireInstructionsResume) -- AVANT l'impression finale du texte
+      // support ci-dessous, pour que celle-ci (déjà générique, réutilisée
+      // sans modification) dispose de la valeur définitive de `texteSupport`.
+      if (modeResume) {
+        const avertissementsResume = [];
+
+        if (!texteSupport) {
+          const { texte: texteSupportGenere, contenuHTML: contenuApresExtractionSupport } = extraireTexteSupportGenereEnPlace(contenuHTML);
+          contenuHTML = contenuApresExtractionSupport;
+          if (texteSupportGenere) {
+            texteSupport = texteSupportGenere;
+          } else {
+            contenuHTML = contenuHTML.split('{{TEXTE_SUPPORT}}').join('');
+            avertissementsResume.push("Le modèle n'a pas fourni de texte support généré automatiquement pour le résumé (marqueurs {{TEXTE_SUPPORT}}...{{FIN_TEXTE_SUPPORT}} absents ou vides) -- aucun texte support n'a pu être imprimé. Régénérez la fiche, ou fournissez vous-même un texte support.");
+          }
+        }
+
+        // Le texte de l'Évaluation est TOUJOURS généré par le modèle (jamais
+        // fourni par l'enseignant, jamais le texte support principal, règle
+        // vérifiée dans les 2 fiches de référence) -- extraireTexteEnPlace
+        // laisse {{TEXTE_EVALUATION}} intact à sa place pour injecterTexteSupport,
+        // appelé plus bas avec ce marqueur dédié.
+        const { texte: texteEvaluationResume, contenuHTML: contenuApresExtractionEvaluation } = extraireTexteEnPlace(contenuHTML, '{{TEXTE_EVALUATION}}', '{{FIN_TEXTE_EVALUATION}}');
+        contenuHTML = contenuApresExtractionEvaluation;
+        if (!texteEvaluationResume) {
+          contenuHTML = contenuHTML.split('{{TEXTE_EVALUATION}}').join('');
+          avertissementsResume.push("Le modèle n'a pas fourni de texte nouveau pour l'Évaluation du résumé (marqueurs {{TEXTE_EVALUATION}}...{{FIN_TEXTE_EVALUATION}} absents ou vides) -- vérifiez la ligne ÉVALUATION de la fiche générée.");
+        }
+
+        // Calibrage du texte support principal -- calculé UNIQUEMENT à partir
+        // du nombre de mots RÉEL de ce texte précis (jamais une valeur
+        // recopiée d'un autre texte/séance, cf. calculerCalibrageResume) et
+        // injecté à la place de {{CALIBRAGE_RESUME}}, jamais calculé par le
+        // modèle. extraireEtDemasquerTexte garde le résumé rédigé par le
+        // modèle en place (contrairement à extraireTexteEnPlace) : seuls les
+        // marqueurs {{RESUME_FINAL}}/{{FIN_RESUME_FINAL}} sont retirés, pour
+        // pouvoir vérifier après coup que sa longueur reste dans l'encadrement.
+        if (texteSupport) {
+          const calibragePrincipal = calculerCalibrageResume(compterMots(texteSupport));
+          contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{CALIBRAGE_RESUME}}', texteCalibrageResume(calibragePrincipal));
+          const { texte: resumeFinal, contenuHTML: contenuApresResumeFinal } = extraireEtDemasquerTexte(contenuHTML, '{{RESUME_FINAL}}', '{{FIN_RESUME_FINAL}}');
+          contenuHTML = contenuApresResumeFinal;
+          if (resumeFinal) {
+            const motsResumeFinal = compterMots(resumeFinal);
+            if (motsResumeFinal < calibragePrincipal.min || motsResumeFinal > calibragePrincipal.max) {
+              avertissementsResume.push(`Le résumé rédigé fait ${motsResumeFinal} mots, hors de l'encadrement calculé [${calibragePrincipal.min}-${calibragePrincipal.max}] pour ce texte support (${calibragePrincipal.nmt} mots) -- vérifiez le résumé produit dans la fiche.`);
+            }
+          }
+        }
+
+        // Même logique pour le résumé corrigé de l'Évaluation, à partir du
+        // nombre de mots RÉEL du texte NOUVEAU généré pour l'Évaluation --
+        // jamais celui du texte support principal.
+        if (texteEvaluationResume) {
+          const calibrageEvaluation = calculerCalibrageResume(compterMots(texteEvaluationResume));
+          contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{CALIBRAGE_EVALUATION}}', texteCalibrageResume(calibrageEvaluation));
+          const { texte: resumeEvaluationFinal, contenuHTML: contenuApresResumeEvaluationFinal } = extraireEtDemasquerTexte(contenuHTML, '{{RESUME_EVALUATION_FINAL}}', '{{FIN_RESUME_EVALUATION_FINAL}}');
+          contenuHTML = contenuApresResumeEvaluationFinal;
+          if (resumeEvaluationFinal) {
+            const motsResumeEvaluationFinal = compterMots(resumeEvaluationFinal);
+            if (motsResumeEvaluationFinal < calibrageEvaluation.min || motsResumeEvaluationFinal > calibrageEvaluation.max) {
+              avertissementsResume.push(`Le résumé corrigé de l'Évaluation fait ${motsResumeEvaluationFinal} mots, hors de l'encadrement calculé [${calibrageEvaluation.min}-${calibrageEvaluation.max}] pour ce texte (${calibrageEvaluation.nmt} mots) -- vérifiez la correction produite dans la fiche.`);
+            }
+          }
+        }
+
+        for (const avertissementResume of avertissementsResume) {
+          res.write(`data: ${JSON.stringify({ avertissement: avertissementResume })}\n\n`);
+        }
+
+        // Impression intégrale du texte de l'Évaluation (marqueur dédié,
+        // jamais le même que le texte support principal) -- réutilise
+        // injecterTexteSupport SANS modification de sa logique, juste avec
+        // un marqueur/titre différents (cf. généralisation du 08/08).
+        contenuHTML = injecterTexteSupport(contenuHTML, texteEvaluationResume, { marqueur: '{{TEXTE_EVALUATION}}', titreRepli: "Texte de l'Évaluation", unePage: true });
       }
       contenuHTML = injecterTexteSupport(contenuHTML, texteSupport, { unePage: estFicheExpressionEcrite });
       const fiche = await Fiche.create({
