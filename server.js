@@ -1348,6 +1348,69 @@ function texteCalibrageResume(calibrage) {
   return `<em>Calibrage : ${nmt} mots ÷ 3 = ${vsr} mots (Volume Standard de Réduction). ${vsr} × 10/100 = ${mt} mots (Marge Tolérée). Résumé attendu entre ${vsr}-${mt} et ${vsr}+${mt}, soit entre ${min} et ${max} mots.</em>`;
 }
 
+// Correction automatique de la longueur d'un résumé hors encadrement
+// (10/08, demande explicite) : un simple rappel de consigne dans le prompt
+// initial ne garantit JAMAIS à 100% qu'un modèle respecte une fourchette
+// de mots (confirmé en prod : résumé de 110 mots hors de l'encadrement
+// [64-78], corrigé de 43 mots hors de [17-21]) -- l'encadrement exact
+// n'est d'ailleurs connu qu'APRÈS coup (calculé sur le nombre de mots RÉEL
+// du texte source, jamais avant). Seule une vérification + regénération
+// ciblée après coup peut réellement corriger un dépassement. Ne réécrit
+// QUE la longueur (mêmes idées, même méthode) -- jamais une nouvelle
+// démarche de sélection/reformulation, pour rester cohérent avec le
+// détail déjà imprimé plus haut dans la fiche (sélection des idées,
+// enchaînement...). Plafonné à MAX_TENTATIVES_CORRECTION_LONGUEUR essais
+// (jamais une boucle illimitée, jamais une facturation incontrôlée) ; si
+// le résultat reste hors bornes après la dernière tentative, la DERNIÈRE
+// version obtenue est conservée (toujours la plus proche de la consigne
+// que l'original) avec un avertissement explicite -- jamais un échec
+// silencieux, jamais un résumé perdu si la correction elle-même échoue
+// (repli sûr sur le résumé original en cas d'erreur réseau/API).
+// `appelModele` est injectable (sinon la vraie API Anthropic est appelée)
+// pour permettre de tester toute la logique de correction/relance en
+// sandbox sans dépendre d'un appel réseau réel.
+const MAX_TENTATIVES_CORRECTION_LONGUEUR = 2;
+
+async function appelModeleCorrectionLongueur(systemPrompt, userPrompt) {
+  const reponse = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1000,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }]
+  });
+  return (reponse.content || []).map((bloc) => bloc.text || '').join('').trim();
+}
+
+async function corrigerLongueurResumeSiHorsEncadrement({ texteSource, resume, calibrage, contexteLabel, appelModele }) {
+  const genererCorrection = appelModele || appelModeleCorrectionLongueur;
+  let texteActuel = resume;
+  let motsActuels = compterMotsResume(texteActuel);
+  if (motsActuels >= calibrage.min && motsActuels <= calibrage.max) {
+    return { texte: texteActuel, mots: motsActuels, tentatives: 0, respecte: true, erreur: false };
+  }
+
+  const systemPrompt = "Tu corriges UNIQUEMENT la longueur d'un résumé déjà rédigé, sans changer sa méthode ni les idées déjà retenues. Réponds EXCLUSIVEMENT avec le texte du résumé corrigé, en un seul paragraphe continu, sans titre, sans balise HTML, sans commentaire ni explication avant ou après.";
+
+  for (let tentative = 1; tentative <= MAX_TENTATIVES_CORRECTION_LONGUEUR; tentative++) {
+    const sens = motsActuels > calibrage.max ? 'trop long' : 'trop court';
+    const userPrompt = `Texte source (${contexteLabel}) :\n${texteSource}\n\nRésumé actuel (${motsActuels} mots, ${sens} -- l'encadrement exigé est de ${calibrage.min} à ${calibrage.max} mots) :\n${texteActuel}\n\nRéécris ce résumé pour qu'il tienne STRICTEMENT entre ${calibrage.min} et ${calibrage.max} mots. Conserve EXACTEMENT les mêmes idées essentielles déjà sélectionnées et le même style de reformulation -- ajuste uniquement la formulation (précision, connecteurs, tournures plus ou moins concises) pour atteindre la longueur exacte demandée, sans ajouter d'idée absente du texte source ni en supprimer une déjà retenue de façon substantielle.`;
+    let texteCorrige;
+    try {
+      texteCorrige = await genererCorrection(systemPrompt, userPrompt);
+    } catch (e) {
+      console.error('❌ Erreur correction longueur résumé:', e.message);
+      return { texte: texteActuel, mots: motsActuels, tentatives: tentative - 1, respecte: false, erreur: true };
+    }
+    if (!texteCorrige) break;
+    texteActuel = texteCorrige;
+    motsActuels = compterMotsResume(texteActuel);
+    if (motsActuels >= calibrage.min && motsActuels <= calibrage.max) {
+      return { texte: texteActuel, mots: motsActuels, tentatives: tentative, respecte: true, erreur: false };
+    }
+  }
+  return { texte: texteActuel, mots: motsActuels, tentatives: MAX_TENTATIVES_CORRECTION_LONGUEUR, respecte: false, erreur: false };
+}
+
 // Palier de la classe pour l'adaptation par niveau de la Lecture méthodique
 // (tonalité, figures de style) : 6e/5e retirent des notions de lycée que les
 // élèves de début de collège n'ont pas encore. Toute classe non reconnue
@@ -4258,7 +4321,28 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           if (resumeFinal) {
             const motsResumeFinal = compterMotsResume(resumeFinal);
             if (motsResumeFinal < calibragePrincipal.min || motsResumeFinal > calibragePrincipal.max) {
-              avertissementsResume.push(`Le résumé rédigé fait ${motsResumeFinal} mots, hors de l'encadrement calculé [${calibragePrincipal.min}-${calibragePrincipal.max}] pour ce texte support (${calibragePrincipal.nmt} mots) -- vérifiez le résumé produit dans la fiche.`);
+              // Correction automatique (10/08, plus fiable qu'un simple
+              // rappel de consigne dans le prompt initial, cf.
+              // corrigerLongueurResumeSiHorsEncadrement) -- remplace le
+              // résumé imprimé par la version corrigée si elle respecte
+              // désormais l'encadrement, sinon garde la meilleure tentative
+              // obtenue avec un avertissement explicite.
+              const correction = await corrigerLongueurResumeSiHorsEncadrement({
+                texteSource: texteSupport,
+                resume: resumeFinal,
+                calibrage: calibragePrincipal,
+                contexteLabel: 'texte support principal'
+              });
+              if (correction.texte !== resumeFinal) {
+                contenuHTML = contenuHTML.replace(resumeFinal, correction.texte);
+              }
+              if (correction.erreur) {
+                avertissementsResume.push(`Le résumé rédigé fait ${motsResumeFinal} mots, hors de l'encadrement calculé [${calibragePrincipal.min}-${calibragePrincipal.max}] pour ce texte support (${calibragePrincipal.nmt} mots) -- la correction automatique a échoué (erreur réseau/API), le résumé original a été conservé. Vérifiez et ajustez manuellement.`);
+              } else if (correction.respecte) {
+                avertissementsResume.push(`Le résumé initial faisait ${motsResumeFinal} mots (hors de l'encadrement [${calibragePrincipal.min}-${calibragePrincipal.max}]) -- corrigé automatiquement en ${correction.mots} mots.`);
+              } else {
+                avertissementsResume.push(`Le résumé fait ${correction.mots} mots, hors de l'encadrement calculé [${calibragePrincipal.min}-${calibragePrincipal.max}] pour ce texte support (${calibragePrincipal.nmt} mots), MÊME APRÈS correction automatique -- vérifiez et ajustez manuellement le résumé produit dans la fiche.`);
+              }
             }
           }
         }
@@ -4285,7 +4369,24 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           if (resumeEvaluationFinal) {
             const motsResumeEvaluationFinal = compterMotsResume(resumeEvaluationFinal);
             if (motsResumeEvaluationFinal < calibrageEvaluation.min || motsResumeEvaluationFinal > calibrageEvaluation.max) {
-              avertissementsResume.push(`Le résumé corrigé de l'Évaluation fait ${motsResumeEvaluationFinal} mots, hors de l'encadrement calculé [${calibrageEvaluation.min}-${calibrageEvaluation.max}] pour ce texte (${calibrageEvaluation.nmt} mots) -- vérifiez la correction produite dans la fiche.`);
+              // Même correction automatique que pour le résumé principal
+              // (10/08, cf. corrigerLongueurResumeSiHorsEncadrement).
+              const correctionEvaluation = await corrigerLongueurResumeSiHorsEncadrement({
+                texteSource: texteEvaluationResume,
+                resume: resumeEvaluationFinal,
+                calibrage: calibrageEvaluation,
+                contexteLabel: "texte de l'Évaluation"
+              });
+              if (correctionEvaluation.texte !== resumeEvaluationFinal) {
+                contenuHTML = contenuHTML.replace(resumeEvaluationFinal, correctionEvaluation.texte);
+              }
+              if (correctionEvaluation.erreur) {
+                avertissementsResume.push(`Le résumé corrigé de l'Évaluation fait ${motsResumeEvaluationFinal} mots, hors de l'encadrement calculé [${calibrageEvaluation.min}-${calibrageEvaluation.max}] pour ce texte (${calibrageEvaluation.nmt} mots) -- la correction automatique a échoué (erreur réseau/API), le résumé original a été conservé. Vérifiez et ajustez manuellement.`);
+              } else if (correctionEvaluation.respecte) {
+                avertissementsResume.push(`Le résumé corrigé initial de l'Évaluation faisait ${motsResumeEvaluationFinal} mots (hors de l'encadrement [${calibrageEvaluation.min}-${calibrageEvaluation.max}]) -- corrigé automatiquement en ${correctionEvaluation.mots} mots.`);
+              } else {
+                avertissementsResume.push(`Le résumé corrigé de l'Évaluation fait ${correctionEvaluation.mots} mots, hors de l'encadrement calculé [${calibrageEvaluation.min}-${calibrageEvaluation.max}] pour ce texte (${calibrageEvaluation.nmt} mots), MÊME APRÈS correction automatique -- vérifiez et ajustez manuellement la correction produite dans la fiche.`);
+              }
             }
           }
         } else {
