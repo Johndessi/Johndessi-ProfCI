@@ -988,6 +988,36 @@ function retirerBlocQuestionsFinal(texte) {
   return { texte: t.slice(0, m.index).trim(), tronque: true };
 }
 
+// Correctif du 09/08 (résidu constaté après le retrait du bloc QUESTIONS :
+// 167 mots comptés au lieu de 163, écart de 4 mots dû à une ligne
+// d'attribution "E.FOA, LE DAHOMEY" restée en fin de texte, juste avant
+// l'ancien emplacement de "QUESTIONS"). Première version basée sur
+// l'absence de "mot-outil" français (article, préposition...) -- abandonnée
+// après un vrai faux négatif en test : "LE" dans "LE DAHOMEY" (nom propre
+// en capitales) se normalise en "le", identique à l'article français,
+// empêchant toute détection. Signal retenu à la place, sans ambiguïté :
+// une ligne d'attribution/signature est intégralement en CAPITALES (aucune
+// lettre minuscule) -- une vraie phrase française ne l'est JAMAIS. Retrait
+// automatique UNIQUEMENT si le DERNIER segment de phrase est court (10
+// mots max), entièrement en capitales, ET contient au moins une lettre --
+// sinon laissé tel quel : mieux vaut un reliquat de quelques mots qu'un
+// risque de tronquer la fin d'une vraie phrase du texte.
+function retirerAttributionFinale(texte) {
+  const t = (texte || '').toString().trim();
+  if (!t) return { texte: t, tronque: false };
+  const segments = t.split(/(?<=[.!?])\s+/).filter(Boolean);
+  if (segments.length < 2) return { texte: t, tronque: false };
+  const dernier = segments[segments.length - 1].trim();
+  if (!dernier) return { texte: t, tronque: false };
+  const mots = dernier.replace(/[.,!?]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if (!mots.length || mots.length > 10) return { texte: t, tronque: false };
+  if (/\p{Ll}/u.test(dernier)) return { texte: t, tronque: false };
+  if (!/\p{Lu}/u.test(dernier)) return { texte: t, tronque: false };
+  const reste = segments.slice(0, -1).join(' ').trim();
+  if (!reste) return { texte: t, tronque: false };
+  return { texte: reste, tronque: true };
+}
+
 // Correctif du 09/08 : l'en-tête scolaire n'était que SIGNALÉ, jamais
 // réellement exclu du calibrage -- corrigé en un retrait automatique ciblé
 // sur des motifs forts et sans ambiguïté (établissement, année scolaire,
@@ -1045,6 +1075,30 @@ function retirerEnTeteScolaire(texte) {
 function ressembleAUnEnTeteScolaire(texte) {
   const premiereLigne = (texte || '').trim().split(/\n/)[0] || '';
   return /ann[ée]e scolaire|lyc[ée]e|coll[eè]ge\s|classe\s*:|r[ée]sum[ée]\s+de\s+texte/i.test(premiereLigne);
+}
+
+// Filet de sécurité (09/08) : malgré l'interdiction explicite du prompt
+// (RÈGLE ABSOLUE SUR LES NOMBRES DE MOTS, cf. construireInstructionsResume),
+// le modèle peut encore écrire une mention de longueur périmée ailleurs
+// dans la fiche (ex. "Pour un texte de 213 mots" dans une section "IV-1
+// Longueur imposée", constaté en prod alors que le vrai calibrage affiché
+// ailleurs dans la MÊME fiche indiquait 167) -- recherche TOUTE mention
+// "pour un texte de N mots" dans le document final et compare N aux
+// valeurs RÉELLEMENT calibrées pour cette fiche (nmtCalibres) : un nombre
+// qui ne correspond à AUCUNE d'elles est signalé. Avertissement seulement
+// (jamais une réécriture automatique d'un texte libre, trop risqué) --
+// laisse l'enseignant corriger ou régénérer.
+function detecterMentionsNombreMotsIncoherentes(contenuHTML, nmtCalibres) {
+  const avertissements = [];
+  const re = /pour un texte de\s+(\d+)\s*mots?/gi;
+  let m;
+  while ((m = re.exec(contenuHTML)) !== null) {
+    const n = Number(m[1]);
+    if (!nmtCalibres.includes(n)) {
+      avertissements.push(`La fiche mentionne encore « ${m[0].trim()} » ailleurs dans le texte, un chiffre qui ne correspond à aucun calibrage réel de cette fiche (${nmtCalibres.join(' ou ')} mots) -- probablement une mention périmée laissée par le modèle. Vérifiez et corrigez cette mention dans la fiche imprimée.`);
+    }
+  }
+  return avertissements;
 }
 
 // Seuil de duplication du texte support (2ᵉ exemplaire en police réduite sur
@@ -1132,7 +1186,19 @@ function injecterTexteSupport(contenuHTML, texteSupport, options = {}) {
     : texteHtml;
 
   let resultat;
-  if (contenuHTML.includes(marqueur)) {
+  if (options.placementFinDocument) {
+    // Correctif du 09/08 (bug constaté en prod, résumé) : le prompt
+    // autorise le modèle à placer {{TEXTE_SUPPORT}} "n'importe où" dans sa
+    // réponse -- ce qui a pu le laisser en plein milieu du tableau de
+    // déroulement (ex. dans la ligne Présentation/traces écrites),
+    // mélangeant le texte support avec une section pédagogique au lieu de
+    // rester une page à part. Cette option ignore délibérément la position
+    // du marqueur : celui-ci est retiré d'où qu'il se trouve, et le texte
+    // support est TOUJOURS déplacé en toute fin de document, sur sa propre
+    // page dédiée (saut de page forcé), jamais mélangé à une autre section.
+    const sansMarqueur = contenuHTML.split(marqueur).join('');
+    resultat = `${sansMarqueur}<div class="texte-support-page-dediee" style="page-break-before:always;break-before:page;"><h3>${titreRepli}</h3>${texteAInserer}</div>\n`;
+  } else if (contenuHTML.includes(marqueur)) {
     // Une seule insertion réelle même si le modèle a répété le marqueur par
     // erreur (ex. une deuxième fois entre les tableaux de vérification des 2
     // axes en Lecture méthodique) : seule la 1ère occurrence reçoit le texte,
@@ -2926,11 +2992,13 @@ IV. APPLICATION AU TEXTE-SUPPORT :
    4. Rédaction collective du résumé final, en UN SEUL paragraphe (jamais de titre, jamais d'introduction/développement/conclusion séparés, jamais de jugement personnel ni d'idée ajoutée). Place EXACTEMENT le marqueur {{CALIBRAGE_RESUME}} juste AVANT le résumé final, sur sa propre ligne -- il sera remplacé automatiquement par le calcul du calibrage (NE CALCULE RIEN toi-même, ne recopie AUCUN chiffre : le calibrage exact sera inséré automatiquement à partir du nombre de mots réel du texte support). Place le résumé final que tu rédiges entre les marqueurs {{RESUME_FINAL}} et {{FIN_RESUME_FINAL}}, N'IMPORTE OÙ après {{CALIBRAGE_RESUME}} -- ces 2 marqueurs seront retirés du document final, seul ton résumé restera visible à leur place.
 
 ${modeEvaluation === 'continuation'
-  ? `ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : cette évaluation NE PORTE PAS sur un texte nouveau -- elle réutilise le MÊME texte support déjà rédigé plus haut (celui du marqueur {{TEXTE_SUPPORT}}), selon la démarche suivante : le professeur résume lui-même, en classe, une première partie du texte à titre d'exemple/de modèle -- tu n'as PAS à rédiger ce résumé modèle ni à le mentionner dans la fiche. Choisis un point de coupure net dans le texte support (fin d'un paragraphe), après lequel commence la portion laissée à l'élève. Copie EXACTEMENT, MOT POUR MOT (aucune reformulation, aucune coupure de phrase, aucun ajout ni omission), cette portion restante -- et UNIQUEMENT elle -- entre les marqueurs {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, N'IMPORTE OÙ dans ta réponse -- NE LA RECOPIE PAS ailleurs, elle sera insérée automatiquement à l'endroit prévu pour l'Évaluation, sous un titre indiquant qu'il s'agit de la suite du texte support. Consigne : l'élève doit résumer SEUL cette portion restante, au 1/3 de son volume avec une marge de ±10% (calibrage calculé automatiquement sur le nombre de mots réel de CETTE PORTION SEULE, jamais sur le texte support entier). Comme en IV, place EXACTEMENT le marqueur {{CALIBRAGE_EVALUATION}} juste avant le résumé corrigé de cette portion (jamais de calcul ni de chiffre inventé par toi), et place ce résumé corrigé entre {{RESUME_EVALUATION_FINAL}} et {{FIN_RESUME_EVALUATION_FINAL}}.`
+  ? `ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : cette évaluation NE PORTE PAS sur un texte nouveau -- elle réutilise le MÊME texte support déjà rédigé plus haut (celui du marqueur {{TEXTE_SUPPORT}}), selon la démarche suivante : le professeur résume lui-même, en classe, une première partie du texte à titre d'exemple/de modèle -- tu n'as PAS à rédiger ce résumé modèle ni à le mentionner dans la fiche. Choisis un point de coupure net dans le texte support (fin d'un paragraphe), après lequel commence la portion laissée à l'élève. Copie EXACTEMENT, MOT POUR MOT (aucune reformulation, aucune coupure de phrase, aucun ajout ni omission), cette portion restante -- et UNIQUEMENT elle -- entre les marqueurs {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, N'IMPORTE OÙ dans ta réponse -- NE LA RECOPIE PAS ailleurs, elle sera insérée automatiquement à l'endroit prévu pour l'Évaluation, sous un titre indiquant qu'il s'agit de la suite du texte support. RÈGLE STRICTE (bug réel constaté le 09/08, ne JAMAIS reproduire) : {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}} ne doivent JAMAIS être laissés vides ou adjacents (jamais "{{TEXTE_EVALUATION}}{{FIN_TEXTE_EVALUATION}}" sans rien entre les deux) -- il doit toujours y avoir un vrai extrait substantiel du texte support entre eux (au moins plusieurs phrases) ; si tu ne peux pas identifier de portion restante distincte, choisis quand même un point de coupure raisonnable (par exemple la 2e moitié du texte) plutôt que de laisser ce bloc vide. Consigne : l'élève doit résumer SEUL cette portion restante, au 1/3 de son volume avec une marge de ±10% (calibrage calculé automatiquement sur le nombre de mots réel de CETTE PORTION SEULE, jamais sur le texte support entier). Comme en IV, place EXACTEMENT le marqueur {{CALIBRAGE_EVALUATION}} juste avant le résumé corrigé de cette portion (jamais de calcul ni de chiffre inventé par toi), et place ce résumé corrigé entre {{RESUME_EVALUATION_FINAL}} et {{FIN_RESUME_EVALUATION_FINAL}} -- SEULEMENT si {{TEXTE_EVALUATION}} contient bien un extrait réel : ne rédige JAMAIS de résumé corrigé pour une portion vide.`
   : `ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose TOUJOURS un texte NOUVEAU, JAMAIS le texte support principal ni un extrait de celui-ci (règle vérifiée dans les 2 fiches de référence) -- un ${donnees.typeSourceLabel} différent, sur un autre sujet, de longueur comparable (150 à 220 mots). RÈGLE STRICTE (même bug que pour le texte support principal, ne JAMAIS reproduire) : entre {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, place EXCLUSIVEMENT le corps de ce nouveau texte -- jamais d'en-tête scolaire, jamais de mention auteur/source, jamais de titre, et surtout jamais les questions de compréhension ni la consigne de résumé décrites ci-dessous : ces éléments (questions de compréhension, consigne "résumer au 1/3 avec une marge de ±10%") vont dans les colonnes du tableau DÉROULEMENT (Activités de l'enseignant/des élèves), PAS entre les marqueurs {{TEXTE_EVALUATION}}/{{FIN_TEXTE_EVALUATION}} -- seul le texte à résumer y va. Consigne : demander à l'élève de répondre à 1-2 questions de compréhension puis de résumer ce nouveau texte au 1/3 de son volume avec une marge de ±10%. Fournis aussi la correction attendue (traitement de la situation d'évaluation), avec la même démarche qu'en IV ci-dessus. Place ce nouveau texte, et UNIQUEMENT lui, entre les marqueurs {{TEXTE_EVALUATION}} et {{FIN_TEXTE_EVALUATION}}, N'IMPORTE OÙ dans ta réponse -- NE LE RECOPIE PAS ailleurs, il sera inséré automatiquement à l'endroit prévu pour l'Évaluation. Comme en IV, place EXACTEMENT le marqueur {{CALIBRAGE_EVALUATION}} juste avant le résumé corrigé de ce nouveau texte (jamais de calcul ni de chiffre inventé par toi), et place ce résumé corrigé entre {{RESUME_EVALUATION_FINAL}} et {{FIN_RESUME_EVALUATION_FINAL}}.`
 }
 
-FORMAT DU TABLEAU 5 COLONNES : aucune exception -- 5 colonnes partout (Moments didactiques/Durée | Stratégies pédagogiques | Activités de l'enseignant | Activités des élèves | Trace écrite), y compris pour les étapes ci-dessus : ne réduis JAMAIS à 2 ou 4 colonnes.`;
+FORMAT DU TABLEAU 5 COLONNES : aucune exception -- 5 colonnes partout (Moments didactiques/Durée | Stratégies pédagogiques | Activités de l'enseignant | Activités des élèves | Trace écrite), y compris pour les étapes ci-dessus : ne réduis JAMAIS à 2 ou 4 colonnes.
+
+RÈGLE ABSOLUE SUR LES NOMBRES DE MOTS (bug réel constaté le 09/08, ne JAMAIS reproduire) : n'écris JAMAIS, nulle part ailleurs dans la fiche (ex. une section "Longueur imposée", une phrase du type "pour un texte de X mots", une consigne dans le tableau DÉROULEMENT...), un nombre de mots que tu aurais toi-même compté, estimé ou recopié. Les SEULS endroits où un nombre de mots doit apparaître sont les marqueurs {{CALIBRAGE_RESUME}} et {{CALIBRAGE_EVALUATION}} -- le serveur y insère automatiquement le calibrage exact, calculé sur le texte réel. Si tu dois évoquer une contrainte de longueur ailleurs dans le texte, réfère-toi simplement au calibrage ("selon le calibrage ci-dessus", "au 1/3 du volume indiqué") SANS jamais réécrire un chiffre.`;
 
   return { instructions, bloque: false, messageBlocage: null, type, modeEvaluation };
 }
@@ -4046,6 +4114,11 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
             texteSupport = texteSupportSansQuestions;
             avertissementsResume.push("Le modèle avait inclus un bloc « QUESTIONS » (questions de compréhension, consigne de résumé...) à l'intérieur du texte support -- retiré automatiquement avant impression et calibrage, seul le texte réel a été conservé. Vérifiez le texte support imprimé.");
           }
+          const { texte: texteSupportSansAttribution, tronque: attributionTronquee } = retirerAttributionFinale(texteSupport);
+          if (attributionTronquee) {
+            texteSupport = texteSupportSansAttribution;
+            avertissementsResume.push("Le modèle avait inclus une ligne d'attribution (auteur/source) en fin de texte support -- retirée automatiquement avant impression et calibrage.");
+          }
           if (ressembleAUnEnTeteScolaire(texteSupport)) {
             avertissementsResume.push("Le début du texte support extrait ressemble ENCORE à un en-tête scolaire après le retrait automatique -- vérifiez le début du texte support imprimé et régénérez si besoin (motif non reconnu par le retrait automatique).");
           }
@@ -4093,6 +4166,11 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
             texteEvaluationResume = texteEvaluationSansQuestions;
             avertissementsResume.push("Le modèle avait inclus un bloc « QUESTIONS » à l'intérieur du texte de l'Évaluation -- retiré automatiquement avant impression et calibrage. Vérifiez le texte de l'Évaluation imprimé.");
           }
+          const { texte: texteEvaluationSansAttribution, tronque: evaluationAttributionTronquee } = retirerAttributionFinale(texteEvaluationResume);
+          if (evaluationAttributionTronquee) {
+            texteEvaluationResume = texteEvaluationSansAttribution;
+            avertissementsResume.push("Le modèle avait inclus une ligne d'attribution (auteur/source) en fin de texte de l'Évaluation -- retirée automatiquement avant impression et calibrage.");
+          }
           if (ressembleAUnEnTeteScolaire(texteEvaluationResume)) {
             avertissementsResume.push("Le début du texte de l'Évaluation extrait ressemble ENCORE à un en-tête scolaire après le retrait automatique -- vérifiez le début du texte imprimé et régénérez si besoin.");
           }
@@ -4120,12 +4198,20 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // modèle en place (contrairement à extraireTexteEnPlace) : seuls les
         // marqueurs {{RESUME_FINAL}}/{{FIN_RESUME_FINAL}} sont retirés, pour
         // pouvoir vérifier après coup que sa longueur reste dans l'encadrement.
+        // Nombres de mots réellement calibrés pour cette fiche (renseignés
+        // ci-dessous s'ils s'appliquent) -- réutilisés après coup pour
+        // repérer une mention de longueur périmée que le modèle aurait
+        // quand même écrite ailleurs dans le texte libre malgré l'interdiction
+        // explicite du prompt (cf. detecterMentionsNombreMotsIncoherentes).
+        const nmtCalibres = [];
+
         if (texteSupport) {
           // INSTRUMENTATION TEMPORAIRE (09/08, cf. analyserComptageResume) --
           // à retirer une fois l'écart constaté en prod expliqué et corrigé.
           const diagSupport = analyserComptageResume(texteSupport);
           avertissementsResume.push(`🔍 Diagnostic calibrage (temporaire) — texte support : ${diagSupport.motsResume} mots [règle résumé] vs ${diagSupport.motsBasique} mots [découpe brute] (écart total ${diagSupport.motsResume - diagSupport.motsBasique}, dont ${diagSupport.elisions} attribuable(s) à des élisions détectées, écart inexpliqué ${diagSupport.ecartInexplique}). Longueur du texte réellement compté : ${diagSupport.longueurCaracteres} caractères. Début : « ${diagSupport.apercuDebut}... ». Fin : « ...${diagSupport.apercuFin} ».`);
           const calibragePrincipal = calculerCalibrageResume(compterMotsResume(texteSupport));
+          nmtCalibres.push(calibragePrincipal.nmt);
           contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{CALIBRAGE_RESUME}}', texteCalibrageResume(calibragePrincipal));
           const { texte: resumeFinal, contenuHTML: contenuApresResumeFinal } = extraireEtDemasquerTexte(contenuHTML, '{{RESUME_FINAL}}', '{{FIN_RESUME_FINAL}}');
           contenuHTML = contenuApresResumeFinal;
@@ -4152,6 +4238,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           const diagEvaluation = analyserComptageResume(texteEvaluationResume);
           avertissementsResume.push(`🔍 Diagnostic calibrage (temporaire) — texte Évaluation : ${diagEvaluation.motsResume} mots [règle résumé] vs ${diagEvaluation.motsBasique} mots [découpe brute] (écart total ${diagEvaluation.motsResume - diagEvaluation.motsBasique}, dont ${diagEvaluation.elisions} attribuable(s) à des élisions détectées, écart inexpliqué ${diagEvaluation.ecartInexplique}). Longueur du texte réellement compté : ${diagEvaluation.longueurCaracteres} caractères. Début : « ${diagEvaluation.apercuDebut}... ». Fin : « ...${diagEvaluation.apercuFin} ».`);
           const calibrageEvaluation = calculerCalibrageResume(compterMotsResume(texteEvaluationResume));
+          nmtCalibres.push(calibrageEvaluation.nmt);
           contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{CALIBRAGE_EVALUATION}}', texteCalibrageResume(calibrageEvaluation));
           const { texte: resumeEvaluationFinal, contenuHTML: contenuApresResumeEvaluationFinal } = extraireEtDemasquerTexte(contenuHTML, '{{RESUME_EVALUATION_FINAL}}', '{{FIN_RESUME_EVALUATION_FINAL}}');
           contenuHTML = contenuApresResumeEvaluationFinal;
@@ -4162,16 +4249,30 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
             }
           }
         } else {
-          // Aucun calibrage possible (texte de l'Évaluation absent, cf.
-          // avertissement déjà émis plus haut) -- retire quand même
-          // {{CALIBRAGE_EVALUATION}} (rien de fiable à y injecter) et
-          // démasque {{RESUME_EVALUATION_FINAL}}/{{FIN_RESUME_EVALUATION_FINAL}}
-          // (garde visible tout contenu que le modèle aurait quand même
-          // rédigé à cet endroit, sans calibrage à son sujet) -- jamais un
-          // marqueur laissé visible tel quel, avec ou sans contenu calibrable.
+          // Correctif du 09/08 (bug constaté en prod) : quand aucune portion
+          // valide n'a pu être extraite pour l'Évaluation, un "résumé
+          // corrigé" pour cette portion n'a AUCUN sens (rien à corriger) --
+          // pourtant le modèle en avait quand même rédigé un (44 mots pour
+          // une portion source vide/invalide), affiché SANS aucun
+          // avertissement bloquant. Comportement précédent (PR #27) :
+          // démasquer {{RESUME_EVALUATION_FINAL}} en gardant son contenu
+          // visible -- corrigé ici en un retrait ENTIER du contenu (pas
+          // seulement des marqueurs), pour ne jamais afficher un corrigé
+          // orphelin susceptible d'induire l'enseignant en erreur.
           contenuHTML = contenuHTML.split('{{CALIBRAGE_EVALUATION}}').join('');
-          const { contenuHTML: contenuDemasqueEvaluation } = extraireEtDemasquerTexte(contenuHTML, '{{RESUME_EVALUATION_FINAL}}', '{{FIN_RESUME_EVALUATION_FINAL}}');
-          contenuHTML = contenuDemasqueEvaluation;
+          const contenuAvantRetraitCorrige = contenuHTML;
+          contenuHTML = contenuHTML.replace(/\{\{RESUME_EVALUATION_FINAL\}\}[\s\S]*?\{\{FIN_RESUME_EVALUATION_FINAL\}\}/, '');
+          if (contenuHTML !== contenuAvantRetraitCorrige) {
+            avertissementsResume.push("Le modèle avait rédigé un résumé « corrigé » pour l'Évaluation malgré l'absence de portion source valide -- retiré entièrement (un corrigé sans texte source n'a aucun sens). Régénérez la fiche.");
+          } else {
+            // Le modèle n'avait de toute façon rien écrit ici -- retire un
+            // éventuel marqueur resté seul (jamais un jeton visible tel quel).
+            contenuHTML = contenuHTML.split('{{RESUME_EVALUATION_FINAL}}').join('').split('{{FIN_RESUME_EVALUATION_FINAL}}').join('');
+          }
+        }
+
+        if (nmtCalibres.length) {
+          avertissementsResume.push(...detecterMentionsNombreMotsIncoherentes(contenuHTML, nmtCalibres));
         }
 
         for (const avertissementResume of avertissementsResume) {
@@ -4193,7 +4294,15 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           unePage: true
         });
       }
-      contenuHTML = injecterTexteSupport(contenuHTML, texteSupport, { unePage: estFicheExpressionEcrite });
+      // placementFinDocument UNIQUEMENT pour le résumé (09/08, bug constaté
+      // en prod : texte support mélangé dans la section Présentation) --
+      // comportement historique inchangé pour les autres types d'Expression
+      // écrite (lettre, portrait...), jamais testés avec ce problème et dont
+      // le placement actuel (en place, à l'endroit du marqueur) fonctionne.
+      contenuHTML = injecterTexteSupport(contenuHTML, texteSupport, {
+        unePage: estFicheExpressionEcrite,
+        placementFinDocument: modeResume
+      });
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
         discipline, classe, lecon, seance, duree, niveau,
