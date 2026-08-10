@@ -14,6 +14,15 @@ const {
 } = require('docx');
 
 const app = express();
+// Nécessaire pour que req.ip reflète la vraie IP du client (via
+// X-Forwarded-For) plutôt que celle du proxy inverse de la plateforme
+// d'hébergement (Render est systématiquement derrière un tel proxy) --
+// sans ce réglage, limiterGenerationParIp verrait TOUTES les requêtes
+// comme venant d'une seule et même IP (celle du proxy), ce qui limiterait
+// injustement l'ensemble des enseignants au lieu d'un abus individuel.
+// "1" = ne fait confiance qu'au premier saut de proxy (celui de la
+// plateforme), jamais à un en-tête falsifiable par le client lui-même.
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static('public'));
@@ -3620,7 +3629,38 @@ function envoyerBlocageSSE(res, message) {
   res.end();
 }
 
- app.post('/api/generer-fiche', uploadTexteSupportFichier, async (req, res) => {
+// Protection anti-abus (10/08) : /api/generer-fiche appelle Anthropic avec
+// la clé API du SERVEUR (jamais celle de l'appelant) et n'exige aujourd'hui
+// aucune authentification -- vérifié en pratique par un test manuel (un
+// simple POST direct, sans en-tête ni clé, a déclenché une génération
+// réelle facturée sur le compte du propriétaire). Limite le nombre de
+// générations PAR IP sur une fenêtre glissante -- volontairement généreuse
+// (un enseignant génère normalement quelques fiches par session, jamais
+// des dizaines en quelques minutes) pour ne jamais gêner un usage normal,
+// tout en plafonnant un abus automatisé ou un script mal configuré. En
+// mémoire (process unique, sans dépendance externe) -- suffisant pour le
+// volume actuel de l'application ; à remplacer par un stockage partagé
+// (Redis...) si l'app tourne un jour sur plusieurs instances, ce qui n'est
+// pas le cas aujourd'hui. Réutilise le canal SSE existant (envoyerBlocageSSE)
+// pour que le client affiche le message comme n'importe quel autre blocage,
+// sans changement côté front.
+const FENETRE_LIMITE_GENERATION_MS = 10 * 60 * 1000;
+const MAX_GENERATIONS_PAR_FENETRE = 10;
+const historiqueGenerationParIp = new Map();
+
+function limiterGenerationParIp(req, res, next) {
+  const ip = req.ip || req.socket?.remoteAddress || 'inconnu';
+  const maintenant = Date.now();
+  const horodatages = (historiqueGenerationParIp.get(ip) || []).filter((t) => maintenant - t < FENETRE_LIMITE_GENERATION_MS);
+  if (horodatages.length >= MAX_GENERATIONS_PAR_FENETRE) {
+    return envoyerBlocageSSE(res, `Trop de générations de fiches en peu de temps depuis cette connexion (limite : ${MAX_GENERATIONS_PAR_FENETRE} toutes les ${Math.round(FENETRE_LIMITE_GENERATION_MS / 60000)} minutes) -- réessayez un peu plus tard.`);
+  }
+  horodatages.push(maintenant);
+  historiqueGenerationParIp.set(ip, horodatages);
+  next();
+}
+
+ app.post('/api/generer-fiche', limiterGenerationParIp, uploadTexteSupportFichier, async (req, res) => {
   console.log('📩 Requête reçue:', req.body.discipline, req.body.classe, req.body.lecon);
   try {
     const {
