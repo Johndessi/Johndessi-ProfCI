@@ -969,22 +969,79 @@ function analyserComptageResume(texte) {
 // légitimement apparaître dans une phrase (ex. "il posa plusieurs
 // questions") -- comparaison volontairement SENSIBLE À LA CASSE pour ne
 // jamais tronquer un texte légitime par erreur.
+// Correctif du 09/08 (preuve directe, texte brut réel inspecté) : "QUESTIONS"
+// n'est PAS toujours isolé sur sa propre ligne comme supposé initialement --
+// dans un cas réel constaté, il est collé en plein milieu du texte, sans
+// saut de ligne ni avant ni après (ex. "...LE DAHOMEY QUESTIONS Donnez
+// trois conséquences..."), ce qui faisait échouer la détection précédente
+// (ancrée sur `(^|\n)...(\n|$)`) -- l'exigence de ligne isolée est donc
+// abandonnée : seul le mot lui-même, en capitales, avec des frontières de
+// mot, suffit. Reste néanmoins SENSIBLE À LA CASSE (jamais "questions" en
+// minuscule, qui PEUT légitimement apparaître dans une phrase, ex. "il posa
+// plusieurs questions") -- c'est cette casse stricte, pas la position dans
+// le texte, qui garantit l'absence de faux positif.
 function retirerBlocQuestionsFinal(texte) {
   const t = (texte || '').toString();
-  const re = /(^|\n)[ \t]*QUESTIONS[ \t]*(\n|$)/;
+  const re = /\bQUESTIONS\b[\s\S]*$/;
   const m = re.exec(t);
   if (!m) return { texte: t, tronque: false };
   return { texte: t.slice(0, m.index).trim(), tronque: true };
 }
 
-// Même preuve : un en-tête scolaire (École, Année scolaire, Classe...) en
-// tête du texte extrait est un signe d'inclusion en trop, mais contrairement
-// au bloc QUESTIONS (motif exact et sûr à retirer automatiquement), un
-// début de texte en capitales ou mentionnant "classe"/"année" peut aussi
-// être un TITRE légitime du texte lui-même (cf. fiches de référence : "La
-// vie au collège" en tête du texte réel) -- retirer automatiquement
-// risquerait de tronquer un titre authentique. Avertissement seulement,
-// jamais une suppression automatique ici.
+// Correctif du 09/08 : l'en-tête scolaire n'était que SIGNALÉ, jamais
+// réellement exclu du calibrage -- corrigé en un retrait automatique ciblé
+// sur des motifs forts et sans ambiguïté (établissement, année scolaire,
+// classe suivie d'un niveau ou d'un ":", intitulé "résumé de texte
+// informatif/argumentatif" quasi identique au libellé utilisé par l'appli
+// elle-même dans ses propres instructions) -- jamais un motif faible comme
+// le seul mot "classe" ou une ligne en capitales, qui pourrait légitimement
+// être le TITRE du texte réel (cf. fiches de référence : "La vie au
+// collège" en tête du texte). Recherche limitée aux 400 premiers
+// caractères (jamais plus loin, pour ne jamais toucher au corps réel) ;
+// coupe à la fin de la ligne contenant la DERNIÈRE occurrence trouvée dans
+// cette fenêtre, pour retirer l'en-tête en entier même sur plusieurs
+// lignes (École, Année scolaire, Classe, titre...).
+// 2 familles de motifs, volontairement séparées (une seule regex combinée
+// avait produit un faux positif réel en test : "La vie au collège", un
+// TITRE légitime tiré d'une fiche de référence réelle, contient le simple
+// mot "collège" et se faisait tronquer à tort) :
+//  - MOTIF_INSTITUTION_ENTETE : "LYCEE"/"COLLEGE" en capitales SUIVI d'un
+//    mot commençant par une majuscule (ex. "LYCEE MODERNE D'OUME") --
+//    SENSIBLE À LA CASSE exprès, pour ne matcher qu'un vrai en-tête de type
+//    lettre officielle, jamais une mention normale ("le collège", "au
+//    collège") dans une phrase en casse normale ;
+//  - MOTIF_ADMIN_ENTETE : phrases administratives sans ambiguïté (année
+//    scolaire, classe suivie d'un niveau/d'un ":", intitulé "résumé de
+//    texte informatif/argumentatif" quasi identique au libellé utilisé par
+//    l'appli elle-même) -- insensible à la casse, ces phrases n'ont pas
+//    d'équivalent plausible dans un vrai corps de texte à résumer.
+const MOTIF_INSTITUTION_ENTETE = /\b(LYCEE|LYCÉE|COLLEGE|COLLÈGE)\b\s+[A-ZÉÈÀÂÎÔÛÇ]/g;
+const MOTIF_ADMIN_ENTETE = /(ann[ée]e\s+scolaire|classe\s*:|classe\s+(6|5|4|3)[eè]me|r[ée]sum[ée]\s+de\s+texte\s+(informatif|argumentatif))/gi;
+
+function retirerEnTeteScolaire(texte) {
+  const t = (texte || '').toString();
+  const fenetre = t.slice(0, 400);
+  let dernierIndexFin = -1;
+  for (const motif of [MOTIF_INSTITUTION_ENTETE, MOTIF_ADMIN_ENTETE]) {
+    const re = new RegExp(motif.source, motif.flags);
+    let m;
+    while ((m = re.exec(fenetre)) !== null) {
+      dernierIndexFin = Math.max(dernierIndexFin, m.index + m[0].length);
+      if (m.index === re.lastIndex) re.lastIndex++; // sécurité anti-boucle infinie (match vide)
+    }
+  }
+  if (dernierIndexFin === -1) return { texte: t, tronque: false };
+  const finLigne = t.indexOf('\n', dernierIndexFin);
+  const coupureA = finLigne !== -1 && finLigne < dernierIndexFin + 200 ? finLigne : dernierIndexFin;
+  return { texte: t.slice(coupureA).trim(), tronque: true };
+}
+
+// Filet de sécurité SECONDAIRE (avertissement seulement, jamais un retrait
+// automatique) : détecte un début de texte qui ressemble ENCORE à un
+// en-tête après le retrait ciblé ci-dessus -- motifs volontairement plus
+// larges (donc plus risqués pour un retrait automatique), utile pour
+// repérer un cas non prévu par MOTIFS_ENTETE_SCOLAIRE_FORTS sans jamais
+// tronquer un titre légitime par erreur.
 function ressembleAUnEnTeteScolaire(texte) {
   const premiereLigne = (texte || '').trim().split(/\n/)[0] || '';
   return /ann[ée]e scolaire|lyc[ée]e|coll[eè]ge\s|classe\s*:|r[ée]sum[ée]\s+de\s+texte/i.test(premiereLigne);
@@ -3974,13 +4031,23 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // sûr, cf. la fonction), avec avertissement si ça se produit --
         // jamais un échec silencieux de la correction elle-même.
         if (texteSupport) {
+          // Ordre important : l'en-tête (début du texte) est retiré AVANT le
+          // bloc QUESTIONS (fin du texte) -- les 2 filets sont indépendants
+          // et n'interfèrent pas, mais retirer l'en-tête en premier réduit
+          // la fenêtre de recherche utile pour les diagnostics/avertissements
+          // qui suivent.
+          const { texte: texteSupportSansEntete, tronque: enTeteTronque } = retirerEnTeteScolaire(texteSupport);
+          if (enTeteTronque) {
+            texteSupport = texteSupportSansEntete;
+            avertissementsResume.push("Le modèle avait inclus un en-tête scolaire (École/Année scolaire/Classe/intitulé de l'exercice) à l'intérieur du texte support -- retiré automatiquement avant impression et calibrage. Vérifiez le début du texte support imprimé.");
+          }
           const { texte: texteSupportSansQuestions, tronque } = retirerBlocQuestionsFinal(texteSupport);
           if (tronque) {
             texteSupport = texteSupportSansQuestions;
             avertissementsResume.push("Le modèle avait inclus un bloc « QUESTIONS » (questions de compréhension, consigne de résumé...) à l'intérieur du texte support -- retiré automatiquement avant impression et calibrage, seul le texte réel a été conservé. Vérifiez le texte support imprimé.");
           }
           if (ressembleAUnEnTeteScolaire(texteSupport)) {
-            avertissementsResume.push("Le début du texte support extrait ressemble à un en-tête scolaire (École/Année scolaire/Classe...) plutôt qu'au texte lui-même -- il n'a PAS été retiré automatiquement (risque de tronquer un titre légitime), mais le calibrage en tiendrait compte s'il s'agit bien d'un en-tête en trop. Vérifiez le début du texte support imprimé et régénérez si besoin.");
+            avertissementsResume.push("Le début du texte support extrait ressemble ENCORE à un en-tête scolaire après le retrait automatique -- vérifiez le début du texte support imprimé et régénérez si besoin (motif non reconnu par le retrait automatique).");
           }
         }
 
@@ -4016,13 +4083,18 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           // l'Évaluation (mode 'nouveau') est rédigé par le modèle de la
           // même façon ("comme dans un vrai texte publié"), donc exposé au
           // même risque d'inclusion d'un bloc QUESTIONS en trop.
+          const { texte: texteEvaluationSansEntete, tronque: evaluationEnTeteTronque } = retirerEnTeteScolaire(texteEvaluationResume);
+          if (evaluationEnTeteTronque) {
+            texteEvaluationResume = texteEvaluationSansEntete;
+            avertissementsResume.push("Le modèle avait inclus un en-tête scolaire à l'intérieur du texte de l'Évaluation -- retiré automatiquement avant impression et calibrage. Vérifiez le début du texte de l'Évaluation imprimé.");
+          }
           const { texte: texteEvaluationSansQuestions, tronque: evaluationTronquee } = retirerBlocQuestionsFinal(texteEvaluationResume);
           if (evaluationTronquee) {
             texteEvaluationResume = texteEvaluationSansQuestions;
             avertissementsResume.push("Le modèle avait inclus un bloc « QUESTIONS » à l'intérieur du texte de l'Évaluation -- retiré automatiquement avant impression et calibrage. Vérifiez le texte de l'Évaluation imprimé.");
           }
           if (ressembleAUnEnTeteScolaire(texteEvaluationResume)) {
-            avertissementsResume.push("Le début du texte de l'Évaluation extrait ressemble à un en-tête scolaire plutôt qu'au texte lui-même -- il n'a PAS été retiré automatiquement (risque de tronquer un titre légitime). Vérifiez le début du texte imprimé et régénérez si besoin.");
+            avertissementsResume.push("Le début du texte de l'Évaluation extrait ressemble ENCORE à un en-tête scolaire après le retrait automatique -- vérifiez le début du texte imprimé et régénérez si besoin.");
           }
           if (modeEvaluationResumeEffectif === 'continuation' && texteSupport
             && !normaliserTexte(texteSupport).includes(normaliserTexte(texteEvaluationResume))) {
