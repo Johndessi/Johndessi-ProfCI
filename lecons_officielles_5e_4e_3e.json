@@ -117,21 +117,7 @@
     "titreLecon": "Le dialogue argumentatif",
     "seances": [
       { "numeroSeance": 1, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 2, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 3, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 4, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 5, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 6, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 7, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 8, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 9, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif en rapport avec un thème des contenus intégrés" },
-      { "numeroSeance": 10, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 11, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 12, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 13, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 14, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif en rapport avec un thème des contenus intégrés" },
-      { "numeroSeance": 15, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
-      { "numeroSeance": 16, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" }
+      { "numeroSeance": 2, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif en rapport avec un thème des contenus intégrés" }
     ]
   },
   {
@@ -198,26 +184,7 @@
     "titreLecon": "Le texte argumentatif",
     "seances": [
       { "numeroSeance": 1, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 2, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 3, "activite": "Lecture méthodique", "intitule": "Lecture méthodique" },
-      { "numeroSeance": 4, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 5, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif en rapport avec un thème des contenus intégrés" },
-      { "numeroSeance": 6, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 7, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 8, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif en rapport avec un thème des contenus intégrés" },
-      { "numeroSeance": 9, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 10, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif en rapport avec un thème des contenus intégrés" },
-      { "numeroSeance": 11, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 13, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 14, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 15, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 16, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif en rapport avec un thème des contenus intégrés" },
-      { "numeroSeance": 17, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 18, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 19, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 20, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 21, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
-      { "numeroSeance": 22, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" }
+      { "numeroSeance": 2, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif en rapport avec un thème des contenus intégrés" }
     ]
   },
   {
