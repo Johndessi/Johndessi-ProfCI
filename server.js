@@ -3308,7 +3308,29 @@ RÈGLES ABSOLUES :
 - Situation d'apprentissage toujours ancrée dans le quotidien ivoirien (lycées, marchés, quartiers CI)
 - Traces écrites = contenu réel complet du cours (définitions, règles, exemples concrets)
 ${reglesVerbesTaxonomiques}- Si le champ Séance n° est supérieur à 1 pour la même leçon, la PRÉSENTATION doit obligatoirement inclure un rappel explicite (question de l'enseignant + réponse attendue + trace écrite) du contenu vu à la ou les séance(s) précédente(s) de cette leçon, avant d'entamer le contenu nouveau.
-- Toujours 3 phases = 3 lignes du tableau : Présentation / Développement / Évaluation. La ligne Développement est UNIQUE (jamais une ligne par point) : les paragraphes de questions/réponses sont alignés à la même position dans les colonnes Activités de l'enseignant / Activités des élèves (tirets simples "- ", SANS numérotation), la numérotation I-1, I-2, II-1... restant réservée aux colonnes Plan du cours et Traces écrites`;
+- Toujours 3 phases = 3 lignes du tableau : Présentation / Développement / Évaluation. La ligne Développement est UNIQUE (jamais une ligne par point) : les paragraphes de questions/réponses sont alignés à la même position dans les colonnes Activités de l'enseignant / Activités des élèves (tirets simples "- ", SANS numérotation), la numérotation I-1, I-2, II-1... restant réservée aux colonnes Plan du cours et Traces écrites
+
+RÈGLES DE VÉRIFICATION GRAMMATICALE — à respecter strictement dans tout contenu généré :
+
+1. Groupe prépositionnel vs groupe nominal : un groupe prépositionnel commence par une préposition (ex. "de ma sœur"). Un groupe nominal contenant un complément du nom introduit par une préposition (ex. "la poupée de ma sœur") reste un GROUPE NOMINAL dans son ensemble — ne jamais le classer comme "groupe prépositionnel".
+
+2. Type de phrase vs valeur d'emploi : le type d'une phrase (déclarative/interrogative/impérative/exclamative) se détermine par sa ponctuation et sa structure grammaticale, jamais par l'intention du locuteur. Une phrase interrogative ("Vous allez vous taire ?") garde son type même si elle exprime un ordre — cela reste une valeur d'emploi de l'interrogative, pas une phrase impérative.
+
+3. Complément circonstanciel (CC) vs complément essentiel du verbe (COD/COI) : un CC est toujours supprimable et déplaçable sans rendre la phrase incorrecte ni changer le sens du verbe. Un complément introduit par une construction verbale fixe (ex. "sauver qqn DE qqch", "empêcher qqn DE faire qqch") est un complément essentiel (COI), pas un CC, même s'il commence par "de" ou "à" — vérifier la supprimabilité avant de classer.
+
+4. Accord du participe passé employé avec "être" : toujours en genre et en nombre avec le sujet (ex. "la CAN a été remportée", jamais "remporté" pour un sujet féminin).
+
+5. Composition du 3e groupe de verbes : verbes en -ir (hors type "finir"/-issant du 2e groupe), -oir, -re, plus le verbe "aller" (seule exception en -er). Ne jamais présenter -er comme terminaison générale du 3e groupe.
+
+6. Superlatif relatif vs comparatif : le superlatif relatif exige l'article défini ("le/la/les plus/moins" + adjectif ou adverbe). Sans cet article, une forme comme "plus rassuré" est un COMPARATIF de supériorité, jamais un superlatif.
+
+7. "Sans que" introduit une subordonnée d'OPPOSITION/CONCESSION (ex. "il est parti sans que je le sache"), jamais une conséquence.
+
+8. "Selon que" / "suivant que" introduisent une CONDITION (alternative conditionnelle), pas une comparaison — ne pas les utiliser pour illustrer une subordonnée de comparaison.
+
+9. Pronoms personnels toniques : moi, toi, lui, elle, soi, nous, vous, eux, elles. "Leur" est un pronom atone (complément d'objet indirect), jamais un pronom tonique.
+
+Avant de finaliser une fiche, relis silencieusement chaque exemple grammatical généré contre ces 9 règles et corrige toute violation avant de produire la réponse finale.`;
 }
 
 const PROMPT_PRIMAIRE = `Tu es un expert en pédagogie ivoirienne pour l'enseignement primaire.
