@@ -1291,6 +1291,20 @@ function estExpressionEcrite({ discipline, lecon, theme, activite }) {
   return cible.includes('expression ecrite');
 }
 
+// Exploitation de texte (DPFC) : activité de compréhension/vocabulaire sur le
+// MÊME texte support qu'une séance de Lecture méthodique -- ni le squelette
+// analytique de la LM (axes, hypothèse), ni celui de production de l'EE
+// (rédaction collective, situation d'évaluation à rédiger). Le catalogue
+// DPFC seedé ne référence cette activité que sous "Lecture méthodique"
+// (aucune leçon "Exploitation de texte" séparée) -- la recherche de la
+// leçon/séance officielle réutilise donc volontairement 'Lecture méthodique'
+// (cf. activiteRecherchee plus bas), cohérent avec "même texte support que
+// Lecture méthodique".
+function estExploitationDeTexte({ discipline, lecon, theme, activite }) {
+  const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
+  return cible.includes('exploitation de texte');
+}
+
 // Le résumé est une activité d'Expression écrite (catalogue DPFC, discipline
 // Français), mais sa démarche réelle (validée le 08/08 contre 2 fiches
 // réelles vérifiées, 3e et 4e) est INCOMPATIBLE avec le squelette générique
@@ -3115,12 +3129,41 @@ DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa 
 ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose une SITUATION NOUVELLE, non traitée en classe (sujet différent de celui exploité en développement), demandant à l'élève de rédiger SEUL un texte du même genre en réinvestissant la définition, la structure et les outils de la langue vus plus haut.`;
 }
 
+// Exploitation de texte (DPFC) : compréhension + vocabulaire sur le texte
+// support, PAS d'analyse par axes (réservée à la Lecture méthodique) ni de
+// production écrite notée par l'élève (réservée à l'Expression écrite) --
+// contrairement à construireInstructionsLectureMethodique/ExpressionEcriture,
+// aucune fiche de référence vérifiée n'a validé cette structure précise
+// (le document source DPFC ne mentionne cette activité que comme intitulé
+// de colonne, sans détailler de gabarit) : le squelette ci-dessous est une
+// construction raisonnable à partir des pratiques de compréhension/lexique
+// usuelles, pas une reproduction d'un modèle officiel confirmé -- à faire
+// vérifier par un enseignant avant usage répété.
+function construireInstructionsExploitationDeTexte() {
+  return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE (cette fiche porte sur le MÊME texte support qu'une séance de Lecture méthodique de la même leçon, mais avec un objectif différent : compréhension et vocabulaire, PAS d'analyse par axes, PAS de production écrite notée. Les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête garde son format standard.) :
+
+ORDRE OBLIGATOIRE DES ÉLÉMENTS : Entête, PUIS Tableau Habiletés/Contenus, PUIS Situation d'apprentissage, PUIS Tableau Supports didactiques/Bibliographie, PUIS Texte support (marqueur {{TEXTE_SUPPORT}}, une seule fois, jamais {{TEXTE_SUPPORT_COPIE}}), PUIS Tableau 5 colonnes.
+
+TABLEAU HABILETÉS ET CONTENUS : verbes taxonomiques centrés sur la compréhension et le lexique (ex. Identifier, Comprendre, Relever, Expliquer, Utiliser -- jamais "Produire un texte", qui n'a pas sa place ici).
+
+DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa propre ligne du tableau DÉROULEMENT (jamais fusionnés, jamais réordonnés) :
+   I. DÉCOUVERTE DU TEXTE — lecture silencieuse puis lecture magistrale du texte support, premières impressions/hypothèses sur le contenu.
+   II. QUESTIONS DE COMPRÉHENSION — questions progressives sur le texte, de la compréhension LITTÉRALE (ce que le texte dit explicitement) vers la compréhension INFÉRENTIELLE (ce qu'on peut déduire), toutes réponses appuyées sur des passages précis du texte.
+   III. ÉTUDE DU VOCABULAIRE — relève 4 à 6 mots ou expressions du texte support jugés difficiles pour le niveau de la classe, explique leur sens EN CONTEXTE (à partir du texte, pas une définition de dictionnaire hors-sol), et fait employer chaque mot par les élèves dans une phrase nouvelle.
+   IV. SYNTHÈSE — bilan collectif de ce qui a été compris et retenu du texte (idée générale, informations clés, vocabulaire nouveau).
+
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : quelques questions de compréhension supplémentaires portant sur une partie du MÊME texte support non exploitée en classe (jamais un nouveau texte, jamais une consigne de rédaction) -- l'élève répond individuellement à l'écrit.`;
+}
+
 function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
   const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
   const motsClefs = [
     'lecture methodique', 'lecture', 'expression ecrite',
     'comprehension de texte', 'comprehension ecrite',
-    'etude de texte', 'commentaire de texte', 'resume de texte'
+    'etude de texte', 'commentaire de texte', 'resume de texte',
+    'exploitation de texte'
   ];
   return motsClefs.some((m) => cible.includes(m));
 }
@@ -3297,6 +3340,7 @@ ADAPTATIONS PAR DISCIPLINE :
 - GRAMMAIRE : ajoute un corpus de phrases numérotées P1 P2 P3... avant le tableau habiletés
 - LECTURE MÉTHODIQUE : inclus présentation du texte, hypothèse générale, axes de lecture avec tableaux de vérification (Entrée | Relevés | Analyse | Interprétation)
 - EXPRESSION ÉCRITE : inclus le texte support, questions de compréhension, vocabulaire, résumé
+- EXPLOITATION DE TEXTE : inclus le texte support (même texte qu'une séance de Lecture méthodique de la même leçon), questions de compréhension progressives, étude du vocabulaire -- JAMAIS d'axes de lecture (réservés à la Lecture méthodique), JAMAIS de production écrite notée (réservée à l'Expression écrite)
 - MATHÉMATIQUES : inclus exercices d'application avec solutions détaillées
 - SVT / PHYSIQUE-CHIMIE : inclus expériences, schémas descriptifs, observations, conclusions
 - HISTOIRE-GÉO : inclus documents sources, cartes, questions d'exploitation
@@ -3804,6 +3848,7 @@ function limiterGenerationParIp(req, res, next) {
       // squelette générique pour un résumé).
       const estResumeDetecte = estResume({ discipline, lecon, theme, activite });
       const estEE = estExpressionEcrite({ discipline, lecon, theme, activite });
+      const estExploitation = estExploitationDeTexte({ discipline, lecon, theme, activite });
       // Appel SANS classe : comportement inchangé (référentiel complet, non
       // filtré par niveau), utilisé par Expression écrite ci-dessous. Lecture
       // méthodique utilise son propre appel avec classe, isolé, juste après.
@@ -3867,21 +3912,31 @@ function limiterGenerationParIp(req, res, next) {
           return envoyerBlocageSSE(res, construireMessageBlocageTypeTexteNonCouvert());
         }
         systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
+      } else if (estExploitation) {
+        // Pas de blocage par référentiel de type de texte ici : l'Exploitation
+        // de texte ne dépend pas des catégories imposées par un type de texte
+        // (contrairement à la LM/EE) -- ses outils sont le texte lui-même
+        // (compréhension + vocabulaire), pas un référentiel de caractéristiques.
+        systemPrompt += construireInstructionsExploitationDeTexte();
       }
 
-      // Champ Leçon de l'entête : pour Lecture méthodique et Expression écrite
-      // uniquement, remplace le titre générique que le modèle avait tendance à
-      // inventer par le vrai intitulé du programme DPFC (ou le message
+      // Champ Leçon de l'entête : pour Lecture méthodique, Expression écrite et
+      // Exploitation de texte, remplace le titre générique que le modèle avait
+      // tendance à inventer par le vrai intitulé du programme DPFC (ou le message
       // d'indisponibilité, jamais un titre inventé, si le catalogue ne couvre pas
       // encore cette discipline/classe/sous-thème).
-      if (estLM || estEE) {
+      if (estLM || estEE || estExploitation) {
         // Le document source DPFC ("PROGRESSIONS DE FRANÇAIS") est une progression
         // UNIQUE couvrant toutes les activités de Français (lecture, expression
         // écrite, grammaire...) — la recherche se fait donc toujours sous la
         // discipline "Français", même si l'enseignant a tapé "Lecture méthodique"
         // ou "Expression écrite" comme discipline (convention déjà utilisée
         // ailleurs dans l'app pour déclencher le bon gabarit de fiche).
-        const activiteRecherchee = estLM ? 'Lecture méthodique' : 'Expression écrite';
+        // Exploitation de texte réutilise volontairement la recherche "Lecture
+        // méthodique" : le catalogue DPFC seedé ne référence cette activité que
+        // sous cette entrée (même leçon, même texte support) -- aucune leçon
+        // "Exploitation de texte" séparée n'existe dans le catalogue.
+        const activiteRecherchee = (estLM || estExploitation) ? 'Lecture méthodique' : 'Expression écrite';
 
         // Sélection via l'UI de menus dépendants (identification par ID, jamais
         // par le seul numéro qui peut se répéter dans l'année) : prioritaire sur
