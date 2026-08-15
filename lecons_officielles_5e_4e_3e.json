@@ -1,0 +1,245 @@
+[
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 1,
+    "titreLecon": "Le portrait",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un portrait simple" },
+      { "numeroSeance": 2, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un portrait simple en rapport avec un thème des contenus intégrés" },
+      { "numeroSeance": 3, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un portrait simple" },
+      { "numeroSeance": 4, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un portrait complexe" },
+      { "numeroSeance": 5, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un portrait complexe" },
+      { "numeroSeance": 6, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un portrait complexe en rapport avec un thème du life skills (le bien-être ; l'hygiène corporelle)" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 2,
+    "titreLecon": "Le texte descriptif",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte descriptif d'un lieu animé" },
+      { "numeroSeance": 2, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte descriptif d'un lieu animé" },
+      { "numeroSeance": 3, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte descriptif d'un lieu animé avec un thème des contenus intégrés" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 3,
+    "titreLecon": "Le poème",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un poème simple en vers libres" },
+      { "numeroSeance": 2, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un poème simple en vers libres" },
+      { "numeroSeance": 3, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un poème simple en rapport avec un thème des contenus intégrés" },
+      { "numeroSeance": 4, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un poème complexe en vers libres" },
+      { "numeroSeance": 5, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un poème complexe en vers libres" },
+      { "numeroSeance": 6, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un poème complexe en vers libres en rapport avec un thème des contenus intégrés" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 1,
+    "titreLecon": "Le portrait",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un portrait simple" },
+      { "numeroSeance": 2, "activite": "Expression écrite", "intitule": "Rédiger un portrait simple en rapport avec un thème des contenus intégrés" },
+      { "numeroSeance": 3, "activite": "Expression écrite", "intitule": "Rédiger un portrait complexe" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 2,
+    "titreLecon": "La description",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un texte descriptif d'un lieu animé" },
+      { "numeroSeance": 2, "activite": "Expression écrite", "intitule": "Rédiger un texte descriptif d'un lieu animé en rapport avec un thème des contenus intégrés" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 3,
+    "titreLecon": "Le poème",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un poème simple en vers libres" },
+      { "numeroSeance": 2, "activite": "Expression écrite", "intitule": "Rédiger un poème complexe en vers libres en rapport avec un thème des contenus intégrés" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 4,
+    "titreLecon": "Le compte rendu de lecture",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un compte rendu de lecture" }
+    ]
+  },
+
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 1,
+    "titreLecon": "Le texte explicatif",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur un phénomène naturel" },
+      { "numeroSeance": 2, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur les pratiques socioculturelles" },
+      { "numeroSeance": 3, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur un phénomène naturel" },
+      { "numeroSeance": 4, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur un phénomène naturel" },
+      { "numeroSeance": 5, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif en rapport avec un thème des contenus intégrés" },
+      { "numeroSeance": 6, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur un phénomène naturel" },
+      { "numeroSeance": 7, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur les pratiques socioculturelles" },
+      { "numeroSeance": 8, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur un phénomène naturel" },
+      { "numeroSeance": 9, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur les pratiques socioculturelles" },
+      { "numeroSeance": 10, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur un phénomène naturel" },
+      { "numeroSeance": 11, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur les pratiques socioculturelles" },
+      { "numeroSeance": 12, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif en rapport avec un thème des contenus intégrés" },
+      { "numeroSeance": 13, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur un phénomène naturel" },
+      { "numeroSeance": 14, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte explicatif portant sur les pratiques socioculturelles" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 2,
+    "titreLecon": "Le dialogue argumentatif",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif" },
+      { "numeroSeance": 2, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un dialogue argumentatif en rapport avec un thème des contenus intégrés" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 1,
+    "titreLecon": "Le texte explicatif",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un texte explicatif portant sur un phénomène naturel" },
+      { "numeroSeance": 2, "activite": "Expression écrite", "intitule": "Rédiger un texte explicatif portant sur des pratiques socioculturelles" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 2,
+    "titreLecon": "Le résumé de texte informatif",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un résumé de texte informatif (T1)" },
+      { "numeroSeance": 2, "activite": "Expression écrite", "intitule": "Rédiger un résumé de texte informatif (T2)" },
+      { "numeroSeance": 3, "activite": "Expression écrite", "intitule": "Rédiger un résumé du texte informatif (T3)" },
+      { "numeroSeance": 4, "activite": "Expression écrite", "intitule": "Rédiger un résumé du texte informatif (T4)" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 3,
+    "titreLecon": "Le compte rendu de réunion",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un compte rendu de réunion" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 4,
+    "titreLecon": "Le dialogue argumentatif",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un dialogue argumentatif exprimant un point de vue personnel" },
+      { "numeroSeance": 2, "activite": "Expression écrite", "intitule": "Rédiger un dialogue argumentatif rapportant des points de vue" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 5,
+    "titreLecon": "La lettre officielle",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger une lettre officielle" }
+    ]
+  },
+
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 1,
+    "titreLecon": "Le texte argumentatif",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif" },
+      { "numeroSeance": 2, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un texte argumentatif en rapport avec un thème des contenus intégrés" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 2,
+    "titreLecon": "L'article de journal",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un article de journal sur un fait dont on a été témoin" },
+      { "numeroSeance": 2, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un article de journal sur un fait dont on a été témoin" },
+      { "numeroSeance": 3, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un article de journal portant sur un fait rapporté" },
+      { "numeroSeance": 4, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un article de journal portant sur un fait rapporté (contenu Life skills)" },
+      { "numeroSeance": 5, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un article de journal portant sur un fait dont on a été témoin" },
+      { "numeroSeance": 6, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un article de journal portant sur un fait rapporté" },
+      { "numeroSeance": 7, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un article de journal portant sur un fait rapporté (à partir d'un thème des contenus intégrés)" },
+      { "numeroSeance": 8, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un article de journal sur un fait rapporté/dont on a été témoin" },
+      { "numeroSeance": 9, "activite": "Lecture méthodique", "intitule": "Lecture méthodique d'un article de journal portant sur un fait rapporté/dont on a été témoin" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 1,
+    "titreLecon": "Le texte argumentatif",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un texte argumentatif pour étayer un point de vue" },
+      { "numeroSeance": 2, "activite": "Expression écrite", "intitule": "Rédiger un texte argumentatif pour étayer un point de vue en rapport avec un thème des contenus intégrés" },
+      { "numeroSeance": 3, "activite": "Expression écrite", "intitule": "Rédiger un texte argumentatif pour réfuter un point de vue" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 2,
+    "titreLecon": "Le résumé du texte argumentatif",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un résumé du texte argumentatif (T1)" },
+      { "numeroSeance": 2, "activite": "Expression écrite", "intitule": "Rédiger un résumé du texte argumentatif (T2) en rapport avec un thème des contenus intégrés" },
+      { "numeroSeance": 3, "activite": "Expression écrite", "intitule": "Rédiger un résumé du texte argumentatif (T3)" },
+      { "numeroSeance": 4, "activite": "Expression écrite", "intitule": "Rédiger un résumé du texte argumentatif (T4) en rapport avec un thème des contenus intégrés" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 3,
+    "titreLecon": "L'article de journal",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un article de journal sur un fait dont on a été témoin" },
+      { "numeroSeance": 2, "activite": "Expression écrite", "intitule": "Rédiger un article de journal sur un fait dont on a été témoin en rapport avec un thème des contenus intégrés" },
+      { "numeroSeance": 3, "activite": "Expression écrite", "intitule": "Rédiger un article de journal portant sur un fait divers rapporté en rapport avec un thème des contenus intégrés" }
+    ]
+  }
+]

@@ -223,6 +223,21 @@ textarea { resize: vertical; min-height: 90px; }
         </div>
       </div>
 
+      <div class="form-group" id="modeSaisieLeconGroup" style="display:none;margin-bottom:8px">
+        <label>Source de la leçon</label>
+        <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+          <label style="font-weight:normal;display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="radio" name="modeSaisieLecon" id="modeSaisieLeconCatalogue" value="catalogue" onchange="choisirModeSaisieLecon('catalogue')"> Catalogue officiel DPFC
+          </label>
+          <label style="font-weight:normal;display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="radio" name="modeSaisieLecon" id="modeSaisieLeconLibre" value="libre" onchange="choisirModeSaisieLecon('libre')"> Saisie libre
+          </label>
+        </div>
+        <p id="modeSaisieLeconIndisponible" style="display:none;font-size:12px;color:var(--gris2);margin-top:4px">
+          Catalogue officiel pas encore disponible pour cette classe/activité — utilisez la saisie libre, ou complétez-le si vous avez la progression.
+        </p>
+      </div>
+
       <div class="form-row">
         <div class="form-group" id="leconLibreBox">
           <label>Leçon / Thème *</label>
@@ -551,7 +566,21 @@ function setNiveauModele(niveau, btn) {
 // existe pour la discipline/classe/activité sélectionnée ; sinon le champ libre
 // "Leçon / Thème" existant reste inchangé (fallback obligatoire).
 let catalogueLeconsDisponibles = [];
+// catalogueActif reste le booléen EFFECTIF lu partout ailleurs dans ce
+// fichier (aucun autre appel à changer) -- calculé dans appliquerModeCatalogue()
+// à partir de 2 sources désormais distinctes : catalogueDisponible (résultat
+// brut de la requête serveur : le catalogue existe-t-il pour cette
+// classe/activité ?) et modeSaisieLeconChoisi (choix EXPLICITE de
+// l'enseignant, qui prime toujours sur la disponibilité). Avant ce
+// changement, les 2 modes étaient mutuellement exclusifs et automatiques :
+// dès qu'un catalogue existait, il remplaçait silencieusement la saisie
+// libre sans que l'enseignant puisse revenir en arrière -- utile pourtant
+// quand le programme localement suivi diffère de la progression officielle
+// (changements de programme selon les régions/écoles, déjà rencontré sur ce
+// projet). Les 2 modes coexistent maintenant toujours, au choix.
 let catalogueActif = false;
+let catalogueDisponible = false;
+let modeSaisieLeconChoisi = null; // null = pas de choix explicite -> comportement par défaut (catalogue si disponible, sinon libre)
 
 // L'activité effective vient du sélecteur dédié quand la discipline saisie est
 // "Français" (cas réel majoritaire : l'enseignant tape la matière, pas
@@ -569,7 +598,12 @@ async function verifierCatalogueOfficiel() {
   const activite = calculerActiviteEffective();
   const classe = document.getElementById('classe').value;
   catalogueLeconsDisponibles = [];
-  catalogueActif = false;
+  catalogueDisponible = false;
+  // Nouvelle combinaison classe/activité -> on réévalue le choix par défaut
+  // (un choix explicite fait pour une combinaison précédente ne doit pas
+  // s'appliquer aveuglément à une autre, qui peut avoir une disponibilité
+  // différente).
+  modeSaisieLeconChoisi = null;
   if (activite && classe) {
     try {
       const res = await fetch(`/api/lecons-officielles/liste?discipline=${encodeURIComponent('Français')}&classe=${encodeURIComponent(classe)}&activite=${encodeURIComponent(activite)}`);
@@ -577,7 +611,7 @@ async function verifierCatalogueOfficiel() {
         const data = await res.json();
         if (Array.isArray(data) && data.length) {
           catalogueLeconsDisponibles = data;
-          catalogueActif = true;
+          catalogueDisponible = true;
         }
       }
     } catch (e) {}
@@ -585,7 +619,35 @@ async function verifierCatalogueOfficiel() {
   appliquerModeCatalogue();
 }
 
+// Choix EXPLICITE de l'enseignant (clic sur le sélecteur de mode) -- prime
+// toujours sur la disponibilité par défaut, tant que la classe/activité ne
+// change pas (cf. verifierCatalogueOfficiel qui réinitialise ce choix).
+function choisirModeSaisieLecon(mode) {
+  modeSaisieLeconChoisi = mode;
+  appliquerModeCatalogue();
+}
+
 function appliquerModeCatalogue() {
+  // catalogueActif ne peut JAMAIS être vrai si aucun catalogue n'existe pour
+  // cette combinaison (rien à afficher) -- sinon, priorité au choix explicite
+  // de l'enseignant ; à défaut de choix explicite, le catalogue reste le
+  // comportement par défaut quand il est disponible (comportement historique
+  // préservé pour la 6e).
+  catalogueActif = catalogueDisponible && modeSaisieLeconChoisi !== 'libre';
+
+  // Le sélecteur de mode reste visible dès qu'une classe/activité est
+  // choisie, que le catalogue existe ou non -- les 2 modes doivent toujours
+  // être visibles et accessibles, jamais l'un remplaçant silencieusement
+  // l'autre. L'option "Catalogue officiel" est désactivée (jamais masquée)
+  // quand aucune donnée n'existe pour cette combinaison, avec une explication.
+  const activite = calculerActiviteEffective();
+  const classe = document.getElementById('classe').value;
+  document.getElementById('modeSaisieLeconGroup').style.display = (activite && classe) ? 'block' : 'none';
+  document.getElementById('modeSaisieLeconCatalogue').disabled = !catalogueDisponible;
+  document.getElementById('modeSaisieLeconCatalogue').checked = catalogueActif;
+  document.getElementById('modeSaisieLeconLibre').checked = !catalogueActif;
+  document.getElementById('modeSaisieLeconIndisponible').style.display = catalogueDisponible ? 'none' : 'block';
+
   document.getElementById('leconLibreBox').style.display = catalogueActif ? 'none' : 'block';
   document.getElementById('seanceGroup').style.display = catalogueActif ? 'none' : 'block';
   document.getElementById('seanceIntituleGroup').style.display = catalogueActif ? 'none' : 'block';
