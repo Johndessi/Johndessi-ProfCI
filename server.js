@@ -3129,34 +3129,48 @@ DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa 
 ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose une SITUATION NOUVELLE, non traitée en classe (sujet différent de celui exploité en développement), demandant à l'élève de rédiger SEUL un texte du même genre en réinvestissant la définition, la structure et les outils de la langue vus plus haut.`;
 }
 
-// Exploitation de texte (DPFC) : compréhension/vocabulaire/grammaire/technique
-// d'expression sur le texte support, PAS d'analyse par axes (réservée à la
-// Lecture méthodique) ni de production écrite notée par l'élève (réservée à
-// l'Expression écrite). Structure (I. Vocabulaire / II. Grammaire /
-// III. Technique d'expression / Évaluation) et réutilisation de
-// REFERENTIEL_TYPES_TEXTE pour la section III précisées par l'enseignant le
-// 15/08 (aucune fiche de référence vérifiée avant cette précision -- le
-// document source DPFC ne mentionne cette activité que comme intitulé de
-// colonne, sans détailler de gabarit).
-function construireInstructionsExploitationDeTexte(referentiel) {
-  const consigneTechnique = referentiel
-    ? `Les catégories ci-dessous sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » (le même référentiel que celui utilisé en Lecture méthodique pour cette leçon) — reprends EXACTEMENT ces catégories, TOUTES SANS EXCEPTION (ni plus, ni moins, ne pas en inventer d'autres), chacune sous sa propre sous-entrée numérotée (III-1, III-2...) dans la colonne Traces écrites :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}\n\nCHAQUE catégorie ci-dessus DOIT donner lieu à une sous-entrée visible, sans exception : si le procédé correspondant (ex. une figure de style précise) est réellement présent dans le texte support, illustre-le par un exemple relevé DANS le texte ; s'il est ABSENT du texte support, la sous-entrée doit tout de même apparaître et le dire explicitement noir sur blanc (ex. « Aucune figure de style trouvée dans ce texte. »), JAMAIS une catégorie simplement omise ou passée sous silence -- une catégorie absente de la fiche serait indiscernable d'un oubli, ce qui n'est jamais acceptable.`
-    : `Aucun référentiel de catégories n'est disponible pour ce type de texte précis : détermine toi-même, à partir d'une analyse rigoureuse du texte support, les procédés d'expression les plus pertinents (indices spatiaux/temporels, verbes d'état, temps verbal dominant selon le type de texte...).`;
+// Exploitation de texte (DPFC), pour 6e/5e/4e : vocabulaire + grammaire sur
+// le texte support, PAS d'analyse par axes (réservée à la Lecture
+// méthodique) ni de production écrite notée par l'élève (réservée à
+// l'Expression écrite). Structure précisée par l'enseignant le 15/08 (I) puis
+// révisée le même jour (II) -- aucune fiche de référence vérifiée avant ces
+// précisions, le document source DPFC ne mentionne cette activité que comme
+// intitulé de colonne, sans détailler de gabarit :
+// - I. Vocabulaire et II. Grammaire sont TOUJOURS présents (jamais de
+//   sous-distinction "Conjugaison"/"Perfectionnement de la langue" : la
+//   conjugaison, quand elle est le point de langue pertinent, reste sous le
+//   même intitulé "Grammaire").
+// - III. Technique d'expression est OPTIONNELLE : ne l'inclure QUE si le
+//   texte support contient un vrai point exploitable (figure de style
+//   identifiable, procédé d'organisation textuelle) -- sinon OMETTRE la
+//   section entièrement (ni ligne vide, ni mention forcée d'absence :
+//   comportement inverse de la version précédente, corrigé sur demande le
+//   même jour après un premier essai qui forçait au contraire une mention
+//   explicite pour CHAQUE catégorie du référentiel complet).
+// - ÉVALUATION reste TOUJOURS en dernier, mais teste uniquement ce qui vient
+//   d'être enseigné dans CETTE séance (vocabulaire/grammaire, et technique
+//   d'expression si la section III est présente) -- explicitement PAS liée
+//   au mécanisme d'"entrée réservée" utilisé par la Lecture méthodique
+//   (cf. resoudrePresentationRecomposee et alentours), qui ne s'applique pas
+//   à cette activité.
+function construireInstructionsExploitationDeTexte(classe) {
+  const niveau = niveauLectureMethodique(classe);
+  const figuresNiveau = figureStyleParNiveauCollege(niveau === 'lycee' ? '4e_3e' : niveau).description;
 
   return `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE (cette fiche porte sur le MÊME texte support qu'une séance de Lecture méthodique de la même leçon, mais avec un objectif différent : vocabulaire, grammaire et technique d'expression, PAS d'analyse par axes, PAS de production écrite notée. Les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête garde son format standard.) :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE (cette fiche porte sur le MÊME texte support qu'une séance de Lecture méthodique de la même leçon, mais avec un objectif différent : vocabulaire et grammaire, PAS d'analyse par axes, PAS de production écrite notée. Les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête garde son format standard.) :
 
 ORDRE OBLIGATOIRE DES ÉLÉMENTS : Entête, PUIS Tableau Habiletés/Contenus, PUIS Situation d'apprentissage, PUIS Tableau Supports didactiques/Bibliographie, PUIS Texte support (marqueur {{TEXTE_SUPPORT}}, une seule fois, jamais {{TEXTE_SUPPORT_COPIE}}), PUIS Tableau 5 colonnes.
 
-TABLEAU HABILETÉS ET CONTENUS : verbes taxonomiques centrés sur le vocabulaire, la grammaire et la technique d'expression (ex. Identifier, Relever, Expliquer, Utiliser, Analyser -- jamais "Produire un texte", qui n'a pas sa place ici).
+TABLEAU HABILETÉS ET CONTENUS : verbes taxonomiques centrés sur le vocabulaire et la grammaire, PLUS la technique d'expression UNIQUEMENT si la section III ci-dessous est effectivement incluse (ex. Identifier, Relever, Expliquer, Utiliser -- jamais "Produire un texte", qui n'a pas sa place ici).
 
-DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa propre ligne du tableau DÉROULEMENT (jamais fusionnés, jamais réordonnés) :
-   I. VOCABULAIRE — relève 4 à 6 mots ou expressions du texte support jugés difficiles pour le niveau de la classe, explique leur sens EN CONTEXTE (à partir du texte, pas une définition de dictionnaire hors-sol), et fait employer chaque mot par les élèves dans une phrase nouvelle.
-   II. GRAMMAIRE — identifie et explique 2 à 3 structures grammaticales significatives réellement présentes dans le texte support (ex. type de phrases dominant, temps verbaux employés, expansion du groupe nominal...), toujours à partir d'exemples relevés dans le texte, jamais hors-sujet.
-   III. TECHNIQUE D'EXPRESSION — ${consigneTechnique}
+DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments I et II suivants, chacun dans sa propre ligne du tableau DÉROULEMENT (jamais fusionnés, jamais réordonnés), PUIS le moment III SEULEMENT s'il est justifié (voir plus bas) :
+   I. VOCABULAIRE (TOUJOURS présent) — relève 4 à 6 mots ou expressions du texte support jugés difficiles pour le niveau de la classe, explique leur sens EN CONTEXTE (à partir du texte, pas une définition de dictionnaire hors-sol), et fait employer chaque mot par les élèves dans une phrase nouvelle.
+   II. GRAMMAIRE (TOUJOURS présent, UN SEUL intitulé "Grammaire", jamais scindé en "Conjugaison" et "Grammaire"/"Perfectionnement de la langue" séparés) — identifie et explique UN point de langue réellement présent et significatif dans le texte support (type de phrases dominant, temps verbaux employés et leur valeur, un point de conjugaison, expansion du groupe nominal, un déterminant ou pronom particulier...) : choisis le point le plus pertinent pour CE texte précis, toujours illustré par des exemples relevés dans le texte, jamais hors-sujet.
+   III. TECHNIQUE D'EXPRESSION (OPTIONNEL -- décide toi-même de l'inclure ou non) — INCLUS cette section UNIQUEMENT si le texte support contient réellement un point exploitable et identifiable : soit une figure de style parmi celles attendues au niveau de la classe (${figuresNiveau}), soit un procédé d'organisation textuelle notable (ex. plan visible, connecteurs logiques structurants, énumération organisée). Si un tel point est identifié, illustre-le par un exemple précis relevé DANS le texte. SI AUCUN point de ce genre n'est réellement présent dans le texte support, N'INCLUS PAS cette section du tout (aucune ligne "III.", aucune mention "aucune figure trouvée" ni "technique d'expression" laissée vide) -- section III entièrement absente de la fiche dans ce cas, exactement comme si elle n'existait pas dans la structure.
 
-ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : quelques questions portant sur une partie du MÊME texte support non exploitée en classe (vocabulaire, grammaire ou technique d'expression -- jamais un nouveau texte, jamais une consigne de rédaction) -- l'élève répond individuellement à l'écrit.`;
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT, TOUJOURS en dernier) : quelques questions individuelles à l'écrit testant UNIQUEMENT ce qui vient d'être enseigné dans CETTE séance précise (le vocabulaire et le point de grammaire vus en I et II, et la technique d'expression si la section III est présente) -- jamais un nouveau texte, jamais une consigne de rédaction, et JAMAIS lié au mécanisme d'entrée réservée à l'évaluation utilisé en Lecture méthodique (mécanisme propre à cette autre activité, sans rapport ici).`;
 }
 
 function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
@@ -3915,16 +3929,13 @@ function limiterGenerationParIp(req, res, next) {
         }
         systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
       } else if (estExploitation) {
-        // Même référentiel, même appel (AVEC classe, fusion socle collège) que
-        // la Lecture méthodique pour cette leçon (précisé par l'enseignant le
-        // 15/08) -- et même principe de blocage que LM/EE : la section
-        // "Technique d'expression" ne doit JAMAIS être une estimation libre du
-        // modèle quand le type de texte n'est pas sourcé.
-        const referentielTypeTexteExploitation = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
-        if (!referentielTypeTexteExploitation) {
-          return envoyerBlocageSSE(res, construireMessageBlocageTypeTexteNonCouvert());
-        }
-        systemPrompt += construireInstructionsExploitationDeTexte(referentielTypeTexteExploitation);
+        // Pas de blocage par référentiel de type de texte ici (révisé le
+        // 15/08) : contrairement à la LM/EE, le vocabulaire et la grammaire
+        // (I et II, toujours présents) ne dépendent d'aucun référentiel de
+        // type de texte -- seule la section III (optionnelle) s'appuie sur la
+        // liste de figures de style par niveau (figureStyleParNiveauCollege),
+        // gérée directement dans construireInstructionsExploitationDeTexte.
+        systemPrompt += construireInstructionsExploitationDeTexte(classe);
       }
 
       // Champ Leçon de l'entête : pour Lecture méthodique, Expression écrite et
