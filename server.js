@@ -3129,32 +3129,34 @@ DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa 
 ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose une SITUATION NOUVELLE, non traitée en classe (sujet différent de celui exploité en développement), demandant à l'élève de rédiger SEUL un texte du même genre en réinvestissant la définition, la structure et les outils de la langue vus plus haut.`;
 }
 
-// Exploitation de texte (DPFC) : compréhension + vocabulaire sur le texte
-// support, PAS d'analyse par axes (réservée à la Lecture méthodique) ni de
-// production écrite notée par l'élève (réservée à l'Expression écrite) --
-// contrairement à construireInstructionsLectureMethodique/ExpressionEcriture,
-// aucune fiche de référence vérifiée n'a validé cette structure précise
-// (le document source DPFC ne mentionne cette activité que comme intitulé
-// de colonne, sans détailler de gabarit) : le squelette ci-dessous est une
-// construction raisonnable à partir des pratiques de compréhension/lexique
-// usuelles, pas une reproduction d'un modèle officiel confirmé -- à faire
-// vérifier par un enseignant avant usage répété.
-function construireInstructionsExploitationDeTexte() {
+// Exploitation de texte (DPFC) : compréhension/vocabulaire/grammaire/technique
+// d'expression sur le texte support, PAS d'analyse par axes (réservée à la
+// Lecture méthodique) ni de production écrite notée par l'élève (réservée à
+// l'Expression écrite). Structure (I. Vocabulaire / II. Grammaire /
+// III. Technique d'expression / Évaluation) et réutilisation de
+// REFERENTIEL_TYPES_TEXTE pour la section III précisées par l'enseignant le
+// 15/08 (aucune fiche de référence vérifiée avant cette précision -- le
+// document source DPFC ne mentionne cette activité que comme intitulé de
+// colonne, sans détailler de gabarit).
+function construireInstructionsExploitationDeTexte(referentiel) {
+  const consigneTechnique = referentiel
+    ? `Les catégories ci-dessous sont IMPOSÉES par le référentiel du type de texte « ${referentiel.typeTexte} » (le même référentiel que celui utilisé en Lecture méthodique pour cette leçon) — reprends EXACTEMENT ces catégories (ni plus, ni moins, ne pas en inventer d'autres), chacune illustrée par un exemple relevé DANS le texte support :\n${formaterCaracteristiquesReferentiel(referentiel.caracteristiques)}`
+    : `Aucun référentiel de catégories n'est disponible pour ce type de texte précis : détermine toi-même, à partir d'une analyse rigoureuse du texte support, les procédés d'expression les plus pertinents (indices spatiaux/temporels, verbes d'état, temps verbal dominant selon le type de texte...).`;
+
   return `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE (cette fiche porte sur le MÊME texte support qu'une séance de Lecture méthodique de la même leçon, mais avec un objectif différent : compréhension et vocabulaire, PAS d'analyse par axes, PAS de production écrite notée. Les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête garde son format standard.) :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE (cette fiche porte sur le MÊME texte support qu'une séance de Lecture méthodique de la même leçon, mais avec un objectif différent : vocabulaire, grammaire et technique d'expression, PAS d'analyse par axes, PAS de production écrite notée. Les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête garde son format standard.) :
 
 ORDRE OBLIGATOIRE DES ÉLÉMENTS : Entête, PUIS Tableau Habiletés/Contenus, PUIS Situation d'apprentissage, PUIS Tableau Supports didactiques/Bibliographie, PUIS Texte support (marqueur {{TEXTE_SUPPORT}}, une seule fois, jamais {{TEXTE_SUPPORT_COPIE}}), PUIS Tableau 5 colonnes.
 
-TABLEAU HABILETÉS ET CONTENUS : verbes taxonomiques centrés sur la compréhension et le lexique (ex. Identifier, Comprendre, Relever, Expliquer, Utiliser -- jamais "Produire un texte", qui n'a pas sa place ici).
+TABLEAU HABILETÉS ET CONTENUS : verbes taxonomiques centrés sur le vocabulaire, la grammaire et la technique d'expression (ex. Identifier, Relever, Expliquer, Utiliser, Analyser -- jamais "Produire un texte", qui n'a pas sa place ici).
 
 DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa propre ligne du tableau DÉROULEMENT (jamais fusionnés, jamais réordonnés) :
-   I. DÉCOUVERTE DU TEXTE — lecture silencieuse puis lecture magistrale du texte support, premières impressions/hypothèses sur le contenu.
-   II. QUESTIONS DE COMPRÉHENSION — questions progressives sur le texte, de la compréhension LITTÉRALE (ce que le texte dit explicitement) vers la compréhension INFÉRENTIELLE (ce qu'on peut déduire), toutes réponses appuyées sur des passages précis du texte.
-   III. ÉTUDE DU VOCABULAIRE — relève 4 à 6 mots ou expressions du texte support jugés difficiles pour le niveau de la classe, explique leur sens EN CONTEXTE (à partir du texte, pas une définition de dictionnaire hors-sol), et fait employer chaque mot par les élèves dans une phrase nouvelle.
-   IV. SYNTHÈSE — bilan collectif de ce qui a été compris et retenu du texte (idée générale, informations clés, vocabulaire nouveau).
+   I. VOCABULAIRE — relève 4 à 6 mots ou expressions du texte support jugés difficiles pour le niveau de la classe, explique leur sens EN CONTEXTE (à partir du texte, pas une définition de dictionnaire hors-sol), et fait employer chaque mot par les élèves dans une phrase nouvelle.
+   II. GRAMMAIRE — identifie et explique 2 à 3 structures grammaticales significatives réellement présentes dans le texte support (ex. type de phrases dominant, temps verbaux employés, expansion du groupe nominal...), toujours à partir d'exemples relevés dans le texte, jamais hors-sujet.
+   III. TECHNIQUE D'EXPRESSION — ${consigneTechnique}
 
-ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : quelques questions de compréhension supplémentaires portant sur une partie du MÊME texte support non exploitée en classe (jamais un nouveau texte, jamais une consigne de rédaction) -- l'élève répond individuellement à l'écrit.`;
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : quelques questions portant sur une partie du MÊME texte support non exploitée en classe (vocabulaire, grammaire ou technique d'expression -- jamais un nouveau texte, jamais une consigne de rédaction) -- l'élève répond individuellement à l'écrit.`;
 }
 
 function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
@@ -3913,11 +3915,16 @@ function limiterGenerationParIp(req, res, next) {
         }
         systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
       } else if (estExploitation) {
-        // Pas de blocage par référentiel de type de texte ici : l'Exploitation
-        // de texte ne dépend pas des catégories imposées par un type de texte
-        // (contrairement à la LM/EE) -- ses outils sont le texte lui-même
-        // (compréhension + vocabulaire), pas un référentiel de caractéristiques.
-        systemPrompt += construireInstructionsExploitationDeTexte();
+        // Même référentiel, même appel (AVEC classe, fusion socle collège) que
+        // la Lecture méthodique pour cette leçon (précisé par l'enseignant le
+        // 15/08) -- et même principe de blocage que LM/EE : la section
+        // "Technique d'expression" ne doit JAMAIS être une estimation libre du
+        // modèle quand le type de texte n'est pas sourcé.
+        const referentielTypeTexteExploitation = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
+        if (!referentielTypeTexteExploitation) {
+          return envoyerBlocageSSE(res, construireMessageBlocageTypeTexteNonCouvert());
+        }
+        systemPrompt += construireInstructionsExploitationDeTexte(referentielTypeTexteExploitation);
       }
 
       // Champ Leçon de l'entête : pour Lecture méthodique, Expression écrite et
