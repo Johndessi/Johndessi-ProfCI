@@ -1385,6 +1385,32 @@ function separerLignesDeroulementExploitation(contenuHTML) {
   return { html, avertissements };
 }
 
+// Vérifie que la structure Mode 1 attendue (I. VOCABULAIRE et II. GRAMMAIRE,
+// chacune EN TÊTE de sa propre ligne du tableau DÉROULEMENT) est bien
+// présente -- utilisé par le filet de sécurité de stream.on('finalMessage', ...).
+// Vérification précise (première cellule d'une ligne à 5 colonnes), PAS une
+// simple recherche de sous-chaîne dans tout le document : les mots
+// "vocabulaire"/"grammaire" peuvent légitimement apparaître ailleurs (ex. un
+// axe "Vocabulaire et sensations" en cas de dérive vers la structure Lecture
+// méthodique, ou une référence bibliographique "Grammaire progressive du
+// français") sans que la vraie structure attendue soit présente -- une
+// recherche naïve produirait un faux négatif (avertissement jamais déclenché
+// alors que la structure a bien échoué).
+function structureExploitationModeAutoPresente(contenuHTML) {
+  if (!contenuHTML || !contenuHTML.includes('<tr')) return false;
+  const $ = cheerio.load(contenuHTML);
+  let vocabulairePresent = false;
+  let grammairePresent = false;
+  $('tr').each((_, tr) => {
+    const $tds = $(tr).find('> td');
+    if ($tds.length !== 5) return;
+    const premiereColonne = $tds.first().text().toUpperCase();
+    if (/I\.\s*VOCABULAIRE/.test(premiereColonne)) vocabulairePresent = true;
+    if (/II\.\s*GRAMMAIRE/.test(premiereColonne)) grammairePresent = true;
+  });
+  return vocabulairePresent && grammairePresent;
+}
+
 // Détection stricte : uniquement "lecture méthodique" (ni "lecture" seule, ni
 // "résumé de texte", ni "commentaire de texte", qui gardent la structure générique).
 function estLectureMethodique({ discipline, lecon, theme, activite }) {
@@ -3281,8 +3307,8 @@ DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments I et II suivants, chacun 
    ou
    <!-- ANALYSE-PREALABLE-TECHNIQUE-EXPRESSION: NON --> (si aucun point réel n'est identifié)
    Cette décision est prise UNE SEULE FOIS, avant de rédiger I et II, et engage IMPÉRATIVEMENT la suite : si tu écris OUI, le tableau DÉROULEMENT doit ensuite contenir une ligne III distincte (voir plus bas) ; si tu écris NON, ce tableau ne doit contenir aucune ligne III. Une fiche où le commentaire dit OUI mais où la section III est absente (ou l'inverse) est INVALIDE.
-   I. VOCABULAIRE (TOUJOURS présent) — relève 4 à 6 mots ou expressions du texte support jugés difficiles pour le niveau de la classe, explique leur sens EN CONTEXTE (à partir du texte, pas une définition de dictionnaire hors-sol), et fait employer chaque mot par les élèves dans une phrase nouvelle. N'utilise JAMAIS ici, même entre parenthèses ou en complément d'un autre point, l'un des mots suivants : comparaison, métaphore, personnification, hyperbole, énumération, gradation, figure de style. Si un mot de vocabulaire retenu appartient aussi à un passage qui illustre une figure de style, explique uniquement son SENS en contexte ici, sans nommer ni analyser la figure : cette analyse appartient EXCLUSIVEMENT à la section III si elle existe.
-   II. GRAMMAIRE (TOUJOURS présent, UN SEUL intitulé "Grammaire", jamais scindé en "Conjugaison" et "Grammaire"/"Perfectionnement de la langue" séparés) — identifie et explique UN point de langue réellement présent et significatif dans le texte support (type de phrases dominant, temps verbaux employés et leur valeur, un point de conjugaison, expansion du groupe nominal, un déterminant ou pronom particulier...) : choisis le point le plus pertinent pour CE texte précis, toujours illustré par des exemples relevés dans le texte, jamais hors-sujet. N'utilise JAMAIS ici, même entre parenthèses ou en complément d'un autre point, l'un des mots suivants : comparaison, métaphore, personnification, hyperbole, énumération, gradation, figure de style. Si l'exemple le plus naturel pour illustrer ton point de grammaire contient aussi une figure de style, tu peux citer ce même passage, mais SANS jamais nommer ni analyser la figure qu'il contient (aucune étiquette de ce type entre parenthèses ou ailleurs) : cette analyse appartient EXCLUSIVEMENT à la section III si elle existe.
+   I. VOCABULAIRE (TOUJOURS présent, JAMAIS les mots comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style, même en étiquette d'un sous-point -- réservés à la III) — pas seulement des mots isolés : selon ce que CE texte permet réellement (jamais forcé, jamais tout inventer), choisis parmi sens en contexte, sens propre/figuré d'un mot (sans nommer de figure de style), dérivation/famille de mots, synonymes/antonymes, niveau de langue. Explique chaque point EN CONTEXTE et fait employer le mot dans une phrase nouvelle. Plusieurs points si le texte le permet, jamais réduit à un seul par principe.
+   II. GRAMMAIRE (TOUJOURS présent, UN SEUL intitulé "Grammaire" -- jamais "Conjugaison"/"Perfectionnement" séparés -- JAMAIS les mots comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style, même en étiquette d'un sous-point -- réservés à la III) — pas un seul point isolé : selon ce que CE texte permet réellement (jamais forcé, jamais tout inventer), choisis parmi type(s) de phrases, temps verbaux et leur valeur, accords, conjugaison, expansion du GN, fonctions (sujet/COD/COI/CC), déterminant/pronom. Chaque point illustré par un exemple du texte. Plusieurs points si le texte le permet, jamais réduit à un seul par principe.
    III. TECHNIQUE D'EXPRESSION (SA PRÉSENCE DÉPEND UNIQUEMENT DU COMMENTAIRE ANALYSE-PREALABLE-TECHNIQUE-EXPRESSION CI-DESSUS -- jamais une décision de mise en forme libre) :
       - SI le commentaire préalable dit OUI : cette section III EST OBLIGATOIRE, avec son propre titre distinct "III. TECHNIQUE D'EXPRESSION" dans sa PROPRE ligne du tableau DÉROULEMENT, séparée de I et de II. C'est ICI, et ICI SEULEMENT, que le mot désignant la figure de style ou le procédé d'organisation doit apparaître et être analysé (nom du procédé, exemple précis relevé DANS le texte, explication de son effet).
       - SI le commentaire préalable dit NON : N'INCLUS PAS cette section du tout (aucune ligne "III.", aucune mention "aucune figure trouvée" ni "technique d'expression" laissée vide) -- section III entièrement absente de la fiche dans ce cas, exactement comme si elle n'existait pas dans la structure.
@@ -3381,16 +3407,16 @@ function construireDeroulementExploitationPlanEnseignantHTML(segments) {
   const lignes = [
     construireLigneDeroulementHTML({
       moment: 'I. VOCABULAIRE',
-      strategie: 'Étude du vocabulaire en contexte',
-      activiteEnseignant: "Fait relever et expliquer les mots/expressions du texte support jugés difficiles, fait employer chacun dans une phrase nouvelle.",
-      activiteEleves: 'Relèvent les mots, en expliquent le sens en contexte, les emploient dans une phrase nouvelle.',
+      strategie: 'Étude du vocabulaire (sens, dérivation, synonymes/antonymes, niveaux de langue selon le texte)',
+      activiteEnseignant: "Fait relever et expliquer le vocabulaire du texte support (sens en contexte, sens propre/figuré, dérivation, synonymes/antonymes, niveaux de langue selon ce que permet le texte), fait employer chaque mot/notion dans une phrase ou un exercice nouveau.",
+      activiteEleves: 'Relèvent le vocabulaire étudié, en expliquent le sens et les particularités en contexte, les emploient dans une phrase ou un exercice nouveau.',
       tracesEcrites: texteSupportVersHtml(segments.vocabulaire)
     }),
     construireLigneDeroulementHTML({
       moment: 'II. GRAMMAIRE',
-      strategie: 'Observation et analyse du point de langue',
-      activiteEnseignant: "Fait identifier et expliquer le point de langue à partir d'exemples relevés dans le texte support.",
-      activiteEleves: "Identifient et expliquent le point de langue, à partir d'exemples relevés dans le texte.",
+      strategie: 'Observation et analyse des points de langue exploitables dans le texte',
+      activiteEnseignant: "Fait identifier et expliquer les points de langue réellement présents dans le texte support (temps verbaux, accords, fonctions, types de phrases... selon ce que le texte permet), à partir d'exemples relevés dans le texte.",
+      activiteEleves: "Identifient et expliquent les points de langue étudiés, à partir d'exemples relevés dans le texte.",
       tracesEcrites: texteSupportVersHtml(segments.grammaire)
     })
   ];
@@ -4614,6 +4640,21 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenuHTML = contenuLignesSeparees;
         for (const avertissementLigne of avertissementsLignes) {
           res.write(`data: ${JSON.stringify({ avertissement: avertissementLigne })}\n\n`);
+        }
+        // Filet de sécurité Mode 1 UNIQUEMENT (Mode 2 garantit déjà la
+        // structure par construction, cf. planFourniExploitationInjection) :
+        // constaté en test réel (16/08) -- même avec des instructions
+        // explicites, le modèle abandonne parfois entièrement la structure
+        // I. Vocabulaire/II. Grammaire pour retomber sur un schéma Lecture
+        // méthodique (Hypothèse générale/Axes) ou un unique bloc DÉVELOPPEMENT
+        // générique, à un taux non négligeable. Impossible à corriger de façon
+        // fiable côté serveur (contenu entièrement libre, pas de marqueur à
+        // réinjecter) -- le seul filet possible est de ne JAMAIS livrer ça
+        // silencieusement : avertissement explicite si les 2 sections
+        // obligatoires sont absentes, pour que l'enseignant sache qu'il doit
+        // régénérer plutôt que de découvrir le problème après coup.
+        if (!planFourniExploitationInjection && !structureExploitationModeAutoPresente(contenuHTML)) {
+          res.write(`data: ${JSON.stringify({ avertissement: "La structure attendue (I. Vocabulaire / II. Grammaire, chacune en tête de ligne du tableau Développement) n'a pas été générée correctement pour cette fiche -- le modèle a produit une autre structure (probablement inspirée de la Lecture méthodique : axes, hypothèse...). Ne pas utiliser cette fiche telle quelle : régénérez-la." })}\n\n`);
         }
       }
       // Mode 1 (Lecture méthodique automatique) sans texte support fourni :
