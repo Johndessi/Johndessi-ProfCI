@@ -4416,10 +4416,30 @@ function limiterGenerationParIp(req, res, next) {
       const estResumeDetecte = estResume({ discipline, lecon, theme, activite });
       const estEE = estExpressionEcrite({ discipline, lecon, theme, activite });
       const estExploitation = estExploitationDeTexte({ discipline, lecon, theme, activite });
+
+      // Résolution par ID (menus dépendants de l'UI, cf. plus bas) faite ICI,
+      // AVANT le matching du référentiel de type de texte ci-dessous : sinon
+      // une sélection par ID (leconOfficielleId/seanceOfficielleId) envoyée
+      // sans un champ "lecon" en texte libre qui matche un alias (cas réel
+      // constaté le 16/08 : Expression écrite 5e "Le portrait" bloquée à
+      // tort) alors que le catalogue identifie parfaitement la leçon
+      // demandée. Le titre/l'intitulé résolus par ID sont donc ajoutés au
+      // texte utilisé pour ce matching -- jamais un remplacement du texte
+      // libre lecon/theme, les deux pouvant coexister ou un seul être fourni.
+      const leconOfficiellePourReferentiel = (leconOfficielleId && seanceOfficielleId)
+        ? await trouverLeconEtSeanceParId(leconOfficielleId, seanceOfficielleId)
+        : null;
+      const texteCibleReferentiel = [
+        lecon || '',
+        theme || '',
+        leconOfficiellePourReferentiel ? leconOfficiellePourReferentiel.lecon.titreLecon : '',
+        leconOfficiellePourReferentiel ? leconOfficiellePourReferentiel.seance.intitule : ''
+      ].join(' ');
+
       // Appel SANS classe : comportement inchangé (référentiel complet, non
       // filtré par niveau), utilisé par Expression écrite ci-dessous. Lecture
       // méthodique utilise son propre appel avec classe, isolé, juste après.
-      const referentielTypeTexte = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`);
+      const referentielTypeTexte = trouverReferentielTypeTexte(texteCibleReferentiel);
 
       if (estLM) {
         // Mode "plan fourni par l'enseignant" : quand l'enseignant a rédigé
@@ -4437,7 +4457,7 @@ function limiterGenerationParIp(req, res, next) {
         // génération est bloquée AVANT tout appel au modèle (changement
         // d'architecture du 07/08, cf. construireMessageBlocageTypeTexteNonCouvert)
         // -- jamais un repli silencieux vers une invention libre.
-        referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
+        referentielTypeTexteLM = trouverReferentielTypeTexte(texteCibleReferentiel, classe);
         if (planCoursEstSubstantiel(planCours)) {
           const resultatPlanFourni = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentielTypeTexteLM);
           if (resultatPlanFourni.bloque) {
@@ -4526,7 +4546,7 @@ function limiterGenerationParIp(req, res, next) {
         // par le seul numéro qui peut se répéter dans l'année) : prioritaire sur
         // la recherche floue par texte libre ci-dessous.
         const leconOfficielle = (leconOfficielleId && seanceOfficielleId)
-          ? await trouverLeconEtSeanceParId(leconOfficielleId, seanceOfficielleId)
+          ? leconOfficiellePourReferentiel
           : await trouverLeconOfficielleDPFC({ discipline: 'Français', classe, lecon, theme, activite: activiteRecherchee });
 
         if (leconOfficielle) {
