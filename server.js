@@ -3261,59 +3261,240 @@ DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa 
 ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose une SITUATION NOUVELLE, non traitée en classe (sujet différent de celui exploité en développement), demandant à l'élève de rédiger SEUL un texte du même genre en réinvestissant la définition, la structure et les outils de la langue vus plus haut.`;
 }
 
-// Exploitation de texte (DPFC), pour 6e/5e/4e : vocabulaire + grammaire sur
-// le texte support, PAS d'analyse par axes (réservée à la Lecture
+// Exploitation de texte (DPFC), pour 6e/5e/4e/3e : vocabulaire + grammaire
+// sur le texte support, PAS d'analyse par axes (réservée à la Lecture
 // méthodique) ni de production écrite notée par l'élève (réservée à
-// l'Expression écrite). Structure précisée par l'enseignant le 15/08 (I) puis
-// révisée le même jour (II) -- aucune fiche de référence vérifiée avant ces
-// précisions, le document source DPFC ne mentionne cette activité que comme
-// intitulé de colonne, sans détailler de gabarit :
+// l'Expression écrite).
 // - I. Vocabulaire et II. Grammaire sont TOUJOURS présents (jamais de
-//   sous-distinction "Conjugaison"/"Perfectionnement de la langue" : la
-//   conjugaison, quand elle est le point de langue pertinent, reste sous le
-//   même intitulé "Grammaire").
+//   sous-distinction "Conjugaison"/"Perfectionnement de la langue"), et
+//   couvrent TOUT ce que le texte permet réellement (pas un seul point
+//   isolé).
 // - III. Technique d'expression est OPTIONNELLE : ne l'inclure QUE si le
-//   texte support contient un vrai point exploitable (figure de style
-//   identifiable, procédé d'organisation textuelle) -- sinon OMETTRE la
-//   section entièrement (ni ligne vide, ni mention forcée d'absence :
-//   comportement inverse de la version précédente, corrigé sur demande le
-//   même jour après un premier essai qui forçait au contraire une mention
-//   explicite pour CHAQUE catégorie du référentiel complet).
-// - ÉVALUATION reste TOUJOURS en dernier, mais teste uniquement ce qui vient
-//   d'être enseigné dans CETTE séance (vocabulaire/grammaire, et technique
-//   d'expression si la section III est présente) -- explicitement PAS liée
-//   au mécanisme d'"entrée réservée" utilisé par la Lecture méthodique
-//   (cf. resoudrePresentationRecomposee et alentours), qui ne s'applique pas
-//   à cette activité.
+//   texte support contient un vrai point exploitable -- sinon OMETTRE la
+//   section entièrement.
+// - ÉVALUATION reste TOUJOURS en dernier, teste uniquement ce qui vient
+//   d'être enseigné dans CETTE séance -- explicitement PAS liée au
+//   mécanisme d'"entrée réservée" utilisé par la Lecture méthodique.
+//
+// CONSTRUCTION DÉTERMINISTE (16/08, 2e itération) : testé en conditions
+// réelles sur un échantillon adverse (texte 3e riche en procédés
+// littéraires), la version précédente -- qui demandait au modèle d'écrire
+// lui-même les <tr> complets du tableau DÉROULEMENT, avec labels imposés et
+// interdictions de vocabulaire -- s'effondrait à un taux élevé (~80% sur cet
+// échantillon, mesuré par comparaison A/B) : le modèle abandonnait la
+// structure entière pour un schéma Lecture méthodique (Hypothèse générale/
+// Axes), malgré les interdictions explicites. Cause probable : combiner
+// génération de contenu ET respect strict d'un format HTML/de labels dans
+// une même tâche complexe, sur un texte qui "invite" à une analyse plus
+// riche. Corrigé en séparant les deux : le modèle ne rédige plus JAMAIS les
+// <tr>/labels lui-même pour cette partie -- il rédige uniquement le contenu
+// pédagogique brut, entre des marqueurs dédiés (mêmes marqueurs, même
+// mécanique que le Mode 2 -- cf. construireLigneDeroulementHTML,
+// injecterMarqueurUneFois), et le serveur construit les lignes <tr> de façon
+// 100% déterministe à partir de ce contenu (cf. resoudreDeroulementExploitationAuto,
+// appelée dans stream.on('finalMessage', ...)). Élimine PAR CONSTRUCTION les
+// risques de fusion de lignes, d'intitulé inventé, ou de structure
+// entièrement remplacée par un schéma Lecture méthodique -- si le modèle
+// dévie malgré tout, les marqueurs sont simplement absents, détecté et
+// signalé explicitement (jamais un échec silencieux), au lieu de produire un
+// document plausible mais structurellement faux.
+const CHAMPS_SECTION_EXPLOITATION_AUTO = ['STRATEGIE', 'ENSEIGNANT', 'ELEVES', 'TRACES'];
+
+const LIBELLES_MOMENT_EXPLOITATION_AUTO = {
+  I: 'I. VOCABULAIRE',
+  II: 'II. GRAMMAIRE',
+  III: "III. TECHNIQUE D'EXPRESSION",
+  EVAL: 'ÉVALUATION'
+};
+
+function construireConsigneChampsExploitationAuto(prefixe, { strategie, enseignant, eleves, traces }) {
+  const m = (champ) => `{{EXPL_AUTO_${prefixe}_${champ}}}...{{FIN_EXPL_AUTO_${prefixe}_${champ}}}`;
+  return `   ${LIBELLES_MOMENT_EXPLOITATION_AUTO[prefixe]} -- rédige, N'IMPORTE OÙ dans ta réponse, ces 4 blocs de contenu SÉPARÉS (jamais de <tr>/<td> autour, jamais le libellé "${LIBELLES_MOMENT_EXPLOITATION_AUTO[prefixe]}" toi-même -- déjà géré par le serveur) :
+      - Stratégie (résumé très court, ex. "${strategie}") entre ${m('STRATEGIE')}
+      - Activités de l'enseignant (${enseignant}) entre ${m('ENSEIGNANT')}
+      - Activités des élèves (${eleves}, alignées 1 pour 1 avec les questions ci-dessus) entre ${m('ELEVES')}
+      - Traces écrites (contenu réel) : ${traces} -- entre ${m('TRACES')}`;
+}
+
 function construireInstructionsExploitationDeTexte(classe) {
   const niveau = niveauLectureMethodique(classe);
   const figuresNiveau = figureStyleParNiveauCollege(niveau === 'lycee' ? '4e_3e' : niveau).description;
+
+  const consigneI = construireConsigneChampsExploitationAuto('I', {
+    strategie: 'Étude du vocabulaire en contexte',
+    enseignant: 'questions taxonomiques sur le vocabulaire',
+    eleves: 'réponses attendues',
+    traces: `pas seulement des mots isolés -- selon ce que CE texte permet réellement (jamais forcé, jamais inventé), choisis parmi sens en contexte, sens propre/figuré d'un mot (SANS nommer de figure de style -- réservé à la section III), dérivation/famille de mots, synonymes/antonymes, niveau de langue ; explique chaque point EN CONTEXTE et fait employer le mot dans une phrase nouvelle ; plusieurs points si le texte le permet, jamais réduit à un seul par principe. JAMAIS les mots comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style, même en étiquette d'un sous-point`
+  });
+  const consigneII = construireConsigneChampsExploitationAuto('II', {
+    strategie: 'Observation et analyse des points de langue',
+    enseignant: 'questions taxonomiques sur la grammaire',
+    eleves: 'réponses attendues',
+    traces: `UN SEUL point de langue isolé est INSUFFISANT -- selon ce que CE texte permet réellement (jamais forcé, jamais inventé), choisis parmi type(s) de phrases, temps verbaux et leur valeur, accords, conjugaison, expansion du GN, fonctions (sujet/COD/COI/CC), déterminant/pronom ; chaque point illustré par un exemple du texte ; plusieurs points si le texte le permet, jamais réduit à un seul par principe. JAMAIS les mots comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style, même en étiquette d'un sous-point -- réservés à la section III`
+  });
+  const consigneIII = construireConsigneChampsExploitationAuto('III', {
+    strategie: "Identification et analyse de la technique d'expression",
+    enseignant: 'questions guidant vers le procédé identifié en étape préalable',
+    eleves: 'réponses attendues',
+    traces: "nom du procédé (figure de style ou d'organisation textuelle), exemple précis relevé DANS le texte, explication de son effet -- C'EST ICI, ET ICI SEULEMENT, que ces mots (comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style) doivent apparaître"
+  });
+  const consigneEval = construireConsigneChampsExploitationAuto('EVAL', {
+    strategie: 'Travail individuel à l\'écrit',
+    enseignant: 'donne le sujet',
+    eleves: 'travaillent seuls, à l\'écrit',
+    traces: "quelques questions testant UNIQUEMENT ce qui vient d'être enseigné dans CETTE séance précise (le vocabulaire et le point de grammaire vus en I et II, et la technique d'expression si la section III est présente) -- jamais un nouveau texte, jamais une consigne de rédaction, jamais lié au mécanisme d'entrée réservée à l'évaluation utilisé en Lecture méthodique (sans rapport ici)"
+  });
 
   return `
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE (cette fiche porte sur le MÊME texte support qu'une séance de Lecture méthodique de la même leçon, mais avec un objectif différent : vocabulaire et grammaire, PAS d'analyse par axes, PAS de production écrite notée. Les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête garde son format standard.) :
 
-INTERDICTION EXPLICITE, même sur un texte support riche en procédés littéraires (portrait, description, texte narratif...) qui pourrait donner l'impression qu'une analyse plus complète serait pertinente : n'utilise JAMAIS, pour cette fiche, le vocabulaire ni la structure de la Lecture méthodique -- pas de "Hypothèse générale", pas de "Axe 1"/"Axe 2"/"Axe 3", pas de découpage en 4 ou 5 moments, pas de tableau d'entrées Indices/Analyse/Interprétation. Le DÉVELOPPEMENT de CETTE fiche a EXACTEMENT 2 ou 3 moments (I, II, et III si justifié), jamais plus, jamais réorganisés autour d'une hypothèse de lecture.
-
-INTITULÉS LITTÉRAUX ET FIXES, jamais reformulés ni adaptés au thème du texte support : les titres des moments DOIVENT être EXACTEMENT "I. VOCABULAIRE", "II. GRAMMAIRE" et, si présente, "III. TECHNIQUE D'EXPRESSION" -- mot pour mot, à l'identique quel que soit le texte support. N'invente JAMAIS de titre plus descriptif ou plus spécifique au texte (ex. "I. Organisation spatiale", "II. Adjectifs et expansions", "III. Figures de style" sont des intitulés INTERDITS, même s'ils décrivent fidèlement le contenu de la section -- seuls les 3 intitulés génériques ci-dessus sont autorisés).
+INTERDICTION EXPLICITE, même sur un texte support riche en procédés littéraires (portrait, description, texte narratif...) qui pourrait donner l'impression qu'une analyse plus complète serait pertinente : n'utilise JAMAIS, pour cette fiche, le vocabulaire ni la structure de la Lecture méthodique -- pas de "Hypothèse générale", pas de "Axe 1"/"Axe 2"/"Axe 3", pas de tableau d'entrées Indices/Analyse/Interprétation.
 
 ORDRE OBLIGATOIRE DES ÉLÉMENTS : Entête, PUIS Tableau Habiletés/Contenus, PUIS Situation d'apprentissage, PUIS Tableau Supports didactiques/Bibliographie, PUIS Texte support (marqueur {{TEXTE_SUPPORT}}, une seule fois, jamais {{TEXTE_SUPPORT_COPIE}}), PUIS Tableau 5 colonnes.
 
 TABLEAU HABILETÉS ET CONTENUS : verbes taxonomiques centrés sur le vocabulaire et la grammaire, PLUS la technique d'expression UNIQUEMENT si la section III ci-dessous est effectivement incluse (ex. Identifier, Relever, Expliquer, Utiliser -- jamais "Produire un texte", qui n'a pas sa place ici).
 
-DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments I et II suivants, chacun dans sa PROPRE ligne <tr> du tableau DÉROULEMENT (jamais fusionnés entre eux, jamais réordonnés, jamais regroupés dans une même ligne même si cela semble plus compact), PUIS le moment III SEULEMENT s'il est justifié (voir plus bas), toujours lui aussi dans sa PROPRE ligne <tr> séparée -- un tableau DÉROULEMENT à 2 ou 3 lignes pour cette partie (selon que III est présent ou non) est OBLIGATOIRE, une seule ligne fusionnant plusieurs moments romains est INTERDITE :
-   ÉTAPE PRÉALABLE OBLIGATOIRE : avant d'écrire le tableau DÉROULEMENT (mais après l'entête, les tableaux Habiletés/Contenus et Supports didactiques, et le texte support, qui gardent l'ordre imposé plus haut), analyse le texte support et détermine s'il contient réellement une figure de style parmi celles attendues au niveau de la classe (${figuresNiveau}) ou un procédé d'organisation textuelle notable (plan visible, connecteurs logiques structurants, énumération organisée). Écris le résultat de cette analyse dans un commentaire HTML, placé juste avant le tableau DÉROULEMENT, au format EXACT :
+DÉVELOPPEMENT — le tableau DÉROULEMENT (lignes I, II, III si applicable, ÉVALUATION) est CONSTRUIT AUTOMATIQUEMENT par le serveur à partir du contenu que tu vas rédiger : tu n'écris JAMAIS toi-même les balises <tr>/<td> de ces lignes, ni leurs intitulés ("I. VOCABULAIRE" etc. sont ajoutés automatiquement, pas par toi). Tu rédiges UNIQUEMENT le contenu pédagogique, entre des marqueurs dédiés, comme demandé ci-dessous. Juste après la ligne PRÉSENTATION rituelle (celle-ci, générique, reste à ta charge comme d'habitude, dans le tableau 5 colonnes normal), place EXACTEMENT le marqueur {{DEROULEMENT_EXPLOITATION_AUTO}} comme SEUL contenu de cette position (pas de <tr>/<td> autour) -- il sera remplacé après coup par les lignes déjà construites à partir du contenu que tu rédiges plus bas.
+
+   ÉTAPE PRÉALABLE OBLIGATOIRE : avant de rédiger le contenu des sections ci-dessous, analyse le texte support et détermine s'il contient réellement une figure de style parmi celles attendues au niveau de la classe (${figuresNiveau}) ou un procédé d'organisation textuelle notable (plan visible, connecteurs logiques structurants, énumération organisée). Écris le résultat de cette analyse dans un commentaire HTML, placé N'IMPORTE OÙ avant le marqueur {{DEROULEMENT_EXPLOITATION_AUTO}}, au format EXACT :
    <!-- ANALYSE-PREALABLE-TECHNIQUE-EXPRESSION: OUI - <type identifié, ex. "comparaison : brillent comme deux étoiles"> --> (si un point réel est identifié)
    ou
    <!-- ANALYSE-PREALABLE-TECHNIQUE-EXPRESSION: NON --> (si aucun point réel n'est identifié)
-   Cette décision est prise UNE SEULE FOIS, avant de rédiger I et II, et engage IMPÉRATIVEMENT la suite : si tu écris OUI, le tableau DÉROULEMENT doit ensuite contenir une ligne III distincte (voir plus bas) ; si tu écris NON, ce tableau ne doit contenir aucune ligne III. Une fiche où le commentaire dit OUI mais où la section III est absente (ou l'inverse) est INVALIDE.
-   I. VOCABULAIRE (TOUJOURS présent, JAMAIS les mots comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style, même en étiquette d'un sous-point -- réservés à la III) — pas seulement des mots isolés : selon ce que CE texte permet réellement (jamais forcé, jamais tout inventer), choisis parmi sens en contexte, sens propre/figuré d'un mot (sans nommer de figure de style), dérivation/famille de mots, synonymes/antonymes, niveau de langue. Explique chaque point EN CONTEXTE et fait employer le mot dans une phrase nouvelle. Plusieurs points si le texte le permet, jamais réduit à un seul par principe.
-   II. GRAMMAIRE (TOUJOURS présent, UN SEUL intitulé "Grammaire" -- jamais "Conjugaison"/"Perfectionnement" séparés -- JAMAIS les mots comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style, même en étiquette d'un sous-point -- réservés à la III) — pas un seul point isolé : selon ce que CE texte permet réellement (jamais forcé, jamais tout inventer), choisis parmi type(s) de phrases, temps verbaux et leur valeur, accords, conjugaison, expansion du GN, fonctions (sujet/COD/COI/CC), déterminant/pronom. Chaque point illustré par un exemple du texte. Plusieurs points si le texte le permet, jamais réduit à un seul par principe.
-   III. TECHNIQUE D'EXPRESSION (SA PRÉSENCE DÉPEND UNIQUEMENT DU COMMENTAIRE ANALYSE-PREALABLE-TECHNIQUE-EXPRESSION CI-DESSUS -- jamais une décision de mise en forme libre) :
-      - SI le commentaire préalable dit OUI : cette section III EST OBLIGATOIRE, avec son propre titre distinct "III. TECHNIQUE D'EXPRESSION" dans sa PROPRE ligne du tableau DÉROULEMENT, séparée de I et de II. C'est ICI, et ICI SEULEMENT, que le mot désignant la figure de style ou le procédé d'organisation doit apparaître et être analysé (nom du procédé, exemple précis relevé DANS le texte, explication de son effet).
-      - SI le commentaire préalable dit NON : N'INCLUS PAS cette section du tout (aucune ligne "III.", aucune mention "aucune figure trouvée" ni "technique d'expression" laissée vide) -- section III entièrement absente de la fiche dans ce cas, exactement comme si elle n'existait pas dans la structure.
+   Cette décision est prise UNE SEULE FOIS et engage IMPÉRATIVEMENT la suite : si tu écris OUI, rédige aussi le contenu de la section III (voir plus bas) ; si tu écris NON, ne rédige PAS le contenu de la section III (ses marqueurs ne doivent apparaître nulle part).
 
-ÉVALUATION (ligne distincte du tableau DÉROULEMENT, TOUJOURS en dernier) : quelques questions individuelles à l'écrit testant UNIQUEMENT ce qui vient d'être enseigné dans CETTE séance précise (le vocabulaire et le point de grammaire vus en I et II, et la technique d'expression si la section III est présente) -- jamais un nouveau texte, jamais une consigne de rédaction, et JAMAIS lié au mécanisme d'entrée réservée à l'évaluation utilisé en Lecture méthodique (mécanisme propre à cette autre activité, sans rapport ici).`;
+   Rédige maintenant le contenu de chaque section, chacune séparément entre ses propres marqueurs (les 4 marqueurs par section peuvent apparaître dans n'importe quel ordre et n'importe où dans ta réponse, mais chaque bloc doit rester intact et complet) :
+${consigneI}
+${consigneII}
+   III. TECHNIQUE D'EXPRESSION -- SEULEMENT SI le commentaire ANALYSE-PREALABLE-TECHNIQUE-EXPRESSION ci-dessus dit OUI (si NON, ne rédige AUCUN des 4 blocs suivants, aucune trace de cette section nulle part) :
+${consigneIII}
+${consigneEval}`;
+}
+
+// Détecte la décision OUI/NON de l'étape préalable (cf. commentaire HTML
+// ANALYSE-PREALABLE-TECHNIQUE-EXPRESSION ci-dessus) -- null si le modèle n'a
+// pas placé ce commentaire du tout (cas à traiter comme un échec par
+// l'appelant, jamais une supposition silencieuse OUI ou NON par défaut).
+function detecterDecisionTechniqueExpressionAuto(contenuHTML) {
+  const m = /<!--\s*ANALYSE-PREALABLE-TECHNIQUE-EXPRESSION:\s*(OUI|NON)/i.exec(contenuHTML || '');
+  if (!m) return null;
+  return m[1].toUpperCase() === 'OUI';
+}
+
+// Extrait les 4 champs d'UNE section (I/II/III/EVAL) via ses marqueurs
+// dédiés, les retire du HTML -- jamais un jeton laissé visible dans le
+// document final, qu'il ait été trouvé ou non.
+function extraireSectionExploitationAuto(contenuHTML, prefixe) {
+  let resultat = contenuHTML;
+  const valeurs = {};
+  const manquants = [];
+  for (const champ of CHAMPS_SECTION_EXPLOITATION_AUTO) {
+    const nomMarqueur = `EXPL_AUTO_${prefixe}_${champ}`;
+    const regex = new RegExp(`\\{\\{${nomMarqueur}\\}\\}([\\s\\S]*?)\\{\\{FIN_${nomMarqueur}\\}\\}`);
+    const m = regex.exec(resultat);
+    if (m) {
+      valeurs[champ] = m[1].trim();
+      resultat = resultat.slice(0, m.index) + resultat.slice(m.index + m[0].length);
+    } else {
+      manquants.push(champ);
+    }
+  }
+  return { valeurs, contenuHTML: resultat, manquants };
+}
+
+// Extrait TOUTES les sections attendues (I, II, III si applicable, EVAL),
+// construit les lignes <tr> déterministes à partir de leur contenu (cf.
+// construireLigneDeroulementHTML -- même fonction que la Lecture méthodique
+// et le Mode 2 d'Exploitation de texte), et retourne le HTML nettoyé des
+// marqueurs + un avertissement EXPLICITE pour toute section dont au moins un
+// champ manque (jamais un jeton laissé visible, jamais un échec silencieux --
+// même principe que verifierMarqueursPlanEnseignant). Une section dont les 4
+// champs manquent TOUS est omise entièrement de la fiche (jamais une ligne
+// vide fabriquée) -- signe que le modèle a dévié de la consigne pour cette
+// section (probable retour vers un schéma Lecture méthodique).
+function resoudreDeroulementExploitationAuto(contenuHTML, sectionsAttendues) {
+  let resultat = contenuHTML;
+  const lignesHTML = [];
+  const avertissements = [];
+
+  for (const prefixe of sectionsAttendues) {
+    const { valeurs, contenuHTML: nettoye, manquants } = extraireSectionExploitationAuto(resultat, prefixe);
+    resultat = nettoye;
+    const moment = LIBELLES_MOMENT_EXPLOITATION_AUTO[prefixe];
+    if (manquants.length === CHAMPS_SECTION_EXPLOITATION_AUTO.length) {
+      avertissements.push(`La section "${moment}" n'a pas été générée dans le format attendu -- absente de cette fiche. Ne pas l'utiliser telle quelle : régénérez-la.`);
+      continue;
+    }
+    if (manquants.length > 0) {
+      avertissements.push(`La section "${moment}" est incomplète (${manquants.join(', ')} manquant(s)) -- vérifiez cette section avant d'utiliser la fiche.`);
+    }
+    // Marque cette ligne comme construite par le serveur (attribut data-*,
+    // jamais visible ni affecté par le rendu) -- cf. supprimerLignesExploitationAutoDupliquees,
+    // qui doit pouvoir la distinguer d'une ligne libre écrite PAR ERREUR par
+    // le modèle avec le même intitulé, y compris quand cette dernière
+    // apparaît AVANT elle dans le document (le modèle ne place pas toujours
+    // le marqueur {{DEROULEMENT_EXPLOITATION_AUTO}} exactement où demandé,
+    // observé en test réel -- "1ère occurrence" n'est donc pas un critère
+    // fiable pour savoir laquelle est la ligne légitime).
+    const ligne = construireLigneDeroulementHTML({
+      moment,
+      strategie: valeurs.STRATEGIE || '',
+      activiteEnseignant: valeurs.ENSEIGNANT || '',
+      activiteEleves: valeurs.ELEVES || '',
+      tracesEcrites: valeurs.TRACES || ''
+    }).replace('<tr>', '<tr data-expl-auto="1">');
+    lignesHTML.push(ligne);
+  }
+
+  return { contenuHTML: resultat, lignesHTML: lignesHTML.join('\n'), avertissements };
+}
+
+// Filet redondant : constaté en test réel (16/08, 2e itération) -- même en
+// plaçant correctement ses marqueurs de contenu, le modèle écrit parfois EN
+// PLUS sa propre ligne <tr> libre pour une section déjà construite,
+// dupliquant le contenu. Comparaison en SOUS-CHAÎNE (pas en préfixe ni en
+// égalité stricte) : une ligne dupliquée par le modèle peut porter une durée
+// en plus ("ÉVALUATION(10 mn)") OU un préfixe en plus ("DÉVELOPPEMENTI.
+// VOCABULAIRE", cas réel observé où le modèle recopie encore l'ancien
+// libellé "DÉVELOPPEMENT" devant) -- une comparaison plus stricte manquerait
+// ces cas et laisserait la duplication en place.
+// Laquelle des 2 lignes garder ? PAS "la première rencontrée" : observé en
+// test réel que le modèle place parfois son marqueur {{DEROULEMENT_EXPLOITATION_AUTO}}
+// APRÈS sa propre ligne libre erronée plutôt qu'à la position demandée --
+// la ligne légitime (construite par le serveur, cf. resoudreDeroulementExploitationAuto)
+// N'EST DONC PAS TOUJOURS la première du document. Elle est en revanche
+// TOUJOURS identifiable par l'attribut data-expl-auto="1" qu'elle seule
+// porte -- c'est ce marqueur, jamais l'ordre d'apparition, qui décide
+// laquelle garder. Repli sûr si aucune des lignes en double ne porte cet
+// attribut (ne devrait pas arriver) : garde la première, comme avant.
+function supprimerLignesExploitationAutoDupliquees(contenuHTML) {
+  if (!contenuHTML || !contenuHTML.includes('<tr')) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  const moments = Object.values(LIBELLES_MOMENT_EXPLOITATION_AUTO);
+
+  const groupes = new Map(); // moment -> [$tr, ...]
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const $tds = $tr.find('> td');
+    if ($tds.length !== 5) return;
+    const intitule = $tds.first().text().trim();
+    const moment = moments.find((m) => intitule.includes(m));
+    if (!moment) return;
+    if (!groupes.has(moment)) groupes.set(moment, []);
+    groupes.get(moment).push($tr);
+  });
+
+  for (const lignes of groupes.values()) {
+    if (lignes.length < 2) continue;
+    const construite = lignes.find(($tr) => $tr.attr('data-expl-auto') === '1');
+    const aGarder = construite || lignes[0];
+    for (const $tr of lignes) {
+      if ($tr !== aGarder) $tr.remove();
+    }
+  }
+
+  const $racine = $('.fiche-cours').first();
+  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
 }
 
 // --- Mode "plan fourni par l'enseignant" pour Exploitation de texte ---
@@ -4200,6 +4381,13 @@ function limiterGenerationParIp(req, res, next) {
     // structure et marqueurs différents, aucun rapport avec les axes/entrées
     // de la Lecture méthodique.
     let planFourniExploitationInjection = null;
+    // Mode 1 (automatique) d'Exploitation de texte, DEPUIS le 16/08 (2e
+    // itération) : construction déterministe du tableau DÉROULEMENT à partir
+    // de marqueurs, cf. resoudreDeroulementExploitationAuto appelée dans
+    // stream.on('finalMessage', ...) -- true UNIQUEMENT quand ce mode est
+    // effectivement déclenché (jamais en Mode 2, où la structure vient déjà
+    // du plan de l'enseignant).
+    let modeAutoExploitationDeterministe = false;
     // Mode 1 (automatique, Lecture méthodique) sans texte support fourni par
     // l'enseignant : le modèle doit rédiger lui-même le texte support (cf.
     // section "texteSupport" plus bas) -- utilisé aussi pour retrouver le
@@ -4312,6 +4500,7 @@ function limiterGenerationParIp(req, res, next) {
           }
         } else {
           systemPrompt += construireInstructionsExploitationDeTexte(classe);
+          modeAutoExploitationDeterministe = true;
         }
       }
 
@@ -4632,6 +4821,25 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       }
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
       contenuHTML = injecterDeroulementExploitationPlanEnseignant(contenuHTML, planFourniExploitationInjection);
+      // Mode 1 déterministe d'Exploitation de texte (16/08, 2e itération) :
+      // extrait le contenu rédigé par le modèle entre les marqueurs dédiés
+      // (cf. resoudreDeroulementExploitationAuto) et construit les lignes
+      // <tr> déterministes à sa place -- AVANT separerLignesDeroulementExploitation
+      // ci-dessous, qui reste un filet redondant pour le cas où le modèle
+      // écrirait malgré tout du HTML libre au lieu de suivre les marqueurs.
+      if (modeAutoExploitationDeterministe) {
+        const decisionTechniqueExpression = detecterDecisionTechniqueExpressionAuto(contenuHTML);
+        const sectionsAttendues = ['I', 'II', ...(decisionTechniqueExpression ? ['III'] : []), 'EVAL'];
+        const { contenuHTML: contenuNettoyeAuto, lignesHTML, avertissements: avertissementsAuto } = resoudreDeroulementExploitationAuto(contenuHTML, sectionsAttendues);
+        contenuHTML = injecterMarqueurUneFois(contenuNettoyeAuto, '{{DEROULEMENT_EXPLOITATION_AUTO}}', lignesHTML);
+        contenuHTML = supprimerLignesExploitationAutoDupliquees(contenuHTML);
+        if (decisionTechniqueExpression === null) {
+          avertissementsAuto.push("Le commentaire d'analyse préalable (figure de style / technique d'expression) n'a pas été trouvé -- la section III n'a pas pu être fiabilisée pour cette fiche. Vérifiez si un point exploitable existe dans le texte et régénérez si besoin.");
+        }
+        for (const avertissementAuto of avertissementsAuto) {
+          res.write(`data: ${JSON.stringify({ avertissement: avertissementAuto })}\n\n`);
+        }
+      }
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
       }
@@ -4641,18 +4849,12 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         for (const avertissementLigne of avertissementsLignes) {
           res.write(`data: ${JSON.stringify({ avertissement: avertissementLigne })}\n\n`);
         }
-        // Filet de sécurité Mode 1 UNIQUEMENT (Mode 2 garantit déjà la
-        // structure par construction, cf. planFourniExploitationInjection) :
-        // constaté en test réel (16/08) -- même avec des instructions
-        // explicites, le modèle abandonne parfois entièrement la structure
-        // I. Vocabulaire/II. Grammaire pour retomber sur un schéma Lecture
-        // méthodique (Hypothèse générale/Axes) ou un unique bloc DÉVELOPPEMENT
-        // générique, à un taux non négligeable. Impossible à corriger de façon
-        // fiable côté serveur (contenu entièrement libre, pas de marqueur à
-        // réinjecter) -- le seul filet possible est de ne JAMAIS livrer ça
-        // silencieusement : avertissement explicite si les 2 sections
-        // obligatoires sont absentes, pour que l'enseignant sache qu'il doit
-        // régénérer plutôt que de découvrir le problème après coup.
+        // Filet redondant (défense en profondeur), utile surtout si le
+        // modèle a malgré tout écrit du HTML libre au lieu de suivre les
+        // marqueurs (cf. modeAutoExploitationDeterministe ci-dessus, qui
+        // gère désormais le cas nominal de façon déterministe) : signale un
+        // avertissement supplémentaire si la structure reste absente après
+        // tout ce qui précède -- jamais un échec silencieux.
         if (!planFourniExploitationInjection && !structureExploitationModeAutoPresente(contenuHTML)) {
           res.write(`data: ${JSON.stringify({ avertissement: "La structure attendue (I. Vocabulaire / II. Grammaire, chacune en tête de ligne du tableau Développement) n'a pas été générée correctement pour cette fiche -- le modèle a produit une autre structure (probablement inspirée de la Lecture méthodique : axes, hypothèse...). Ne pas utiliser cette fiche telle quelle : régénérez-la." })}\n\n`);
         }
