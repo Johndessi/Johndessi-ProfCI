@@ -1279,6 +1279,112 @@ function separerTableauxImbriques(contenuHTML) {
   return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
 }
 
+// Filet de sécurité serveur pour Exploitation de texte : même si le prompt
+// interdit explicitement de fusionner I. Vocabulaire / II. Grammaire / III.
+// Technique d'expression dans une seule ligne <tr> du tableau DÉROULEMENT
+// (cf. construireInstructionsExploitationDeTexte), le modèle l'a fait malgré
+// tout dans des tests réels (les 3 intitulés apparaissant comme sous-titres
+// <strong> à l'intérieur des mêmes cellules d'une seule ligne). On ne fait
+// jamais confiance uniquement à l'obéissance du modèle sur ce point : cette
+// fonction détecte une ligne fusionnée et la scinde en autant de lignes <tr>
+// distinctes que de sections détectées, en ne touchant QUE les lignes dont
+// la structure est sans ambiguïté (mêmes labels, dans le même ordre, dans
+// chaque cellule) -- sinon elle laisse le HTML intact et remonte un
+// avertissement explicite (jamais de découpage hasardeux qui risquerait de
+// tronquer ou de mélanger du contenu réel).
+const LABELS_DEROULEMENT_EXPLOITATION = [
+  { regex: /I\.\s*VOCABULAIRE/i, titre: 'I. VOCABULAIRE' },
+  { regex: /II\.\s*GRAMMAIRE/i, titre: 'II. GRAMMAIRE' },
+  { regex: /III\.\s*TECHNIQUE\s*D[’']EXPRESSION/i, titre: "III. TECHNIQUE D'EXPRESSION" }
+];
+
+function separerLignesDeroulementExploitation(contenuHTML) {
+  const avertissements = [];
+  if (!contenuHTML || !contenuHTML.includes('<tr')) return { html: contenuHTML, avertissements };
+  const $ = cheerio.load(contenuHTML);
+
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const $tds = $tr.find('> td');
+    if ($tds.length < 2) return;
+
+    const rowHtml = $tr.html() || '';
+    const labelsPresents = LABELS_DEROULEMENT_EXPLOITATION.filter((l) => l.regex.test(rowHtml));
+    if (labelsPresents.length < 2) return; // ligne normale (un seul moment, ou sans rapport) : rien à faire
+
+    const N = labelsPresents.length;
+    const decoupageParCellule = [];
+    let coherent = true;
+
+    $tds.each((idxCell, td) => {
+      const html = $(td).html() || '';
+      const positions = [];
+      let curseur = 0;
+      for (const l of labelsPresents) {
+        const m = html.slice(curseur).match(l.regex);
+        if (!m) { positions.push(null); continue; }
+        const idx = curseur + m.index;
+        positions.push(idx);
+        curseur = idx + m[0].length;
+      }
+      const trouves = positions.filter((p) => p !== null).length;
+      // Positions strictement croissantes attendues (ordre I, II, III) --
+      // toute incohérence (ordre inversé, label manquant au milieu) rend le
+      // découpage de CETTE ligne non fiable.
+      const ordreValide = positions.every((p, i) => p === null || i === 0 || positions[i - 1] === null || p > positions[i - 1]);
+      if (!ordreValide || (trouves !== 0 && trouves !== N)) { coherent = false; return false; }
+      if (trouves === 0) {
+        // Cellule non subdivisée par le modèle (aucun des labels attendus) :
+        // jamais de perte silencieuse de contenu -- tout le texte de la
+        // cellule est conservé, rattaché à la 1ère nouvelle ligne, les
+        // suivantes restant vides pour cette colonne plutôt que dupliquées
+        // ou effacées.
+        const contenuComplet = html.trim();
+        decoupageParCellule.push(Array.from({ length: N }, (_, i) => (i === 0 ? contenuComplet : '')));
+        return;
+      }
+      const segments = positions.map((debut, i) => {
+        const fin = i + 1 < N ? positions[i + 1] : html.length;
+        return debut === null ? '' : html.slice(debut, fin).trim();
+      });
+      const preambule = html.slice(0, positions[0]).trim();
+      if (preambule) segments[0] = preambule + segments[0];
+      decoupageParCellule.push(segments);
+    });
+
+    if (!coherent) {
+      avertissements.push("Une ligne du tableau Développement (Exploitation de texte) mélangeait plusieurs sections (Vocabulaire/Grammaire/Technique d'expression) de façon trop ambiguë pour être séparée automatiquement -- vérifiez manuellement que chaque section apparaît bien sur sa propre ligne.");
+      return;
+    }
+
+    const stylesTd = [];
+    $tds.each((i, td) => stylesTd.push($(td).attr('style') || ''));
+
+    const nouvellesLignes = [];
+    for (let i = 0; i < N; i++) {
+      const $nouvelleLigne = $('<tr></tr>');
+      $tds.each((idxCell) => {
+        const $nouvelleCellule = $('<td></td>');
+        if (stylesTd[idxCell]) $nouvelleCellule.attr('style', stylesTd[idxCell]);
+        if (idxCell === 0) {
+          $nouvelleCellule.html(`DÉVELOPPEMENT<br>${labelsPresents[i].titre}`);
+        } else {
+          const segments = decoupageParCellule[idxCell];
+          $nouvelleCellule.html(segments ? (segments[i] || '') : '');
+        }
+        $nouvelleLigne.append($nouvelleCellule);
+      });
+      nouvellesLignes.push($nouvelleLigne);
+    }
+
+    $tr.replaceWith(nouvellesLignes);
+  });
+
+  const $racine = $('.fiche-cours').first();
+  const html = $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+  return { html, avertissements };
+}
+
 // Détection stricte : uniquement "lecture méthodique" (ni "lecture" seule, ni
 // "résumé de texte", ni "commentaire de texte", qui gardent la structure générique).
 function estLectureMethodique({ discipline, lecon, theme, activite }) {
@@ -4251,6 +4357,13 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
+      }
+      if (estExploitationDeTexte({ discipline, lecon, theme, activite })) {
+        const { html: contenuLignesSeparees, avertissements: avertissementsLignes } = separerLignesDeroulementExploitation(contenuHTML);
+        contenuHTML = contenuLignesSeparees;
+        for (const avertissementLigne of avertissementsLignes) {
+          res.write(`data: ${JSON.stringify({ avertissement: avertissementLigne })}\n\n`);
+        }
       }
       // Mode 1 (Lecture méthodique automatique) sans texte support fourni :
       // extrait le texte rédigé par le modèle (cf. userMessage plus haut)
