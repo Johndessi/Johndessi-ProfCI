@@ -1279,6 +1279,112 @@ function separerTableauxImbriques(contenuHTML) {
   return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
 }
 
+// Filet de sécurité serveur pour Exploitation de texte : même si le prompt
+// interdit explicitement de fusionner I. Vocabulaire / II. Grammaire / III.
+// Technique d'expression dans une seule ligne <tr> du tableau DÉROULEMENT
+// (cf. construireInstructionsExploitationDeTexte), le modèle l'a fait malgré
+// tout dans des tests réels (les 3 intitulés apparaissant comme sous-titres
+// <strong> à l'intérieur des mêmes cellules d'une seule ligne). On ne fait
+// jamais confiance uniquement à l'obéissance du modèle sur ce point : cette
+// fonction détecte une ligne fusionnée et la scinde en autant de lignes <tr>
+// distinctes que de sections détectées, en ne touchant QUE les lignes dont
+// la structure est sans ambiguïté (mêmes labels, dans le même ordre, dans
+// chaque cellule) -- sinon elle laisse le HTML intact et remonte un
+// avertissement explicite (jamais de découpage hasardeux qui risquerait de
+// tronquer ou de mélanger du contenu réel).
+const LABELS_DEROULEMENT_EXPLOITATION = [
+  { regex: /I\.\s*VOCABULAIRE/i, titre: 'I. VOCABULAIRE' },
+  { regex: /II\.\s*GRAMMAIRE/i, titre: 'II. GRAMMAIRE' },
+  { regex: /III\.\s*TECHNIQUE\s*D[’']EXPRESSION/i, titre: "III. TECHNIQUE D'EXPRESSION" }
+];
+
+function separerLignesDeroulementExploitation(contenuHTML) {
+  const avertissements = [];
+  if (!contenuHTML || !contenuHTML.includes('<tr')) return { html: contenuHTML, avertissements };
+  const $ = cheerio.load(contenuHTML);
+
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const $tds = $tr.find('> td');
+    if ($tds.length < 2) return;
+
+    const rowHtml = $tr.html() || '';
+    const labelsPresents = LABELS_DEROULEMENT_EXPLOITATION.filter((l) => l.regex.test(rowHtml));
+    if (labelsPresents.length < 2) return; // ligne normale (un seul moment, ou sans rapport) : rien à faire
+
+    const N = labelsPresents.length;
+    const decoupageParCellule = [];
+    let coherent = true;
+
+    $tds.each((idxCell, td) => {
+      const html = $(td).html() || '';
+      const positions = [];
+      let curseur = 0;
+      for (const l of labelsPresents) {
+        const m = html.slice(curseur).match(l.regex);
+        if (!m) { positions.push(null); continue; }
+        const idx = curseur + m.index;
+        positions.push(idx);
+        curseur = idx + m[0].length;
+      }
+      const trouves = positions.filter((p) => p !== null).length;
+      // Positions strictement croissantes attendues (ordre I, II, III) --
+      // toute incohérence (ordre inversé, label manquant au milieu) rend le
+      // découpage de CETTE ligne non fiable.
+      const ordreValide = positions.every((p, i) => p === null || i === 0 || positions[i - 1] === null || p > positions[i - 1]);
+      if (!ordreValide || (trouves !== 0 && trouves !== N)) { coherent = false; return false; }
+      if (trouves === 0) {
+        // Cellule non subdivisée par le modèle (aucun des labels attendus) :
+        // jamais de perte silencieuse de contenu -- tout le texte de la
+        // cellule est conservé, rattaché à la 1ère nouvelle ligne, les
+        // suivantes restant vides pour cette colonne plutôt que dupliquées
+        // ou effacées.
+        const contenuComplet = html.trim();
+        decoupageParCellule.push(Array.from({ length: N }, (_, i) => (i === 0 ? contenuComplet : '')));
+        return;
+      }
+      const segments = positions.map((debut, i) => {
+        const fin = i + 1 < N ? positions[i + 1] : html.length;
+        return debut === null ? '' : html.slice(debut, fin).trim();
+      });
+      const preambule = html.slice(0, positions[0]).trim();
+      if (preambule) segments[0] = preambule + segments[0];
+      decoupageParCellule.push(segments);
+    });
+
+    if (!coherent) {
+      avertissements.push("Une ligne du tableau Développement (Exploitation de texte) mélangeait plusieurs sections (Vocabulaire/Grammaire/Technique d'expression) de façon trop ambiguë pour être séparée automatiquement -- vérifiez manuellement que chaque section apparaît bien sur sa propre ligne.");
+      return;
+    }
+
+    const stylesTd = [];
+    $tds.each((i, td) => stylesTd.push($(td).attr('style') || ''));
+
+    const nouvellesLignes = [];
+    for (let i = 0; i < N; i++) {
+      const $nouvelleLigne = $('<tr></tr>');
+      $tds.each((idxCell) => {
+        const $nouvelleCellule = $('<td></td>');
+        if (stylesTd[idxCell]) $nouvelleCellule.attr('style', stylesTd[idxCell]);
+        if (idxCell === 0) {
+          $nouvelleCellule.html(`DÉVELOPPEMENT<br>${labelsPresents[i].titre}`);
+        } else {
+          const segments = decoupageParCellule[idxCell];
+          $nouvelleCellule.html(segments ? (segments[i] || '') : '');
+        }
+        $nouvelleLigne.append($nouvelleCellule);
+      });
+      nouvellesLignes.push($nouvelleLigne);
+    }
+
+    $tr.replaceWith(nouvellesLignes);
+  });
+
+  const $racine = $('.fiche-cours').first();
+  const html = $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+  return { html, avertissements };
+}
+
 // Détection stricte : uniquement "lecture méthodique" (ni "lecture" seule, ni
 // "résumé de texte", ni "commentaire de texte", qui gardent la structure générique).
 function estLectureMethodique({ discipline, lecon, theme, activite }) {
@@ -1289,6 +1395,20 @@ function estLectureMethodique({ discipline, lecon, theme, activite }) {
 function estExpressionEcrite({ discipline, lecon, theme, activite }) {
   const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
   return cible.includes('expression ecrite');
+}
+
+// Exploitation de texte (DPFC) : activité de compréhension/vocabulaire sur le
+// MÊME texte support qu'une séance de Lecture méthodique -- ni le squelette
+// analytique de la LM (axes, hypothèse), ni celui de production de l'EE
+// (rédaction collective, situation d'évaluation à rédiger). Le catalogue
+// DPFC seedé ne référence cette activité que sous "Lecture méthodique"
+// (aucune leçon "Exploitation de texte" séparée) -- la recherche de la
+// leçon/séance officielle réutilise donc volontairement 'Lecture méthodique'
+// (cf. activiteRecherchee plus bas), cohérent avec "même texte support que
+// Lecture méthodique".
+function estExploitationDeTexte({ discipline, lecon, theme, activite }) {
+  const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
+  return cible.includes('exploitation de texte');
 }
 
 // Le résumé est une activité d'Expression écrite (catalogue DPFC, discipline
@@ -3115,12 +3235,64 @@ DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa 
 ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose une SITUATION NOUVELLE, non traitée en classe (sujet différent de celui exploité en développement), demandant à l'élève de rédiger SEUL un texte du même genre en réinvestissant la définition, la structure et les outils de la langue vus plus haut.`;
 }
 
+// Exploitation de texte (DPFC), pour 6e/5e/4e : vocabulaire + grammaire sur
+// le texte support, PAS d'analyse par axes (réservée à la Lecture
+// méthodique) ni de production écrite notée par l'élève (réservée à
+// l'Expression écrite). Structure précisée par l'enseignant le 15/08 (I) puis
+// révisée le même jour (II) -- aucune fiche de référence vérifiée avant ces
+// précisions, le document source DPFC ne mentionne cette activité que comme
+// intitulé de colonne, sans détailler de gabarit :
+// - I. Vocabulaire et II. Grammaire sont TOUJOURS présents (jamais de
+//   sous-distinction "Conjugaison"/"Perfectionnement de la langue" : la
+//   conjugaison, quand elle est le point de langue pertinent, reste sous le
+//   même intitulé "Grammaire").
+// - III. Technique d'expression est OPTIONNELLE : ne l'inclure QUE si le
+//   texte support contient un vrai point exploitable (figure de style
+//   identifiable, procédé d'organisation textuelle) -- sinon OMETTRE la
+//   section entièrement (ni ligne vide, ni mention forcée d'absence :
+//   comportement inverse de la version précédente, corrigé sur demande le
+//   même jour après un premier essai qui forçait au contraire une mention
+//   explicite pour CHAQUE catégorie du référentiel complet).
+// - ÉVALUATION reste TOUJOURS en dernier, mais teste uniquement ce qui vient
+//   d'être enseigné dans CETTE séance (vocabulaire/grammaire, et technique
+//   d'expression si la section III est présente) -- explicitement PAS liée
+//   au mécanisme d'"entrée réservée" utilisé par la Lecture méthodique
+//   (cf. resoudrePresentationRecomposee et alentours), qui ne s'applique pas
+//   à cette activité.
+function construireInstructionsExploitationDeTexte(classe) {
+  const niveau = niveauLectureMethodique(classe);
+  const figuresNiveau = figureStyleParNiveauCollege(niveau === 'lycee' ? '4e_3e' : niveau).description;
+
+  return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE (cette fiche porte sur le MÊME texte support qu'une séance de Lecture méthodique de la même leçon, mais avec un objectif différent : vocabulaire et grammaire, PAS d'analyse par axes, PAS de production écrite notée. Les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête garde son format standard.) :
+
+ORDRE OBLIGATOIRE DES ÉLÉMENTS : Entête, PUIS Tableau Habiletés/Contenus, PUIS Situation d'apprentissage, PUIS Tableau Supports didactiques/Bibliographie, PUIS Texte support (marqueur {{TEXTE_SUPPORT}}, une seule fois, jamais {{TEXTE_SUPPORT_COPIE}}), PUIS Tableau 5 colonnes.
+
+TABLEAU HABILETÉS ET CONTENUS : verbes taxonomiques centrés sur le vocabulaire et la grammaire, PLUS la technique d'expression UNIQUEMENT si la section III ci-dessous est effectivement incluse (ex. Identifier, Relever, Expliquer, Utiliser -- jamais "Produire un texte", qui n'a pas sa place ici).
+
+DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments I et II suivants, chacun dans sa PROPRE ligne <tr> du tableau DÉROULEMENT (jamais fusionnés entre eux, jamais réordonnés, jamais regroupés dans une même ligne même si cela semble plus compact), PUIS le moment III SEULEMENT s'il est justifié (voir plus bas), toujours lui aussi dans sa PROPRE ligne <tr> séparée -- un tableau DÉROULEMENT à 2 ou 3 lignes pour cette partie (selon que III est présent ou non) est OBLIGATOIRE, une seule ligne fusionnant plusieurs moments romains est INTERDITE :
+   ÉTAPE PRÉALABLE OBLIGATOIRE : avant d'écrire le tableau DÉROULEMENT (mais après l'entête, les tableaux Habiletés/Contenus et Supports didactiques, et le texte support, qui gardent l'ordre imposé plus haut), analyse le texte support et détermine s'il contient réellement une figure de style parmi celles attendues au niveau de la classe (${figuresNiveau}) ou un procédé d'organisation textuelle notable (plan visible, connecteurs logiques structurants, énumération organisée). Écris le résultat de cette analyse dans un commentaire HTML, placé juste avant le tableau DÉROULEMENT, au format EXACT :
+   <!-- ANALYSE-PREALABLE-TECHNIQUE-EXPRESSION: OUI - <type identifié, ex. "comparaison : brillent comme deux étoiles"> --> (si un point réel est identifié)
+   ou
+   <!-- ANALYSE-PREALABLE-TECHNIQUE-EXPRESSION: NON --> (si aucun point réel n'est identifié)
+   Cette décision est prise UNE SEULE FOIS, avant de rédiger I et II, et engage IMPÉRATIVEMENT la suite : si tu écris OUI, le tableau DÉROULEMENT doit ensuite contenir une ligne III distincte (voir plus bas) ; si tu écris NON, ce tableau ne doit contenir aucune ligne III. Une fiche où le commentaire dit OUI mais où la section III est absente (ou l'inverse) est INVALIDE.
+   I. VOCABULAIRE (TOUJOURS présent) — relève 4 à 6 mots ou expressions du texte support jugés difficiles pour le niveau de la classe, explique leur sens EN CONTEXTE (à partir du texte, pas une définition de dictionnaire hors-sol), et fait employer chaque mot par les élèves dans une phrase nouvelle. N'utilise JAMAIS ici, même entre parenthèses ou en complément d'un autre point, l'un des mots suivants : comparaison, métaphore, personnification, hyperbole, énumération, gradation, figure de style. Si un mot de vocabulaire retenu appartient aussi à un passage qui illustre une figure de style, explique uniquement son SENS en contexte ici, sans nommer ni analyser la figure : cette analyse appartient EXCLUSIVEMENT à la section III si elle existe.
+   II. GRAMMAIRE (TOUJOURS présent, UN SEUL intitulé "Grammaire", jamais scindé en "Conjugaison" et "Grammaire"/"Perfectionnement de la langue" séparés) — identifie et explique UN point de langue réellement présent et significatif dans le texte support (type de phrases dominant, temps verbaux employés et leur valeur, un point de conjugaison, expansion du groupe nominal, un déterminant ou pronom particulier...) : choisis le point le plus pertinent pour CE texte précis, toujours illustré par des exemples relevés dans le texte, jamais hors-sujet. N'utilise JAMAIS ici, même entre parenthèses ou en complément d'un autre point, l'un des mots suivants : comparaison, métaphore, personnification, hyperbole, énumération, gradation, figure de style. Si l'exemple le plus naturel pour illustrer ton point de grammaire contient aussi une figure de style, tu peux citer ce même passage, mais SANS jamais nommer ni analyser la figure qu'il contient (aucune étiquette de ce type entre parenthèses ou ailleurs) : cette analyse appartient EXCLUSIVEMENT à la section III si elle existe.
+   III. TECHNIQUE D'EXPRESSION (SA PRÉSENCE DÉPEND UNIQUEMENT DU COMMENTAIRE ANALYSE-PREALABLE-TECHNIQUE-EXPRESSION CI-DESSUS -- jamais une décision de mise en forme libre) :
+      - SI le commentaire préalable dit OUI : cette section III EST OBLIGATOIRE, avec son propre titre distinct "III. TECHNIQUE D'EXPRESSION" dans sa PROPRE ligne du tableau DÉROULEMENT, séparée de I et de II. C'est ICI, et ICI SEULEMENT, que le mot désignant la figure de style ou le procédé d'organisation doit apparaître et être analysé (nom du procédé, exemple précis relevé DANS le texte, explication de son effet).
+      - SI le commentaire préalable dit NON : N'INCLUS PAS cette section du tout (aucune ligne "III.", aucune mention "aucune figure trouvée" ni "technique d'expression" laissée vide) -- section III entièrement absente de la fiche dans ce cas, exactement comme si elle n'existait pas dans la structure.
+
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT, TOUJOURS en dernier) : quelques questions individuelles à l'écrit testant UNIQUEMENT ce qui vient d'être enseigné dans CETTE séance précise (le vocabulaire et le point de grammaire vus en I et II, et la technique d'expression si la section III est présente) -- jamais un nouveau texte, jamais une consigne de rédaction, et JAMAIS lié au mécanisme d'entrée réservée à l'évaluation utilisé en Lecture méthodique (mécanisme propre à cette autre activité, sans rapport ici).`;
+}
+
 function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
   const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
   const motsClefs = [
     'lecture methodique', 'lecture', 'expression ecrite',
     'comprehension de texte', 'comprehension ecrite',
-    'etude de texte', 'commentaire de texte', 'resume de texte'
+    'etude de texte', 'commentaire de texte', 'resume de texte',
+    'exploitation de texte'
   ];
   return motsClefs.some((m) => cible.includes(m));
 }
@@ -3297,6 +3469,7 @@ ADAPTATIONS PAR DISCIPLINE :
 - GRAMMAIRE : ajoute un corpus de phrases numérotées P1 P2 P3... avant le tableau habiletés
 - LECTURE MÉTHODIQUE : inclus présentation du texte, hypothèse générale, axes de lecture avec tableaux de vérification (Entrée | Relevés | Analyse | Interprétation)
 - EXPRESSION ÉCRITE : inclus le texte support, questions de compréhension, vocabulaire, résumé
+- EXPLOITATION DE TEXTE : inclus le texte support (même texte qu'une séance de Lecture méthodique de la même leçon), questions de compréhension progressives, étude du vocabulaire -- JAMAIS d'axes de lecture (réservés à la Lecture méthodique), JAMAIS de production écrite notée (réservée à l'Expression écrite)
 - MATHÉMATIQUES : inclus exercices d'application avec solutions détaillées
 - SVT / PHYSIQUE-CHIMIE : inclus expériences, schémas descriptifs, observations, conclusions
 - HISTOIRE-GÉO : inclus documents sources, cartes, questions d'exploitation
@@ -3804,6 +3977,7 @@ function limiterGenerationParIp(req, res, next) {
       // squelette générique pour un résumé).
       const estResumeDetecte = estResume({ discipline, lecon, theme, activite });
       const estEE = estExpressionEcrite({ discipline, lecon, theme, activite });
+      const estExploitation = estExploitationDeTexte({ discipline, lecon, theme, activite });
       // Appel SANS classe : comportement inchangé (référentiel complet, non
       // filtré par niveau), utilisé par Expression écrite ci-dessous. Lecture
       // méthodique utilise son propre appel avec classe, isolé, juste après.
@@ -3867,21 +4041,33 @@ function limiterGenerationParIp(req, res, next) {
           return envoyerBlocageSSE(res, construireMessageBlocageTypeTexteNonCouvert());
         }
         systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
+      } else if (estExploitation) {
+        // Pas de blocage par référentiel de type de texte ici (révisé le
+        // 15/08) : contrairement à la LM/EE, le vocabulaire et la grammaire
+        // (I et II, toujours présents) ne dépendent d'aucun référentiel de
+        // type de texte -- seule la section III (optionnelle) s'appuie sur la
+        // liste de figures de style par niveau (figureStyleParNiveauCollege),
+        // gérée directement dans construireInstructionsExploitationDeTexte.
+        systemPrompt += construireInstructionsExploitationDeTexte(classe);
       }
 
-      // Champ Leçon de l'entête : pour Lecture méthodique et Expression écrite
-      // uniquement, remplace le titre générique que le modèle avait tendance à
-      // inventer par le vrai intitulé du programme DPFC (ou le message
+      // Champ Leçon de l'entête : pour Lecture méthodique, Expression écrite et
+      // Exploitation de texte, remplace le titre générique que le modèle avait
+      // tendance à inventer par le vrai intitulé du programme DPFC (ou le message
       // d'indisponibilité, jamais un titre inventé, si le catalogue ne couvre pas
       // encore cette discipline/classe/sous-thème).
-      if (estLM || estEE) {
+      if (estLM || estEE || estExploitation) {
         // Le document source DPFC ("PROGRESSIONS DE FRANÇAIS") est une progression
         // UNIQUE couvrant toutes les activités de Français (lecture, expression
         // écrite, grammaire...) — la recherche se fait donc toujours sous la
         // discipline "Français", même si l'enseignant a tapé "Lecture méthodique"
         // ou "Expression écrite" comme discipline (convention déjà utilisée
         // ailleurs dans l'app pour déclencher le bon gabarit de fiche).
-        const activiteRecherchee = estLM ? 'Lecture méthodique' : 'Expression écrite';
+        // Exploitation de texte réutilise volontairement la recherche "Lecture
+        // méthodique" : le catalogue DPFC seedé ne référence cette activité que
+        // sous cette entrée (même leçon, même texte support) -- aucune leçon
+        // "Exploitation de texte" séparée n'existe dans le catalogue.
+        const activiteRecherchee = (estLM || estExploitation) ? 'Lecture méthodique' : 'Expression écrite';
 
         // Sélection via l'UI de menus dépendants (identification par ID, jamais
         // par le seul numéro qui peut se répéter dans l'année) : prioritaire sur
@@ -4171,6 +4357,13 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
+      }
+      if (estExploitationDeTexte({ discipline, lecon, theme, activite })) {
+        const { html: contenuLignesSeparees, avertissements: avertissementsLignes } = separerLignesDeroulementExploitation(contenuHTML);
+        contenuHTML = contenuLignesSeparees;
+        for (const avertissementLigne of avertissementsLignes) {
+          res.write(`data: ${JSON.stringify({ avertissement: avertissementLigne })}\n\n`);
+        }
       }
       // Mode 1 (Lecture méthodique automatique) sans texte support fourni :
       // extrait le texte rédigé par le modèle (cf. userMessage plus haut)
