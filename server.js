@@ -3290,6 +3290,220 @@ DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments I et II suivants, chacun 
 ÉVALUATION (ligne distincte du tableau DÉROULEMENT, TOUJOURS en dernier) : quelques questions individuelles à l'écrit testant UNIQUEMENT ce qui vient d'être enseigné dans CETTE séance précise (le vocabulaire et le point de grammaire vus en I et II, et la technique d'expression si la section III est présente) -- jamais un nouveau texte, jamais une consigne de rédaction, et JAMAIS lié au mécanisme d'entrée réservée à l'évaluation utilisé en Lecture méthodique (mécanisme propre à cette autre activité, sans rapport ici).`;
 }
 
+// --- Mode "plan fourni par l'enseignant" pour Exploitation de texte ---
+//
+// Même principe que construireInstructionsLectureMethodiqueAvecPlanEnseignant
+// (16/08) : quand l'enseignant a rédigé lui-même le contenu pédagogique
+// (vocabulaire, point de grammaire, technique d'expression), le modèle ne
+// doit JAMAIS le régénérer ni le réinterpréter -- seulement structurer,
+// corriger et mettre en page. Structure BEAUCOUP plus simple que celle de la
+// Lecture méthodique (pas d'axes, pas d'entrées Indices/Analyse/
+// Interprétation, pas de référentiel de type de texte) : I et II sont de
+// simples blocs de texte libre, III optionnel. Conséquence directe et
+// recherchée de ce découpage : contrairement au Mode 1 (cf.
+// construireInstructionsExploitationDeTexte, où un vrai risque de fusion de
+// lignes ou d'intitulés inventés par le modèle a été constaté et corrigé le
+// 16/08), le Mode 2 rend ce risque STRUCTURELLEMENT IMPOSSIBLE : les lignes
+// I/II/III sont construites côté code et injectées via un marqueur unique,
+// le modèle n'écrit jamais lui-même ces lignes.
+
+// Segmente le plan de l'enseignant en blocs I (Vocabulaire, OBLIGATOIRE) / II
+// (Grammaire, OBLIGATOIRE) / III (Technique d'expression, OPTIONNEL -- son
+// absence dans le plan signifie simplement qu'il n'y a pas de section III
+// pour cette fiche, exactement comme la décision du modèle en Mode 1) /
+// Évaluation (OPTIONNEL -- si absente, c'est au modèle de la rédiger, à
+// partir du contenu réel de I/II/III donné en lecture seule, cf.
+// construireInstructionsExploitationDeTexteAvecPlanEnseignant). AUCUNE
+// tolérance de contenu inventé pour les blocs trouvés : si I ou II est
+// manquant, dans le désordre, ou sans contenu associé, le parsing échoue
+// EXPLICITEMENT ({ ok: false, raison }) -- jamais un repli silencieux.
+function parserPlanExploitationDeTexte(planCours) {
+  const lignes = (planCours || '').replace(/\r\n/g, '\n').split('\n');
+  const positions = {};
+  const resteDeLigneParRepere = {};
+
+  lignes.forEach((ligne, index) => {
+    const repere = detecterRepereLigne(ligne);
+    if (!repere) return;
+    if (repere.type === 'numero') {
+      if (['I', 'II', 'III'].includes(repere.numero) && positions[repere.numero] === undefined) {
+        positions[repere.numero] = index;
+        resteDeLigneParRepere[repere.numero] = repere.resteDeLigne;
+      }
+    } else if (repere.type === 'evaluation' && positions.evaluation === undefined) {
+      positions.evaluation = index;
+      resteDeLigneParRepere.evaluation = repere.resteDeLigne;
+    }
+  });
+
+  const manquants = ['I', 'II'].filter((r) => positions[r] === undefined);
+  if (manquants.length) {
+    return { ok: false, raison: `repère(s) manquant(s) : ${manquants.join(', ')}` };
+  }
+
+  const ordreAVerifier = ['I', 'II', ...(positions.III !== undefined ? ['III'] : []), ...(positions.evaluation !== undefined ? ['evaluation'] : [])];
+  for (let i = 1; i < ordreAVerifier.length; i++) {
+    if (positions[ordreAVerifier[i]] <= positions[ordreAVerifier[i - 1]]) {
+      return { ok: false, raison: `repères dans le désordre (${ordreAVerifier[i - 1]} après ${ordreAVerifier[i]})` };
+    }
+  }
+
+  const texteEntre = (indexDebut, indexFin, resteEnTete) =>
+    [resteEnTete, ...lignes.slice(indexDebut + 1, indexFin)].join('\n').trim();
+
+  const finI = positions.II;
+  const finII = positions.III !== undefined ? positions.III : (positions.evaluation !== undefined ? positions.evaluation : lignes.length);
+  const finIII = positions.evaluation !== undefined ? positions.evaluation : lignes.length;
+
+  const segments = {
+    vocabulaire: texteEntre(positions.I, finI, resteDeLigneParRepere.I),
+    grammaire: texteEntre(positions.II, finII, resteDeLigneParRepere.II),
+    technique: positions.III !== undefined ? texteEntre(positions.III, finIII, resteDeLigneParRepere.III) : '',
+    evaluation: positions.evaluation !== undefined ? texteEntre(positions.evaluation, lignes.length, resteDeLigneParRepere.evaluation) : ''
+  };
+
+  if (!segments.vocabulaire || !segments.grammaire) {
+    return { ok: false, raison: 'repère(s) trouvé(s) mais sans contenu associé' };
+  }
+  if (positions.III !== undefined && !segments.technique) {
+    return { ok: false, raison: 'repère III trouvé mais sans contenu associé' };
+  }
+
+  return { ok: true, segments };
+}
+
+// Construit, de façon 100% déterministe, les lignes <tr> I/II/(III) du
+// tableau DÉROULEMENT à partir des segments déjà parsés -- réutilise
+// construireLigneDeroulementHTML (même fonction que la Lecture méthodique,
+// mêmes bordures/styles). Jamais de ligne IV ni d'axes ici : structure
+// propre à Exploitation de texte (cf. construireInstructionsExploitationDeTexte).
+function construireDeroulementExploitationPlanEnseignantHTML(segments) {
+  const lignes = [
+    construireLigneDeroulementHTML({
+      moment: 'I. VOCABULAIRE',
+      strategie: 'Étude du vocabulaire en contexte',
+      activiteEnseignant: "Fait relever et expliquer les mots/expressions du texte support jugés difficiles, fait employer chacun dans une phrase nouvelle.",
+      activiteEleves: 'Relèvent les mots, en expliquent le sens en contexte, les emploient dans une phrase nouvelle.',
+      tracesEcrites: texteSupportVersHtml(segments.vocabulaire)
+    }),
+    construireLigneDeroulementHTML({
+      moment: 'II. GRAMMAIRE',
+      strategie: 'Observation et analyse du point de langue',
+      activiteEnseignant: "Fait identifier et expliquer le point de langue à partir d'exemples relevés dans le texte support.",
+      activiteEleves: "Identifient et expliquent le point de langue, à partir d'exemples relevés dans le texte.",
+      tracesEcrites: texteSupportVersHtml(segments.grammaire)
+    })
+  ];
+  if (segments.technique) {
+    lignes.push(construireLigneDeroulementHTML({
+      moment: "III. TECHNIQUE D'EXPRESSION",
+      strategie: 'Identification et analyse du procédé',
+      activiteEnseignant: "Fait identifier et analyser le procédé (figure de style ou d'organisation textuelle) à partir d'un exemple précis relevé dans le texte support.",
+      activiteEleves: "Identifient et analysent le procédé, à partir d'un exemple précis relevé dans le texte.",
+      tracesEcrites: texteSupportVersHtml(segments.technique)
+    }));
+  }
+  return lignes.join('\n');
+}
+
+function construireInstructionsExploitationDeTexteAvecPlanEnseignant(planCours) {
+  const resultatParsing = parserPlanExploitationDeTexte(planCours);
+
+  const enteteCommun = `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE, MODE "PLAN FOURNI PAR L'ENSEIGNANT" (cette fiche porte sur le MÊME texte support qu'une séance de Lecture méthodique de la même leçon, mais l'enseignant a rédigé lui-même le contenu pédagogique du développement -- vocabulaire, point de grammaire, technique d'expression. Les instructions ci-dessous concernent UNIQUEMENT le tableau Habiletés/Contenus, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION : elles REMPLACENT, pour ces éléments SEULEMENT, les règles du mode automatique décrites par ailleurs dans ce message. TOUT LE RESTE DE LA FICHE N'EST PAS CONCERNÉ et reste à rédiger NORMALEMENT à partir des instructions générales données ailleurs dans ce message : entête, Situation d'apprentissage, Supports didactiques/Bibliographie, Texte support.) :
+
+RÈGLE ABSOLUE, UNIQUEMENT POUR LE CONTENU PÉDAGOGIQUE DU DÉVELOPPEMENT (vocabulaire, point de grammaire, technique d'expression) : tu ne dois JAMAIS l'inventer, le compléter ou le reformuler substantiellement -- il vient à 100% du texte de l'enseignant.
+
+CONTRAINTE SUR LA LIGNE PRÉSENTATION RITUELLE (avant le tableau DÉROULEMENT, début de séance) : inchangée par rapport au mode automatique -- reste à ta charge comme d'habitude, cette phase d'accueil ne doit JAMAIS révéler le contenu précis du texte étudié.`;
+
+  if (!resultatParsing.ok) {
+    const instructions = enteteCommun + `
+
+ÉCHEC DE LA DÉTECTION AUTOMATIQUE DES PARTIES (${resultatParsing.raison}) : le plan fourni par l'enseignant ne suit pas le format attendu (repères "I." et "II." OBLIGATOIRES, "III." OPTIONNEL -- chacun en tout début de ligne, suivi d'un point, d'une parenthèse fermante, de deux-points ou d'un tiret -- manquants, mal placés ou dans le désordre). MODE DE REPLI, obligatoire dans ce cas, et UNIQUEMENT pour la partie DÉVELOPPEMENT : place l'INTÉGRALITÉ du texte de l'enseignant (reproduit à la toute fin de ce message, corrigé orthographiquement, jamais réécrit sur le fond) dans une UNIQUE ligne DÉVELOPPEMENT du tableau DÉROULEMENT, à l'intérieur d'un bloc commençant EXACTEMENT par : "<strong>⚠ Plan non structuré automatiquement (format des repères I./II./III. non reconnu) :</strong>" suivi du texte de l'enseignant. N'essaie PAS de deviner ou de reconstituer la structure toi-même. Rédige toi-même l'ÉVALUATION, normalement.`;
+
+    return {
+      instructions,
+      injectionDeroulement: null,
+      injectionEvaluation: null,
+      planCoursPourPromptFinal: `\n\nPLAN DE COURS FOURNI PAR L'ENSEIGNANT (contenu à corriger orthographiquement, jamais à réinventer, pour la ligne DÉVELOPPEMENT UNIQUEMENT -- ne concerne aucun autre champ de la fiche) :\n${planCours}`,
+      avertissement: `Le plan de cours fourni n'a pas pu être structuré automatiquement (${resultatParsing.raison}) : les repères "I." et "II." (obligatoires) et "III." (optionnel) sont attendus chacun en tout début de ligne. La fiche a été générée en mode de repli (texte non structuré, clairement signalé dans le document) -- corrigez le format des repères et régénérez pour obtenir un tableau correctement réparti.`,
+      bloque: false,
+      messageBlocage: null
+    };
+  }
+
+  const lignesHTML = construireDeroulementExploitationPlanEnseignantHTML(resultatParsing.segments);
+  const evaluationFournie = !!resultatParsing.segments.evaluation;
+
+  const injectionEvaluation = evaluationFournie
+    ? construireLigneDeroulementHTML({
+        moment: 'ÉVALUATION',
+        strategie: 'Travail individuel',
+        activiteEnseignant: 'Donne le sujet.',
+        activiteEleves: "Travaillent seuls, à l'écrit.",
+        tracesEcrites: texteSupportVersHtml(resultatParsing.segments.evaluation)
+      })
+    : null;
+
+  const consigneEvaluation = evaluationFournie
+    ? `Juste après ce tableau, place EXACTEMENT le marqueur {{EVALUATION_EXPLOITATION_PLAN_ENSEIGNANT}} comme SEUL contenu de la ligne ÉVALUATION -- il sera remplacé par la ligne déjà construite à partir du texte d'Évaluation rédigé par l'enseignant (reproduit à l'identique, jamais réinventé).`
+    : `L'enseignant n'a PAS rédigé d'Évaluation dans son plan : rédige-la TOI-MÊME, normalement, dans sa propre ligne ÉVALUATION du tableau DÉROULEMENT -- quelques questions individuelles à l'écrit testant UNIQUEMENT le contenu réel de I/II/III reproduit ci-dessous (jamais un nouveau texte, jamais une consigne de rédaction, jamais lié au mécanisme d'entrée réservée de la Lecture méthodique, sans rapport ici).
+CONTENU RÉEL DE I/II/III (fourni ici en LECTURE SEULE pour que ton Évaluation soit cohérente avec ce qui a été enseigné -- ce contenu est déjà placé automatiquement dans le tableau DÉROULEMENT via le marqueur ci-dessus, ne le recopie pas ailleurs, ne le modifie pas) :
+I. Vocabulaire : ${resultatParsing.segments.vocabulaire}
+II. Grammaire : ${resultatParsing.segments.grammaire}${resultatParsing.segments.technique ? `\nIII. Technique d'expression : ${resultatParsing.segments.technique}` : ''}`;
+
+  const instructions = enteteCommun + `
+
+DÉTECTION RÉUSSIE — le plan de l'enseignant a déjà été segmenté et mis en tableau AUTOMATIQUEMENT, côté serveur (pas par toi), selon ses repères I/II${resultatParsing.segments.technique ? '/III' : ''}. Le tableau DÉROULEMENT (lignes I, II${resultatParsing.segments.technique ? ', III' : ''}) est DÉJÀ CONSTRUIT.
+
+IGNORE COMPLÈTEMENT, pour cette ligne DÉVELOPPEMENT précise, le modèle générique "DÉVELOPPEMENT (35-40 mn) / [plan détaillé] / [question]... / [réponse]..." donné en exemple plus haut dans ce message pour illustrer le tableau DÉROULEMENT par défaut : il ne s'applique PAS ici, il est intégralement remplacé par le marqueur ci-dessous. N'écris TOI-MÊME AUCUN texte de vocabulaire, de grammaire ou de technique d'expression, même en résumé, même en apparence fidèle au plan de l'enseignant, même si tu penses pouvoir mieux formuler ou mieux structurer son contenu : ta seule tâche pour cette ligne est de placer un marqueur, rien d'autre.
+
+Concernant UNIQUEMENT cette partie développement (pas le reste de la fiche), ta tâche est EXACTEMENT :
+   1. Dans le tableau DÉROULEMENT (5 colonnes), juste après la ligne PRÉSENTATION rituelle (donc juste après son </tr>), à la place où irait normalement la ligne "DÉVELOPPEMENT", écris le marqueur EXACT {{DEROULEMENT_EXPLOITATION_PLAN_ENSEIGNANT}} SEUL, comme TEXTE NU sur sa propre ligne -- JAMAIS entouré d'un <tr>, JAMAIS entouré d'un <td>, JAMAIS avec colspan ni aucune autre balise : il sera remplacé après coup par les lignes I, II${resultatParsing.segments.technique ? ', III' : ''} déjà construites (chacune un <tr> complet à 5 colonnes, bordures et styles déjà gérés). Si tu l'entoures d'un <tr>/<td>, les lignes déjà construites se retrouveraient imbriquées à l'intérieur d'une cellule au lieu d'être des lignes de tableau normales -- résultat INVALIDE. Referme normalement le tableau juste après (les lignes suivantes, dont ÉVALUATION, restent des <tr> normaux).
+   2. ${consigneEvaluation}
+N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu I/II/III toi-même : il est déjà entièrement construit. Le reste de la fiche (entête, Situation d'apprentissage, Supports/Bibliographie, Texte support) n'est PAS concerné par cette restriction et se rédige normalement.`;
+
+  return {
+    instructions,
+    injectionDeroulement: lignesHTML,
+    injectionEvaluation,
+    planCoursPourPromptFinal: null,
+    avertissement: null,
+    bloque: false,
+    messageBlocage: null
+  };
+}
+
+// Vérifie que le modèle a bien placé les marqueurs attendus pour le mode
+// plan-enseignant d'Exploitation de texte -- jamais un échec silencieux
+// (même principe que verifierMarqueursPlanEnseignant pour la Lecture
+// méthodique, structure plus simple : pas d'axes, pas de texte support
+// distinct de celui géré génériquement ailleurs).
+function verifierMarqueursExploitationPlanEnseignant(contenuHTMLBrut, injection) {
+  if (!injection || injection.injectionDeroulement === null) return [];
+  const avertissements = [];
+  if (!contenuHTMLBrut.includes('{{DEROULEMENT_EXPLOITATION_PLAN_ENSEIGNANT}}')) {
+    avertissements.push("Le modèle n'a pas placé le marqueur attendu pour le tableau développement (I/II/III) d'Exploitation de texte : ce tableau n'a pas pu être inséré automatiquement à l'emplacement prévu. Vérifiez la fiche générée.");
+  }
+  if (injection.injectionEvaluation !== null && !contenuHTMLBrut.includes('{{EVALUATION_EXPLOITATION_PLAN_ENSEIGNANT}}')) {
+    avertissements.push("Le modèle n'a pas placé le marqueur attendu pour la ligne Évaluation rédigée par l'enseignant : elle n'a pas pu être insérée automatiquement. Vérifiez la fiche générée.");
+  }
+  return avertissements;
+}
+
+// Injecte le contenu déjà construit déterministiquement par
+// construireInstructionsExploitationDeTexteAvecPlanEnseignant à la place des
+// marqueurs dédiés (même logique anti-duplication qu'injecterMarqueurUneFois :
+// seule la 1ère occurrence reçoit le contenu).
+function injecterDeroulementExploitationPlanEnseignant(contenuHTML, injection) {
+  if (!injection || injection.injectionDeroulement === null) return contenuHTML;
+  let resultat = contenuHTML;
+  resultat = injecterMarqueurUneFois(resultat, '{{DEROULEMENT_EXPLOITATION_PLAN_ENSEIGNANT}}', injection.injectionDeroulement);
+  resultat = injecterMarqueurUneFois(resultat, '{{EVALUATION_EXPLOITATION_PLAN_ENSEIGNANT}}', injection.injectionEvaluation);
+  return resultat;
+}
+
 function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
   const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
   const motsClefs = [
@@ -3473,7 +3687,7 @@ ADAPTATIONS PAR DISCIPLINE :
 - GRAMMAIRE : ajoute un corpus de phrases numérotées P1 P2 P3... avant le tableau habiletés
 - LECTURE MÉTHODIQUE : inclus présentation du texte, hypothèse générale, axes de lecture avec tableaux de vérification (Entrée | Relevés | Analyse | Interprétation)
 - EXPRESSION ÉCRITE : inclus le texte support, questions de compréhension, vocabulaire, résumé
-- EXPLOITATION DE TEXTE : inclus le texte support (même texte qu'une séance de Lecture méthodique de la même leçon), questions de compréhension progressives, étude du vocabulaire -- JAMAIS d'axes de lecture (réservés à la Lecture méthodique), JAMAIS de production écrite notée (réservée à l'Expression écrite)
+- EXPLOITATION DE TEXTE : ce tableau DÉVELOPPEMENT générique NE S'APPLIQUE PAS à cette activité -- la structure exacte (I. Vocabulaire / II. Grammaire / III. Technique d'expression optionnelle, PUIS Évaluation) est intégralement définie plus bas dans ce message (section "STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE"), suis-la à la lettre plutôt que ce modèle générique. JAMAIS d'axes de lecture (réservés à la Lecture méthodique), JAMAIS de production écrite notée (réservée à l'Expression écrite).
 - MATHÉMATIQUES : inclus exercices d'application avec solutions détaillées
 - SVT / PHYSIQUE-CHIMIE : inclus expériences, schémas descriptifs, observations, conclusions
 - HISTOIRE-GÉO : inclus documents sources, cartes, questions d'exploitation
@@ -3954,6 +4168,12 @@ function limiterGenerationParIp(req, res, next) {
     // dans stream.on('finalMessage', ...) plus bas) -- null si le mode plan-
     // enseignant n'est pas déclenché ou si son parsing a échoué.
     let planFourniInjection = null;
+    // Même principe que planFourniInjection ci-dessus, mais pour Exploitation
+    // de texte (16/08, cf. construireInstructionsExploitationDeTexteAvecPlanEnseignant) --
+    // volontairement une variable séparée (jamais réutilisé planFourniInjection) :
+    // structure et marqueurs différents, aucun rapport avec les axes/entrées
+    // de la Lecture méthodique.
+    let planFourniExploitationInjection = null;
     // Mode 1 (automatique, Lecture méthodique) sans texte support fourni par
     // l'enseignant : le modèle doit rédiger lui-même le texte support (cf.
     // section "texteSupport" plus bas) -- utilisé aussi pour retrouver le
@@ -4046,13 +4266,27 @@ function limiterGenerationParIp(req, res, next) {
         }
         systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
       } else if (estExploitation) {
-        // Pas de blocage par référentiel de type de texte ici (révisé le
-        // 15/08) : contrairement à la LM/EE, le vocabulaire et la grammaire
-        // (I et II, toujours présents) ne dépendent d'aucun référentiel de
-        // type de texte -- seule la section III (optionnelle) s'appuie sur la
-        // liste de figures de style par niveau (figureStyleParNiveauCollege),
-        // gérée directement dans construireInstructionsExploitationDeTexte.
-        systemPrompt += construireInstructionsExploitationDeTexte(classe);
+        // Mode 2 (16/08) : même bascule que la Lecture méthodique
+        // (planCoursEstSubstantiel) -- si l'enseignant a fourni son propre
+        // plan (I./II./III. optionnel), on structure/corrige son contenu au
+        // lieu de le régénérer. Mode 1 (titre seul) inchangé, cf.
+        // construireInstructionsExploitationDeTexte -- pas de blocage par
+        // référentiel de type de texte ici (révisé le 15/08) : le vocabulaire
+        // et la grammaire (I et II, toujours présents) ne dépendent d'aucun
+        // référentiel de type de texte -- seule la section III (optionnelle,
+        // en Mode 1) s'appuie sur la liste de figures de style par niveau
+        // (figureStyleParNiveauCollege), gérée directement dans
+        // construireInstructionsExploitationDeTexte.
+        if (planCoursEstSubstantiel(planCours)) {
+          const resultatPlanFourniExploitation = construireInstructionsExploitationDeTexteAvecPlanEnseignant(planCours);
+          systemPrompt += resultatPlanFourniExploitation.instructions;
+          planFourniExploitationInjection = resultatPlanFourniExploitation;
+          if (resultatPlanFourniExploitation.avertissement) {
+            avertissementRappel = avertissementRappel ? `${avertissementRappel} ${resultatPlanFourniExploitation.avertissement}` : resultatPlanFourniExploitation.avertissement;
+          }
+        } else {
+          systemPrompt += construireInstructionsExploitationDeTexte(classe);
+        }
       }
 
       // Champ Leçon de l'entête : pour Lecture méthodique, Expression écrite et
@@ -4207,6 +4441,9 @@ function limiterGenerationParIp(req, res, next) {
     if (planFourniInjection && planFourniInjection.planCoursPourPromptFinal) {
       systemPrompt += planFourniInjection.planCoursPourPromptFinal;
     }
+    if (planFourniExploitationInjection && planFourniExploitationInjection.planCoursPourPromptFinal) {
+      systemPrompt += planFourniExploitationInjection.planCoursPourPromptFinal;
+    }
 
     let userMessage = '';
     if (modelePersonnel) {
@@ -4319,6 +4556,15 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           res.write(`data: ${JSON.stringify({ avertissement: avertissementMarqueur })}\n\n`);
         }
       }
+      // Même contrôle que ci-dessus, pour le mode plan-enseignant
+      // d'Exploitation de texte (16/08) -- planFourniExploitationInjection et
+      // planFourniInjection ne sont jamais tous les deux non-null pour une
+      // même requête (branches mutuellement exclusives estLM/estExploitation).
+      if (planFourniExploitationInjection) {
+        for (const avertissementMarqueur of verifierMarqueursExploitationPlanEnseignant(contenuHTML, planFourniExploitationInjection)) {
+          res.write(`data: ${JSON.stringify({ avertissement: avertissementMarqueur })}\n\n`);
+        }
+      }
       // Exception étroite ligne I (recomposition en phrase, à partir de la
       // 4e) : extrait la phrase rédigée par le modèle AVANT l'injection des
       // marqueurs déterministes, avec repli sûr (texte verbatim) si absente
@@ -4359,6 +4605,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         }
       }
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
+      contenuHTML = injecterDeroulementExploitationPlanEnseignant(contenuHTML, planFourniExploitationInjection);
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
       }
