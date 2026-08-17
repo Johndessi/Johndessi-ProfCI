@@ -597,7 +597,16 @@ const LeconOfficielleDPFCSchema = new mongoose.Schema({
     // "type de récit" en liste + "thème des contenus intégrés" en texte libre),
     // ou aucun des deux (séance sans choix enseignant).
     choixLibre      : Boolean,   // true -> champ texte libre supplémentaire
-    choixLibreLabel : String     // libellé du champ texte libre (ex. "thème des contenus intégrés")
+    choixLibreLabel : String,    // libellé du champ texte libre (ex. "thème des contenus intégrés")
+    // Texte-support fixe et calibré (17/08, ex. Résumé de texte 4e/3e) --
+    // optionnel : absent pour la grande majorité des séances (Lecture
+    // méthodique, Expression écrite classique...), où le texte support vient
+    // toujours soit de l'enseignant (collé/uploadé), soit du modèle qui en
+    // invente un. Utilisé UNIQUEMENT en repli, quand l'enseignant sélectionne
+    // cette séance par catalogue SANS fournir son propre texte -- ne prend
+    // jamais le pas sur un texte fourni par l'enseignant (cf. route
+    // /api/generer-fiche).
+    texteSupportOfficiel : String
   }],
   createdAt   : { type: Date, default: Date.now }
 });
@@ -4188,7 +4197,8 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
           numeroSeance, intitule, activite,
           optionsChoix: Array.isArray(s.optionsChoix) ? s.optionsChoix.map((o) => String(o).trim()).filter(Boolean) : [],
           choixLibre: !!s.choixLibre,
-          choixLibreLabel: (s.choixLibreLabel || '').toString().trim()
+          choixLibreLabel: (s.choixLibreLabel || '').toString().trim(),
+          texteSupportOfficiel: (s.texteSupportOfficiel || '').toString().trim()
         });
       }
       if (seancesInvalides) { ignores++; continue; }
@@ -4440,6 +4450,18 @@ function limiterGenerationParIp(req, res, next) {
       // filtré par niveau), utilisé par Expression écrite ci-dessous. Lecture
       // méthodique utilise son propre appel avec classe, isolé, juste après.
       const referentielTypeTexte = trouverReferentielTypeTexte(texteCibleReferentiel);
+
+      // Texte-support officiel DPFC (17/08, ex. Résumé de texte 4e) : quand
+      // l'enseignant sélectionne par catalogue une séance qui porte un texte-
+      // support fixe et calibré (vérifié contre la fiche papier), SANS avoir
+      // lui-même collé/uploadé de texte, on utilise ce texte officiel au lieu
+      // de laisser le modèle en inventer un. Fait ICI, AVANT construireInstructionsResume
+      // juste en dessous (qui a besoin de la valeur définitive de texteSupport
+      // pour savoir si un texte est "fourni") -- le texte de l'enseignant,
+      // quand il existe, garde TOUJOURS la priorité et n'est jamais écrasé.
+      if (estResumeDetecte && !texteSupport && leconOfficiellePourReferentiel && leconOfficiellePourReferentiel.seance.texteSupportOfficiel) {
+        texteSupport = leconOfficiellePourReferentiel.seance.texteSupportOfficiel;
+      }
 
       if (estLM) {
         // Mode "plan fourni par l'enseignant" : quand l'enseignant a rédigé
