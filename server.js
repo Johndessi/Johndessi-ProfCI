@@ -1742,6 +1742,29 @@ const REFERENTIEL_TYPES_TEXTE = {
       { categorie: 'lexique', axe: 2, libelle: 'Le lexique thématique', description: 'vocabulaire du sujet précis débattu' },
       { categorie: 'temps_verbaux', axe: 2, libelle: 'Les temps verbaux', description: 'présent de vérité générale, valeurs modales (devoir, falloir...)' }
     ]
+  },
+  // Ajoutés le 17/08 à partir d'une fiche papier réelle (4e, DPFC) fournie
+  // par l'enseignant -- caractéristiques reprises fidèlement de ses sections
+  // "Présentation formelle"/"Structure"/"Caractéristiques"/"Parties" ; axe 2
+  // (langue) construit à partir de ce qui est OBSERVABLE dans sa rédaction
+  // collective modèle quand la fiche ne détaille pas d'"outils de la langue"
+  // séparés (cas du compte-rendu), jamais inventé hors de cette source.
+  'compte rendu de réunion': {
+    caracteristiques: [
+      { categorie: 'presentation_formelle', axe: 1, libelle: 'La présentation formelle', description: "en-tête complet (nature de la réunion, date, lieu, heure, membres présents et absents, rapporteur, ordre du jour) et signature du rapporteur en fin de document" },
+      { categorie: 'structure', axe: 1, libelle: 'La structure en trois parties', description: "introduction reprenant la nature de la rencontre, la date, l'heure et le lieu ; développement résumant brièvement chaque intervention en signalant son auteur (ou l'idée générale d'un débat, sans entrer dans le détail) ; conclusion constatant l'épuisement de l'ordre du jour et l'heure de la levée de séance" },
+      { categorie: 'discours_rapporte', axe: 2, libelle: 'Le discours rapporté', description: "verbes déclaratifs pour restituer les interventions (indiquer, proposer, informer, remercier...), au discours indirect, jamais de citations au style direct" },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique administratif', description: "vocabulaire de la vie associative/institutionnelle (ordre du jour, bilan, doléances, rapporteur, membres présents/absents...)" }
+    ]
+  },
+  'lettre officielle': {
+    caracteristiques: [
+      { categorie: 'presentation_materielle', axe: 1, libelle: 'La présentation matérielle', description: "lieu et date, nom/adresse de l'émetteur, nomination du récepteur, objet de la lettre, formule d'appel, corps de la lettre, formule de politesse, pièces jointes (p.j.), signature" },
+      { categorie: 'indices_personne', axe: 1, libelle: 'Les indices de personne', description: "vouvoiement systématique, formules de déférence adaptées à une autorité, jamais de tutoiement" },
+      { categorie: 'registre_langue', axe: 1, libelle: 'Le registre de langue', description: "niveau de langue soutenu, respect strict de la typographie et de la mise en page administratives (paragraphes)" },
+      { categorie: 'types_phrases', axe: 2, libelle: 'Les types de phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) selon l'objet de la demande, dominante déclarative pour exposer la requête` },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique', description: "vocabulaire administratif propre à l'objet précis de la lettre (motif de la demande, pièce/document sollicité, autorité destinataire)" }
+    ]
   }
 };
 
