@@ -149,7 +149,7 @@
     "classe": "4ème",
     "activite": "Expression écrite",
     "numeroLecon": 3,
-    "titreLecon": "Le compte rendu de réunion",
+    "titreLecon": "Le compte-rendu de réunion",
     "seances": [
       { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un compte rendu de réunion" }
     ]
