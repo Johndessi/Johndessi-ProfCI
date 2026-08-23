@@ -597,7 +597,16 @@ const LeconOfficielleDPFCSchema = new mongoose.Schema({
     // "type de récit" en liste + "thème des contenus intégrés" en texte libre),
     // ou aucun des deux (séance sans choix enseignant).
     choixLibre      : Boolean,   // true -> champ texte libre supplémentaire
-    choixLibreLabel : String     // libellé du champ texte libre (ex. "thème des contenus intégrés")
+    choixLibreLabel : String,    // libellé du champ texte libre (ex. "thème des contenus intégrés")
+    // Texte-support fixe et calibré (17/08, ex. Résumé de texte 4e/3e) --
+    // optionnel : absent pour la grande majorité des séances (Lecture
+    // méthodique, Expression écrite classique...), où le texte support vient
+    // toujours soit de l'enseignant (collé/uploadé), soit du modèle qui en
+    // invente un. Utilisé UNIQUEMENT en repli, quand l'enseignant sélectionne
+    // cette séance par catalogue SANS fournir son propre texte -- ne prend
+    // jamais le pas sur un texte fourni par l'enseignant (cf. route
+    // /api/generer-fiche).
+    texteSupportOfficiel : String
   }],
   createdAt   : { type: Date, default: Date.now }
 });
@@ -1732,6 +1741,36 @@ const REFERENTIEL_TYPES_TEXTE = {
       { categorie: 'types_phrases', axe: 1, libelle: 'Les types de phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) — dominante déclarative/interrogative selon la stratégie argumentative` },
       { categorie: 'lexique', axe: 2, libelle: 'Le lexique thématique', description: 'vocabulaire du sujet précis débattu' },
       { categorie: 'temps_verbaux', axe: 2, libelle: 'Les temps verbaux', description: 'présent de vérité générale, valeurs modales (devoir, falloir...)' }
+    ]
+  },
+  // Ajoutés le 17/08 à partir d'une fiche papier réelle (4e, DPFC) fournie
+  // par l'enseignant -- caractéristiques reprises fidèlement de ses sections
+  // "Présentation formelle"/"Structure"/"Caractéristiques"/"Parties" ; axe 2
+  // (langue) construit à partir de ce qui est OBSERVABLE dans sa rédaction
+  // collective modèle quand la fiche ne détaille pas d'"outils de la langue"
+  // séparés (cas du compte-rendu), jamais inventé hors de cette source.
+  'compte rendu de réunion': {
+    // alias (18/08) : le catalogue DPFC orthographie cette leçon/séance avec
+    // un trait d'union ("compte-rendu"), que le matching par simple
+    // inclusion de sous-chaîne ne peut pas rapprocher de la clé ci-dessus
+    // (le trait d'union n'est pas normalisé en espace par normaliserTexte)
+    // -- sans cet alias, la génération se bloquait à tort dès que le titre
+    // catalogue contenait le trait d'union (cf. trouverReferentielTypeTexte).
+    alias: ['compte-rendu de réunion'],
+    caracteristiques: [
+      { categorie: 'presentation_formelle', axe: 1, libelle: 'La présentation formelle', description: "en-tête complet (nature de la réunion, date, lieu, heure, membres présents et absents, rapporteur, ordre du jour) et signature du rapporteur en fin de document" },
+      { categorie: 'structure', axe: 1, libelle: 'La structure en trois parties', description: "introduction reprenant la nature de la rencontre, la date, l'heure et le lieu ; développement résumant brièvement chaque intervention en signalant son auteur (ou l'idée générale d'un débat, sans entrer dans le détail) ; conclusion constatant l'épuisement de l'ordre du jour et l'heure de la levée de séance" },
+      { categorie: 'discours_rapporte', axe: 2, libelle: 'Le discours rapporté', description: "verbes déclaratifs pour restituer les interventions (indiquer, proposer, informer, remercier...), au discours indirect, jamais de citations au style direct" },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique administratif', description: "vocabulaire de la vie associative/institutionnelle (ordre du jour, bilan, doléances, rapporteur, membres présents/absents...)" }
+    ]
+  },
+  'lettre officielle': {
+    caracteristiques: [
+      { categorie: 'presentation_materielle', axe: 1, libelle: 'La présentation matérielle', description: "lieu et date, nom/adresse de l'émetteur, nomination du récepteur, objet de la lettre, formule d'appel, corps de la lettre, formule de politesse, pièces jointes (p.j.), signature" },
+      { categorie: 'indices_personne', axe: 1, libelle: 'Les indices de personne', description: "vouvoiement systématique, formules de déférence adaptées à une autorité, jamais de tutoiement" },
+      { categorie: 'registre_langue', axe: 1, libelle: 'Le registre de langue', description: "niveau de langue soutenu, respect strict de la typographie et de la mise en page administratives (paragraphes)" },
+      { categorie: 'types_phrases', axe: 2, libelle: 'Les types de phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) selon l'objet de la demande, dominante déclarative pour exposer la requête` },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique', description: "vocabulaire administratif propre à l'objet précis de la lettre (motif de la demande, pièce/document sollicité, autorité destinataire)" }
     ]
   }
 };
@@ -4188,7 +4227,8 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
           numeroSeance, intitule, activite,
           optionsChoix: Array.isArray(s.optionsChoix) ? s.optionsChoix.map((o) => String(o).trim()).filter(Boolean) : [],
           choixLibre: !!s.choixLibre,
-          choixLibreLabel: (s.choixLibreLabel || '').toString().trim()
+          choixLibreLabel: (s.choixLibreLabel || '').toString().trim(),
+          texteSupportOfficiel: (s.texteSupportOfficiel || '').toString().trim()
         });
       }
       if (seancesInvalides) { ignores++; continue; }
@@ -4416,10 +4456,42 @@ function limiterGenerationParIp(req, res, next) {
       const estResumeDetecte = estResume({ discipline, lecon, theme, activite });
       const estEE = estExpressionEcrite({ discipline, lecon, theme, activite });
       const estExploitation = estExploitationDeTexte({ discipline, lecon, theme, activite });
+
+      // Résolution par ID (menus dépendants de l'UI, cf. plus bas) faite ICI,
+      // AVANT le matching du référentiel de type de texte ci-dessous : sinon
+      // une sélection par ID (leconOfficielleId/seanceOfficielleId) envoyée
+      // sans un champ "lecon" en texte libre qui matche un alias (cas réel
+      // constaté le 16/08 : Expression écrite 5e "Le portrait" bloquée à
+      // tort) alors que le catalogue identifie parfaitement la leçon
+      // demandée. Le titre/l'intitulé résolus par ID sont donc ajoutés au
+      // texte utilisé pour ce matching -- jamais un remplacement du texte
+      // libre lecon/theme, les deux pouvant coexister ou un seul être fourni.
+      const leconOfficiellePourReferentiel = (leconOfficielleId && seanceOfficielleId)
+        ? await trouverLeconEtSeanceParId(leconOfficielleId, seanceOfficielleId)
+        : null;
+      const texteCibleReferentiel = [
+        lecon || '',
+        theme || '',
+        leconOfficiellePourReferentiel ? leconOfficiellePourReferentiel.lecon.titreLecon : '',
+        leconOfficiellePourReferentiel ? leconOfficiellePourReferentiel.seance.intitule : ''
+      ].join(' ');
+
       // Appel SANS classe : comportement inchangé (référentiel complet, non
       // filtré par niveau), utilisé par Expression écrite ci-dessous. Lecture
       // méthodique utilise son propre appel avec classe, isolé, juste après.
-      const referentielTypeTexte = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`);
+      const referentielTypeTexte = trouverReferentielTypeTexte(texteCibleReferentiel);
+
+      // Texte-support officiel DPFC (17/08, ex. Résumé de texte 4e) : quand
+      // l'enseignant sélectionne par catalogue une séance qui porte un texte-
+      // support fixe et calibré (vérifié contre la fiche papier), SANS avoir
+      // lui-même collé/uploadé de texte, on utilise ce texte officiel au lieu
+      // de laisser le modèle en inventer un. Fait ICI, AVANT construireInstructionsResume
+      // juste en dessous (qui a besoin de la valeur définitive de texteSupport
+      // pour savoir si un texte est "fourni") -- le texte de l'enseignant,
+      // quand il existe, garde TOUJOURS la priorité et n'est jamais écrasé.
+      if (estResumeDetecte && !texteSupport && leconOfficiellePourReferentiel && leconOfficiellePourReferentiel.seance.texteSupportOfficiel) {
+        texteSupport = leconOfficiellePourReferentiel.seance.texteSupportOfficiel;
+      }
 
       if (estLM) {
         // Mode "plan fourni par l'enseignant" : quand l'enseignant a rédigé
@@ -4437,7 +4509,7 @@ function limiterGenerationParIp(req, res, next) {
         // génération est bloquée AVANT tout appel au modèle (changement
         // d'architecture du 07/08, cf. construireMessageBlocageTypeTexteNonCouvert)
         // -- jamais un repli silencieux vers une invention libre.
-        referentielTypeTexteLM = trouverReferentielTypeTexte(`${lecon || ''} ${theme || ''}`, classe);
+        referentielTypeTexteLM = trouverReferentielTypeTexte(texteCibleReferentiel, classe);
         if (planCoursEstSubstantiel(planCours)) {
           const resultatPlanFourni = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentielTypeTexteLM);
           if (resultatPlanFourni.bloque) {
@@ -4526,7 +4598,7 @@ function limiterGenerationParIp(req, res, next) {
         // par le seul numéro qui peut se répéter dans l'année) : prioritaire sur
         // la recherche floue par texte libre ci-dessous.
         const leconOfficielle = (leconOfficielleId && seanceOfficielleId)
-          ? await trouverLeconEtSeanceParId(leconOfficielleId, seanceOfficielleId)
+          ? leconOfficiellePourReferentiel
           : await trouverLeconOfficielleDPFC({ discipline: 'Français', classe, lecon, theme, activite: activiteRecherchee });
 
         if (leconOfficielle) {
