@@ -1750,6 +1750,13 @@ const REFERENTIEL_TYPES_TEXTE = {
   // collective modèle quand la fiche ne détaille pas d'"outils de la langue"
   // séparés (cas du compte-rendu), jamais inventé hors de cette source.
   'compte rendu de réunion': {
+    // alias (18/08) : le catalogue DPFC orthographie cette leçon/séance avec
+    // un trait d'union ("compte-rendu"), que le matching par simple
+    // inclusion de sous-chaîne ne peut pas rapprocher de la clé ci-dessus
+    // (le trait d'union n'est pas normalisé en espace par normaliserTexte)
+    // -- sans cet alias, la génération se bloquait à tort dès que le titre
+    // catalogue contenait le trait d'union (cf. trouverReferentielTypeTexte).
+    alias: ['compte-rendu de réunion'],
     caracteristiques: [
       { categorie: 'presentation_formelle', axe: 1, libelle: 'La présentation formelle', description: "en-tête complet (nature de la réunion, date, lieu, heure, membres présents et absents, rapporteur, ordre du jour) et signature du rapporteur en fin de document" },
       { categorie: 'structure', axe: 1, libelle: 'La structure en trois parties', description: "introduction reprenant la nature de la rencontre, la date, l'heure et le lieu ; développement résumant brièvement chaque intervention en signalant son auteur (ou l'idée générale d'un débat, sans entrer dans le détail) ; conclusion constatant l'épuisement de l'ordre du jour et l'heure de la levée de séance" },

@@ -151,7 +151,7 @@
     "numeroLecon": 3,
     "titreLecon": "Le compte-rendu de réunion",
     "seances": [
-      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un compte rendu de réunion" }
+      { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un compte-rendu de réunion" }
     ]
   },
   {
