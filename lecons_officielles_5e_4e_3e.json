@@ -58,7 +58,7 @@
     "classe": "5ème",
     "activite": "Expression écrite",
     "numeroLecon": 2,
-    "titreLecon": "La description",
+    "titreLecon": "La description (lieu animé)",
     "seances": [
       { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un texte descriptif d'un lieu animé" },
       { "numeroSeance": 2, "activite": "Expression écrite", "intitule": "Rédiger un texte descriptif d'un lieu animé en rapport avec un thème des contenus intégrés" }
@@ -69,7 +69,7 @@
     "classe": "5ème",
     "activite": "Expression écrite",
     "numeroLecon": 3,
-    "titreLecon": "Le poème",
+    "titreLecon": "Le poème en vers libres",
     "seances": [
       { "numeroSeance": 1, "activite": "Expression écrite", "intitule": "Rédiger un poème simple en vers libres" },
       { "numeroSeance": 2, "activite": "Expression écrite", "intitule": "Rédiger un poème complexe en vers libres en rapport avec un thème des contenus intégrés" }
