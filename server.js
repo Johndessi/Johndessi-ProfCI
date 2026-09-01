@@ -857,18 +857,40 @@ function echapperHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-// Remplacement déterministe du champ Activité de l'entête : la consigne
-// explicite donnée au modèle (cf. CHAMP ACTIVITÉ DE L'ENTÊTE) n'est pas
-// toujours respectée (il recopie parfois le titre de la leçon, ou reformule),
-// alors que la valeur attendue est toujours connue côté serveur -- même
-// principe de fiabilité que pour Leçon/Séance, mais appliqué en post-traitement
-// plutôt qu'en se fiant à l'obéissance du modèle. No-op si le champ Activité
-// n'apparaît pas dans le HTML généré (ex. niveau primaire).
-function injecterActiviteEntete(contenuHTML, activiteAttendue) {
-  if (!contenuHTML || !activiteAttendue) return contenuHTML;
-  const re = /(<div[^>]*>\s*Activité\s*:?\s*<\/div>\s*<div[^>]*>)([\s\S]*?)(<\/div>)/i;
+// Remplacement déterministe d'un champ de l'entête vertical (Compétence/
+// Activité/Leçon/Séance...) : une consigne explicite donnée au modèle n'est
+// pas toujours respectée (cf. injecterActiviteEntete, découvert sur le champ
+// Activité -- le modèle recopiait parfois le titre de la leçon, ou
+// reformulait), alors que la valeur attendue est toujours connue côté
+// serveur pour ces champs-là. Généralisé ici (01/09, chantier Étude de
+// l'œuvre intégrale) car Compétence/Leçon y sont AUSSI des valeurs fixes
+// connues à l'avance, pas seulement Activité. No-op si le libellé n'apparaît
+// pas dans le HTML généré (ex. niveau primaire, qui n'a pas cet entête).
+function injecterChampEntete(contenuHTML, libelle, valeurAttendue) {
+  if (!contenuHTML || !valeurAttendue) return contenuHTML;
+  const libelleEchappe = libelle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(<div[^>]*>\\s*${libelleEchappe}\\s*:?\\s*<\\/div>\\s*<div[^>]*>)([\\s\\S]*?)(<\\/div>)`, 'i');
   if (!re.test(contenuHTML)) return contenuHTML;
-  return contenuHTML.replace(re, (m, avant, _valeur, apres) => avant + echapperHtml(activiteAttendue) + apres);
+  return contenuHTML.replace(re, (m, avant, _valeur, apres) => avant + echapperHtml(valeurAttendue) + apres);
+}
+
+function injecterActiviteEntete(contenuHTML, activiteAttendue) {
+  return injecterChampEntete(contenuHTML, 'Activité', activiteAttendue);
+}
+
+// Même principe que ci-dessus, mais pour le paragraphe "Situation
+// d'apprentissage :" (jamais un champ de l'entête vertical -- un <p><strong>
+// isolé, cf. le gabarit ligne ~3916). Utilisé UNIQUEMENT quand la situation
+// doit être identique sur plusieurs séances d'une même séquence (Étude de
+// l'œuvre intégrale : rédigée une fois par le modèle en Séance 1, puis
+// réinjectée verbatim de la Séance 2 à la Séance 11 -- jamais laissée
+// régénérer, ce qui produirait un texte différent à chaque fiche). No-op si
+// le paragraphe n'apparaît pas (activité qui ne l'utilise pas).
+function injecterSituationApprentissage(contenuHTML, texteAttendu) {
+  if (!contenuHTML || !texteAttendu) return contenuHTML;
+  const re = /(<p>\s*<strong>\s*Situation d'apprentissage\s*:?\s*<\/strong>)([\s\S]*?)(<\/p>)/i;
+  if (!re.test(contenuHTML)) return contenuHTML;
+  return contenuHTML.replace(re, (m, avant, _valeur, apres) => `${avant} ${echapperHtml(texteAttendu)}${apres}`);
 }
 
 function texteSupportVersHtml(texte) {
@@ -4388,6 +4410,185 @@ function envoyerBlocageSSE(res, message) {
   res.end();
 }
 
+// ===================== ÉTUDE DE L'ŒUVRE INTÉGRALE (01/09) =====================
+// Mode 2 exclusif (aucun catalogue DPFC : le titre de l'œuvre n'est jamais
+// fixé par le programme, chaque enseignant choisit son livre). Entête fixe
+// sourcée du Programme Éducatif officiel DPFC 6e (Corps du Programme),
+// identique sur les 11 séances de CHAQUE séquence (2 séquences indépendantes
+// par an, "n°1"/"n°2" -- gérées uniquement par état côté client, aucune
+// différence de logique serveur entre les deux, cf. numeroSequence).
+const COMPETENCE_OEUVRE_INTEGRALE = "Compétence 2 : Traiter des situations relatives à la construction du sens de textes divers.";
+const ACTIVITE_OEUVRE_INTEGRALE = 'Lecture';
+
+// Règle bloquante : sur les 8 séances 2-9, exactement 2 en Lecture
+// méthodique (jamais 0, 1, 3+). Vérifiée pour toute séance qui a besoin
+// d'une planification cohérente -- 2 à 9 (chacune doit être conforme au
+// plan déclaré) ET 10/11, qui clôturent la séquence et n'ont donc de sens
+// que si cette planification est déjà valide. Séance 1 (Introduction) est
+// EXCLUE de cette exigence : l'enseignant peut légitimement l'écrire avant
+// d'avoir figé le choix des 8 séances suivantes -- correction du 01/09
+// après un test local qui bloquait la Séance 1 à tort.
+// planSeancesOI : tableau de 8 valeurs ('lecture_suivie'|'lecture_methodique'),
+// une par séance de 2 à 9, dans l'ordre.
+function validerSequenceOeuvreIntegrale({ seance, titreOeuvre, auteurOeuvre, axeEtude, planSeancesOI, typeSeanceOI, situationApprentissageOeuvre }) {
+  const seanceNum = parseInt(seance, 10);
+  if (!Number.isFinite(seanceNum) || seanceNum < 1 || seanceNum > 11) {
+    return "Numéro de séance invalide pour Étude de l'œuvre intégrale (doit être compris entre 1 et 11).";
+  }
+  if (!(titreOeuvre || '').toString().trim()) {
+    return "Le titre de l'œuvre est obligatoire pour générer une fiche de cette séquence.";
+  }
+  if (!(auteurOeuvre || '').toString().trim()) {
+    return "L'auteur de l'œuvre est obligatoire pour générer une fiche de cette séquence.";
+  }
+  if (!(axeEtude || '').toString().trim()) {
+    return "L'axe d'étude est obligatoire (saisi en Séance 1, jamais deviné par le modèle) pour générer une fiche de cette séquence.";
+  }
+
+  if (seanceNum >= 2) {
+    const plan = Array.isArray(planSeancesOI) ? planSeancesOI : [];
+    if (plan.length !== 8 || plan.some((t) => t !== 'lecture_suivie' && t !== 'lecture_methodique')) {
+      return "La planification complète des 8 séances (2 à 9) est requise avant de générer une fiche de cette séquence -- choisissez Lecture suivie ou Lecture méthodique pour chacune des 8 séances.";
+    }
+    const nbLectureMethodique = plan.filter((t) => t === 'lecture_methodique').length;
+    if (nbLectureMethodique !== 2) {
+      return `Sur les 8 séances 2 à 9, exactement 2 doivent être en Lecture méthodique (actuellement ${nbLectureMethodique}) -- corrigez la planification avant de générer.`;
+    }
+
+    if (seanceNum <= 9) {
+      const typeAttendu = plan[seanceNum - 2];
+      if (typeSeanceOI !== typeAttendu) {
+        return "Le sous-type de cette séance ne correspond pas à la planification enregistrée pour la séquence -- revérifiez votre planification.";
+      }
+    }
+  }
+
+  // La situation d'apprentissage est rédigée par le modèle en Séance 1 SEULE
+  // -- pour toutes les autres, l'enseignant doit l'avoir reportée depuis la
+  // fiche de la Séance 1 (jamais régénérée, cf. injecterSituationApprentissage).
+  if (seanceNum >= 2 && !(situationApprentissageOeuvre || '').toString().trim()) {
+    return "La situation d'apprentissage (rédigée par le modèle en Séance 1) est requise pour générer les séances suivantes -- générez d'abord la Séance 1, puis reportez son texte ici.";
+  }
+
+  return null;
+}
+
+function construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, etablissement, axeEtude }) {
+  const titre = (titreOeuvre || '').toString().trim();
+  const auteur = (auteurOeuvre || '').toString().trim();
+  const etab = (etablissement || '').toString().trim();
+  const axe = (axeEtude || '').toString().trim();
+  return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — SÉANCE 1, INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (cette fiche ouvre une séquence de 11 séances consacrée à l'étude intégrale d'une œuvre choisie par l'enseignant. Les instructions ci-dessous concernent le contenu pédagogique de cette séance UNIQUEMENT ; le reste de l'entête (Discipline, Classe, Durée) se rédige normalement.) :
+
+Habiletés de cette séance : présente l'auteur (${auteur}) et son œuvre « ${titre} », situe l'œuvre dans son contexte (historique, social, littéraire), à partir de tes connaissances réelles sur cette œuvre et cet auteur -- si tu n'es pas certain d'un fait précis (date, détail biographique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude.
+
+Situation d'apprentissage : rédige-la normalement (ancrée dans le quotidien ivoirien), en t'appuyant sur le contexte suivant fourni par l'enseignant -- établissement/classe : "${etab}" -- et sur le titre/auteur de l'œuvre ci-dessus. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les 10 séances suivantes de cette même séquence -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance (n'y mentionne rien de spécifique à "aujourd'hui" ou à cette seule introduction).
+
+AXE D'ÉTUDE DE LA SÉQUENCE : "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix. Présente-le clairement dans le développement de cette séance (c'est lui qui sera repris tel quel en Séance 10, la Conclusion de la séquence) -- reproduis-le EXACTEMENT comme fourni ci-dessus, mot pour mot, sans reformulation.`;
+}
+
+function construireInstructionsConclusionOeuvre({ titreOeuvre, auteurOeuvre, axeEtude }) {
+  const titre = (titreOeuvre || '').toString().trim();
+  const auteur = (auteurOeuvre || '').toString().trim();
+  const axe = (axeEtude || '').toString().trim();
+  return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — SÉANCE 10, CONCLUSION DE L'ÉTUDE DE L'ŒUVRE INTÉGRALE (cette fiche clôt la séquence de 11 séances consacrée à l'étude intégrale de « ${titre} » de ${auteur}.) :
+
+Habiletés de cette séance : rappelle les thèmes étudiés au fil de la séquence, relève les principaux faits d'écriture (procédés, style) étudiés, précise la portée de l'œuvre, porte un jugement critique sur l'œuvre (thème, écriture, visée).
+
+AXE D'ÉTUDE À REPRENDRE (fourni par l'enseignant en Séance 1, OBLIGATOIRE, jamais un autre axe de ton choix, jamais ressaisi par l'enseignant) : "${axe}" -- structure ton bilan et ton jugement critique autour de CET axe précis, reproduit ici EXACTEMENT tel que fourni, sans reformulation.`;
+}
+
+function construireInstructionsLectureSuivie() {
+  return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE SUIVIE (SÉANCE D'ÉTUDE D'ŒUVRE INTÉGRALE) (cette fiche porte sur un passage d'une œuvre intégrale étudiée en lecture suivie : les instructions ci-dessous REMPLACENT, pour cette fiche uniquement, la structure du tableau 5 colonnes (lignes DÉVELOPPEMENT et ÉVALUATION) décrite plus haut. L'entête, la Situation d'apprentissage, le tableau Habiletés/Contenus et le tableau Supports didactiques/Bibliographie restent inchangés et se rédigent normalement.) :
+
+Le tableau 5 colonnes habituel ne garde QUE la ligne PRÉSENTATION (rituel de début de séance, inchangé). N'inclus NI ligne DÉVELOPPEMENT NI ligne ÉVALUATION dans ce tableau pour cette activité.
+
+Juste après ce tableau réduit à sa seule ligne PRÉSENTATION, place EXACTEMENT et UNIQUEMENT ce jeton, seul sur sa ligne, sans aucun texte avant ni après ni autour : {{DEVELOPPEMENT_LECTURE_SUIVIE}}
+
+Ce jeton sera remplacé automatiquement par le contenu réel de la séance (le passage étudié, ses personnages, les faits relevés et le bilan de synthèse ont déjà été rédigés par l'enseignant) : n'invente RIEN à sa place, ne rédige toi-même aucune section "Développement" ni "Évaluation" -- ce jeton doit être la SEULE chose que tu écris après le tableau réduit.
+
+Aucune section Évaluation séparée pour cette séance : la vérification de la lecture est déjà intégrée dans le contenu qui remplacera le jeton ci-dessus.`;
+}
+
+// Assemble déterministiquement les unités de sens saisies par l'enseignant
+// (référence de pages, personnages présents, faits/événements en liste
+// libre, titre) -- jamais rédigées par le modèle, cf.
+// construireInstructionsLectureSuivie ci-dessus.
+function construireUnitesSensHTML(unitesSens) {
+  const unites = Array.isArray(unitesSens) ? unitesSens : [];
+  return unites.map((u, i) => {
+    const titre = echapperHtml((u && u.titre ? u.titre : `Unité ${i + 1}`).toString().trim());
+    const pages = echapperHtml((u && u.pages ? u.pages : '').toString().trim());
+    const personnages = echapperHtml((u && u.personnages ? u.personnages : '').toString().trim());
+    const faits = u && Array.isArray(u.faits) ? u.faits.filter(Boolean) : [];
+    const faitsHTML = faits.length
+      ? `<ul style="margin:4px 0 0 0;padding-left:18px;">${faits.map((f) => `<li>${echapperHtml(f.toString().trim())}</li>`).join('')}</ul>`
+      : '';
+    return `<div style="border:1px solid #000;padding:8px;margin-bottom:8px;">
+  <div style="font-weight:bold;">Unité ${i + 1} : ${titre}${pages ? ` (p. ${pages})` : ''}</div>
+  ${personnages ? `<div><strong>Personnages présents :</strong> ${personnages}</div>` : ''}
+  ${faitsHTML ? `<div><strong>Faits/événements :</strong>${faitsHTML}</div>` : ''}
+</div>`;
+  }).join('\n');
+}
+
+// I. Situation / II. Lecture et construction des unités de sens / Bilan --
+// entièrement déterministe, à partir de champs saisis par l'enseignant
+// (jamais rédigé par le modèle), injecté à la place du jeton
+// {{DEVELOPPEMENT_LECTURE_SUIVIE}} (cf. injecterMarqueurUneFois).
+function construireDeveloppementLectureSuivieHTML({ passagePages, contexteNarratif, axeEtude, unitesSens, bilanSynthese }) {
+  return `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+  <tr><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">I. Situation</th></tr>
+  <tr><td style="border:1px solid #000;padding:8px;">
+    <div><strong>Pages du passage étudié :</strong> ${echapperHtml((passagePages || '').toString().trim())}</div>
+    <div><strong>Axe d'étude (rappel) :</strong> ${echapperHtml((axeEtude || '').toString().trim())}</div>
+    <div><strong>Contexte narratif :</strong> ${echapperHtml((contexteNarratif || '').toString().trim())}</div>
+  </td></tr>
+</table>
+<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+  <tr><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">II. Lecture et construction des unités de sens</th></tr>
+  <tr><td style="border:1px solid #000;padding:8px;">
+${construireUnitesSensHTML(unitesSens)}
+  </td></tr>
+</table>
+<p><strong>Bilan :</strong> ${echapperHtml((bilanSynthese || '').toString().trim())}</p>`;
+}
+
+// Séance 11, Évaluation finale : contenu intégralement saisi par
+// l'enseignant, aucun squelette imposé, aucun appel au modèle (cf. l'appel
+// dans /api/generer-fiche, qui retourne AVANT toute construction de
+// systemPrompt pour cette séance) -- juste restitué proprement dans le
+// format fiche habituel (entête fixe + contenu tel quel).
+function construireFicheLibreOeuvreSeance11({ discipline, classe, duree, titreOeuvre, auteurOeuvre, numeroSequence, contenuLibre }) {
+  const leconAffichee = `Œuvre intégrale n°${numeroSequence}`;
+  const corpsLibre = texteSupportVersHtml(contenuLibre);
+  return `<div class="fiche-cours">
+
+<div class="entete-libre" style="display:grid;grid-template-columns:110px 1fr;column-gap:12px;row-gap:2px;margin-bottom:14px;">
+  <div style="font-weight:bold;padding:2px 0;">Discipline :</div><div style="padding:2px 0;">${echapperHtml((discipline || 'Français').toString().trim())}</div>
+  <div style="font-weight:bold;padding:2px 0;">Date :</div><div style="padding:2px 0;"></div>
+  <div style="font-weight:bold;padding:2px 0;">Classe :</div><div style="padding:2px 0;">${echapperHtml((classe || '').toString().trim())}</div>
+  <div style="font-weight:bold;padding:2px 0;">Compétence :</div><div style="padding:2px 0;">${echapperHtml(COMPETENCE_OEUVRE_INTEGRALE)}</div>
+  <div style="font-weight:bold;padding:2px 0;">Activité :</div><div style="padding:2px 0;">${echapperHtml(ACTIVITE_OEUVRE_INTEGRALE)}</div>
+  <div style="font-weight:bold;padding:2px 0;">Durée :</div><div style="padding:2px 0;">${echapperHtml((duree || '').toString().trim())}</div>
+  <div style="font-weight:bold;padding:2px 0;">Leçon :</div><div style="padding:2px 0;">${echapperHtml(leconAffichee)}</div>
+  <div style="font-weight:bold;padding:2px 0;">Séance :</div><div style="padding:2px 0;">11 : Évaluation finale</div>
+</div>
+
+<p><strong>Œuvre :</strong> « ${echapperHtml((titreOeuvre || '').toString().trim())} », ${echapperHtml((auteurOeuvre || '').toString().trim())}</p>
+
+${corpsLibre}
+
+</div>`;
+}
+// =================== FIN ÉTUDE DE L'ŒUVRE INTÉGRALE (fonctions) ===================
+
 // Protection anti-abus (10/08) : /api/generer-fiche appelle Anthropic avec
 // la clé API du SERVEUR (jamais celle de l'appelant) et n'exige aujourd'hui
 // aucune authentification -- vérifié en pratique par un test manuel (un
@@ -4427,8 +4628,24 @@ function limiterGenerationParIp(req, res, next) {
       classe, lecon, seance = '1', duree = '1 heure',
       theme = '', planCours = '', approche = 'APC',
       leconOfficielleId = '', seanceOfficielleId = '', optionChoisie = '', optionLibre = '',
-      activite = '', seanceIntitule = '', modeEvaluationResume = 'nouveau'
+      activite = '', seanceIntitule = '', modeEvaluationResume = 'nouveau',
+      // Étude de l'œuvre intégrale (01/09) -- Mode 2 exclusif, aucun ID
+      // catalogue : sousModule distingue cette activité de "Lecture"
+      // classique (même valeur d'Activité affichée, cf. ACTIVITE_OEUVRE_INTEGRALE).
+      sousModule = '', numeroSequence = '1', titreOeuvre = '', auteurOeuvre = '',
+      etablissement = '', axeEtude = '', situationApprentissageOeuvre = '',
+      typeSeanceOI = '', passagePages = '', contexteNarratif = '', bilanSynthese = '',
+      contenuLibreSeance11 = ''
     } = req.body;
+    const estOeuvreIntegrale = sousModule === 'oeuvre_integrale';
+    // planSeancesOI/unitesSens : tableaux -- reçus tels quels en JSON, ou en
+    // chaîne JSON quand la requête passe par FormData (upload de fichier).
+    const parseTableauJSON = (valeur) => {
+      if (Array.isArray(valeur)) return valeur;
+      try { const p = JSON.parse(valeur || '[]'); return Array.isArray(p) ? p : []; } catch { return []; }
+    };
+    const planSeancesOI = parseTableauJSON(req.body.planSeancesOI);
+    const unitesSens = parseTableauJSON(req.body.unitesSens);
 
     const approcheNormalisee = (approche || 'APC').toString().trim().toUpperCase() || 'APC';
     const avecVerbesTaxonomiques = !['PPO', 'FLEXIBLE'].includes(approcheNormalisee);
@@ -4436,6 +4653,42 @@ function limiterGenerationParIp(req, res, next) {
     let texteSupport = (req.body.texteSupport || '').toString().trim();
     if (req.file) {
       texteSupport = (await extraireTexteFichier(req.file)).trim();
+    }
+
+    // Étude de l'œuvre intégrale : validation bloquante de la séquence AVANT
+    // tout appel modèle (cf. validerSequenceOeuvreIntegrale), puis bypass
+    // complet du modèle pour la Séance 11 (Évaluation finale, contenu
+    // intégralement saisi par l'enseignant, cf. construireFicheLibreOeuvreSeance11)
+    // -- fait ICI, avant modelePersonnel/systemPrompt, pour ne rien construire
+    // d'inutile sur ce chemin.
+    if (estOeuvreIntegrale) {
+      const messageBlocageSequence = validerSequenceOeuvreIntegrale({
+        seance, titreOeuvre, auteurOeuvre, axeEtude, planSeancesOI, typeSeanceOI, situationApprentissageOeuvre
+      });
+      if (messageBlocageSequence) {
+        return envoyerBlocageSSE(res, messageBlocageSequence);
+      }
+
+      if (parseInt(seance, 10) === 11) {
+        if (!(contenuLibreSeance11 || '').toString().trim()) {
+          return envoyerBlocageSSE(res, "Le contenu de la Séance 11 (Évaluation finale) doit être saisi intégralement par l'enseignant avant de générer la fiche.");
+        }
+        const contenuHTML11 = construireFicheLibreOeuvreSeance11({
+          discipline, classe, duree, titreOeuvre, auteurOeuvre, numeroSequence, contenuLibre: contenuLibreSeance11
+        });
+        const fiche11 = await Fiche.create({
+          enseignantId: enseignantId || 'anonyme',
+          discipline: discipline || 'Français', classe,
+          lecon: `Œuvre intégrale n°${numeroSequence}`, seance, duree, niveau,
+          approche: approcheNormalisee, contenu: contenuHTML11
+        });
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+        res.write(`data: ${JSON.stringify({ done: true, ficheId: fiche11._id, contenuFinal: contenuHTML11 })}\n\n`);
+        return res.end();
+      }
     }
 
     let modelePersonnel = null;
@@ -4486,8 +4739,60 @@ function limiterGenerationParIp(req, res, next) {
     // pour l'injection déterministe (le modèle n'obéit pas toujours à la
     // consigne ci-dessous malgré sa formulation explicite, cf. injecterActiviteEntete).
     let activiteAffichee = '';
+    // Étude de l'œuvre intégrale : Compétence/Leçon/Séance/Situation
+    // d'apprentissage/Développement (Lecture suivie) sont TOUS calculés une
+    // seule fois ici (comme activiteAffichee ci-dessus) et réinjectés
+    // déterministiquement dans stream.on('finalMessage', ...).
+    let leconAfficheeOI = '';
+    let seanceAfficheeOI = '';
+    let developpementLectureSuivieHTML = null;
 
-    if (niveau !== 'primaire') {
+    if (estOeuvreIntegrale) {
+      leconAfficheeOI = `Œuvre intégrale n°${numeroSequence}`;
+      activiteAffichee = ACTIVITE_OEUVRE_INTEGRALE;
+      systemPrompt += `\n\nCHAMP ACTIVITÉ DE L'ENTÊTE : écris EXACTEMENT "${ACTIVITE_OEUVRE_INTEGRALE}" dans le champ Activité de l'entête -- jamais "Étude de l'œuvre intégrale" ni une autre formulation.`;
+      systemPrompt += `\n\nCHAMP COMPÉTENCE DE L'ENTÊTE : écris EXACTEMENT "${COMPETENCE_OEUVRE_INTEGRALE}" dans le champ Compétence de l'entête, sans reformulation.`;
+      systemPrompt += `\n\nCHAMP LEÇON DE L'ENTÊTE : écris EXACTEMENT "${leconAfficheeOI}" dans le champ Leçon de l'entête, sans reformulation.`;
+
+      const seanceNumOI = parseInt(seance, 10);
+      if (seanceNumOI === 1) {
+        seanceAfficheeOI = "1 : Introduire l'étude";
+        systemPrompt += construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, etablissement, axeEtude });
+      } else if (seanceNumOI === 10) {
+        seanceAfficheeOI = '10 : Conclure l\'étude';
+        systemPrompt += construireInstructionsConclusionOeuvre({ titreOeuvre, auteurOeuvre, axeEtude });
+      } else if (seanceNumOI >= 2 && seanceNumOI <= 9) {
+        if (typeSeanceOI === 'lecture_methodique') {
+          seanceAfficheeOI = `${seanceNumOI} : Construire le sens des textes choisis (Lecture méthodique)`;
+          if (!planCoursEstSubstantiel(planCours)) {
+            return envoyerBlocageSSE(res, "Pour une séance de Lecture méthodique intégrée, l'enseignant doit fournir son plan (hypothèse/axes/analyses) -- aucune génération automatique n'existe pour cette sous-activité en dehors du plan fourni.");
+          }
+          // Genre du passage étudié (portrait, texte descriptif...) : UNIQUEMENT
+          // via "theme" -- "lecon" est ici la valeur fixe de séquence ("Œuvre
+          // intégrale n°1", cf. leconAfficheeOI), pas un texte libre où deviner
+          // un genre, contrairement à la Lecture méthodique classique.
+          const referentielOI = trouverReferentielTypeTexte(theme || '', classe);
+          const resultatPlanFourniOI = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentielOI);
+          if (resultatPlanFourniOI.bloque) {
+            return envoyerBlocageSSE(res, resultatPlanFourniOI.messageBlocage);
+          }
+          systemPrompt += resultatPlanFourniOI.instructions;
+          planFourniInjection = resultatPlanFourniOI;
+          if (resultatPlanFourniOI.avertissement) {
+            avertissementRappel = avertissementRappel ? `${avertissementRappel} ${resultatPlanFourniOI.avertissement}` : resultatPlanFourniOI.avertissement;
+          }
+        } else if (typeSeanceOI === 'lecture_suivie') {
+          seanceAfficheeOI = `${seanceNumOI} : Construire le sens des textes choisis (Lecture suivie)`;
+          if (!(passagePages || '').toString().trim() || !unitesSens.length || !(bilanSynthese || '').toString().trim()) {
+            return envoyerBlocageSSE(res, "Pour une séance de Lecture suivie, l'enseignant doit fournir les pages du passage, au moins une unité de sens et le bilan de synthèse.");
+          }
+          systemPrompt += construireInstructionsLectureSuivie();
+          developpementLectureSuivieHTML = construireDeveloppementLectureSuivieHTML({ passagePages, contexteNarratif, axeEtude, unitesSens, bilanSynthese });
+        } else {
+          return envoyerBlocageSSE(res, 'Sous-type de séance invalide pour cette tranche (2 à 9) -- choisissez Lecture suivie ou Lecture méthodique.');
+        }
+      }
+    } else if (niveau !== 'primaire') {
       // Contrairement à Leçon/Séance, le champ Activité n'était jamais
       // résolu explicitement -- le modèle devait le deviner du contexte, ce
       // qui échouait pour Orthographe (confondu avec le titre de leçon).
@@ -4738,7 +5043,12 @@ function limiterGenerationParIp(req, res, next) {
       }
     }
 
-    if (niveau !== 'primaire' && avecVerbesTaxonomiques) {
+    if (!estOeuvreIntegrale && niveau !== 'primaire' && avecVerbesTaxonomiques) {
+      // estOeuvreIntegrale exclu : Compétence est une valeur fixe connue
+      // (COMPETENCE_OEUVRE_INTEGRALE, déjà injectée ci-dessus) -- cette
+      // résolution générique par CompetenceDPFC/CompetenceParActivite ne la
+      // connaît pas et produirait une 2e instruction concurrente, potentiellement
+      // "NON DISPONIBLE", inutile et source de confusion pour le modèle.
       let competenceResolue = null;
       let raisonIndisponible = null;
 
@@ -4780,7 +5090,7 @@ function limiterGenerationParIp(req, res, next) {
       }
     }
 
-    if (!texteSupport && leconNecessiteTexteSupport({ discipline, lecon, theme })) {
+    if (!estOeuvreIntegrale && !texteSupport && leconNecessiteTexteSupport({ discipline, lecon, theme })) {
       const avertissementTexte = 'Cette leçon semble nécessiter un texte support (lecture, expression écrite...) — fournis un texte collé ou un fichier Word/PDF pour une fiche fidèle au contenu étudié.';
       avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementTexte}` : avertissementTexte;
     }
@@ -4902,6 +5212,23 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       clearInterval(heartbeat);
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
       contenuHTML = injecterActiviteEntete(contenuHTML, activiteAffichee);
+      if (estOeuvreIntegrale) {
+        contenuHTML = injecterChampEntete(contenuHTML, 'Compétence', COMPETENCE_OEUVRE_INTEGRALE);
+        contenuHTML = injecterChampEntete(contenuHTML, 'Leçon', leconAfficheeOI);
+        contenuHTML = injecterChampEntete(contenuHTML, 'Séance', seanceAfficheeOI);
+        // Séance 1 : situation d'apprentissage rédigée par le modèle (laissée
+        // telle quelle, l'enseignant la reportera lui-même dans les séances
+        // suivantes, cf. validerSequenceOeuvreIntegrale). Séances 2-10 :
+        // réinjectée verbatim, jamais laissée régénérer (cf.
+        // injecterSituationApprentissage) -- la Séance 11 ne passe jamais ici
+        // (bypass complet du modèle, cf. construireFicheLibreOeuvreSeance11).
+        if (parseInt(seance, 10) >= 2) {
+          contenuHTML = injecterSituationApprentissage(contenuHTML, situationApprentissageOeuvre);
+        }
+        if (developpementLectureSuivieHTML) {
+          contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{DEVELOPPEMENT_LECTURE_SUIVIE}}', developpementLectureSuivieHTML);
+        }
+      }
       // Contrôle des 3 marqueurs attendus du mode plan-enseignant, AVANT toute
       // injection -- un marqueur omis par le modèle ne doit jamais provoquer
       // une perte de contenu silencieuse (cf. verifierMarqueursPlanEnseignant).
