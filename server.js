@@ -4469,6 +4469,17 @@ function limiterGenerationParIp(req, res, next) {
     let modeEvaluationResumeEffectif = 'nouveau';
 
     if (niveau !== 'primaire') {
+      // Contrairement à Leçon/Séance, le champ Activité n'était jamais
+      // résolu explicitement -- le modèle devait le deviner du contexte, ce
+      // qui échouait pour Orthographe (confondu avec le titre de leçon).
+      // La valeur est pourtant toujours connue côté serveur (champ dédié, ou
+      // discipline pour la convention historique -- cf. calculerActiviteEffective
+      // côté client), donc on l'injecte ici pour toute discipline/activité.
+      const activiteAffichee = (activite || '').toString().trim() || (discipline || '').toString().trim();
+      if (activiteAffichee) {
+        systemPrompt += `\n\nCHAMP ACTIVITÉ DE L'ENTÊTE : écris EXACTEMENT "${activiteAffichee}" dans le champ Activité de l'entête (à droite du libellé "Activité :" déjà présent) -- jamais le titre de la leçon, jamais une autre discipline/activité devinée à partir du contexte, jamais une reformulation.`;
+      }
+
       const estLM = estLectureMethodique({ discipline, lecon, theme, activite });
       // estResume est un sous-ensemble d'estEE (résumé = activité
       // Expression écrite au sens DPFC) -- vérifié EN PREMIER pour
