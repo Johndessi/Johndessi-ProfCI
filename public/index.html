@@ -211,7 +211,7 @@ textarea { resize: vertical; min-height: 90px; }
         </div>
         <div class="form-group" id="activiteGroup" style="display:none">
           <label>Activité *</label>
-          <select id="activite" onchange="verifierCatalogueOfficiel();mettreAJourVisibiliteResume()">
+          <select id="activite" onchange="verifierCatalogueOfficiel();mettreAJourVisibiliteResume();mettreAJourVisibiliteOeuvreIntegrale()">
             <option value="">-- Choisir une activité --</option>
             <option>Expression écrite</option>
             <option>Lecture méthodique</option>
@@ -224,6 +224,7 @@ textarea { resize: vertical; min-height: 90px; }
         </div>
       </div>
 
+      <div id="formulaireStandardGroup">
       <div class="form-group" id="modeSaisieLeconGroup" style="display:none;margin-bottom:8px">
         <label>Source de la leçon</label>
         <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
@@ -314,6 +315,134 @@ textarea { resize: vertical; min-height: 90px; }
       </div>
 
       <button class="btn" id="btnGenerer" onclick="genererFiche()">
+        🪄 Générer la fiche de cours
+      </button>
+      </div>
+    </div>
+
+    <div class="card" id="oeuvreIntegraleCard" style="display:none">
+      <h2>📖 Étude de l'œuvre intégrale</h2>
+
+      <div class="tabs" style="margin-bottom:14px">
+        <button type="button" class="tab active" id="tabSequence1" onclick="choisirSequenceOI(1)">Œuvre intégrale n°1</button>
+        <button type="button" class="tab" id="tabSequence2" onclick="choisirSequenceOI(2)">Œuvre intégrale n°2</button>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Titre de l'œuvre *</label>
+          <input id="oiTitreOeuvre" type="text" placeholder="Ex: Sous l'orage" oninput="sauvegarderChampsSequenceOI()"/>
+        </div>
+        <div class="form-group">
+          <label>Auteur *</label>
+          <input id="oiAuteurOeuvre" type="text" placeholder="Ex: Seydou Badian" oninput="sauvegarderChampsSequenceOI()"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Établissement / Classe (contexte de la situation d'apprentissage) *</label>
+          <input id="oiEtablissement" type="text" placeholder="Ex: Collège Moderne de Yopougon, 6ème A" oninput="sauvegarderChampsSequenceOI()"/>
+        </div>
+        <div class="form-group" style="max-width:120px">
+          <label>Classe *</label>
+          <select id="oiClasse" onchange="sauvegarderChampsSequenceOI()">
+            <option>6ème</option><option>5ème</option><option>4ème</option><option>3ème</option>
+            <option>2nde</option><option>1ère A</option><option>1ère C</option><option>1ère D</option>
+            <option>Tle A</option><option>Tle C</option><option>Tle D</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Axe d'étude de la séquence * (saisi une fois en Séance 1, jamais deviné par le modèle, réutilisé automatiquement en Séance 10)</label>
+        <input id="oiAxeEtude" type="text" placeholder="Ex: La dénonciation du conflit de générations" oninput="sauvegarderChampsSequenceOI()"/>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Situation d'apprentissage de la séquence</label>
+        <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
+          Vide au départ : générez d'abord la Séance 1 (le modèle la rédige), puis copiez-collez ici son texte tel qu'affiché dans la fiche — il sera ensuite réutilisé tel quel dans toutes les séances suivantes de cette séquence.
+        </p>
+        <textarea id="oiSituationApprentissage" style="min-height:80px" oninput="sauvegarderChampsSequenceOI()" placeholder="Collez ici la situation d'apprentissage générée en Séance 1..."></textarea>
+      </div>
+
+      <h2 style="margin-top:18px">Séances de la séquence</h2>
+      <div class="form-row">
+        <div class="form-group" style="max-width:340px">
+          <label>Séance à générer</label>
+          <select id="oiSeance" onchange="mettreAJourPanneauSeanceOI()">
+            <option value="1">Séance 1 — Introduire l'étude</option>
+            <option value="2">Séance 2</option><option value="3">Séance 3</option>
+            <option value="4">Séance 4</option><option value="5">Séance 5</option>
+            <option value="6">Séance 6</option><option value="7">Séance 7</option>
+            <option value="8">Séance 8</option><option value="9">Séance 9</option>
+            <option value="10">Séance 10 — Conclure l'étude</option>
+            <option value="11">Séance 11 — Évaluation finale</option>
+          </select>
+        </div>
+        <div class="form-group" id="oiCompteurLMGroup" style="max-width:340px">
+          <label>Planification Lecture méthodique (séances 2-9)</label>
+          <div id="oiCompteurLM" style="padding:10px 12px;border-radius:8px;background:var(--gris);font-size:13px;font-weight:700"></div>
+        </div>
+      </div>
+
+      <div id="oiPanneauSeances29" style="display:none">
+        <div class="form-group" style="margin-bottom:10px;max-width:340px">
+          <label>Sous-type de cette séance *</label>
+          <select id="oiTypeSeance" onchange="changerTypeSeanceOI()">
+            <option value="">-- Choisir --</option>
+            <option value="lecture_suivie">Lecture suivie</option>
+            <option value="lecture_methodique">Lecture méthodique</option>
+          </select>
+        </div>
+
+        <div id="oiPanneauLectureSuivie" style="display:none">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Pages du passage étudié *</label>
+              <input id="oiPassagePages" type="text" placeholder="Ex: p. 34 à 41"/>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Contexte narratif (bref) *</label>
+            <textarea id="oiContexteNarratif" style="min-height:60px" placeholder="Ce qui vient de se passer juste avant ce passage..."></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label>Unités de sens *</label>
+            <div id="oiUnitesSensListe"></div>
+            <button type="button" class="btn" style="width:auto;padding:7px 16px;font-size:13px" onclick="ajouterUniteSensOI()">➕ Ajouter une unité de sens</button>
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Bilan (résumé de synthèse du passage) *</label>
+            <textarea id="oiBilanSynthese" style="min-height:80px"></textarea>
+          </div>
+        </div>
+
+        <div id="oiPanneauLectureMethodique" style="display:none">
+          <p style="font-size:12px;color:var(--gris2);margin-bottom:10px">
+            Utilise les champs "Plan de cours" et "Texte support" ci-dessous (les mêmes que pour une Lecture méthodique classique) : renseigne aussi le genre du passage (ex. "portrait", "texte descriptif") dans le champ Thème.
+          </p>
+          <div class="form-group" style="margin-bottom:10px">
+            <label>Thème / genre du passage *</label>
+            <input id="oiThemeLM" type="text" placeholder="Ex: portrait, texte descriptif..."/>
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Plan de cours *</label>
+            <textarea id="oiPlanCoursLM" placeholder="I- Présentation&#10;II- Hypothèse&#10;III- Vérification&#10;IV- Bilan"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Texte support *</label>
+            <textarea id="oiTexteSupportLM" style="min-height:120px"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div id="oiPanneauSeance11" style="display:none">
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Contenu intégral de l'Évaluation finale * (saisie libre : questions, consignes...)</label>
+          <textarea id="oiContenuLibre11" style="min-height:160px"></textarea>
+        </div>
+      </div>
+
+      <button class="btn" id="btnGenererOI" onclick="genererFicheOeuvreIntegrale()">
         🪄 Générer la fiche de cours
       </button>
     </div>
@@ -472,6 +601,7 @@ function mettreAJourVisibiliteActivite() {
   document.getElementById('activiteGroup').style.display = visible ? 'block' : 'none';
   if (!visible) document.getElementById('activite').value = '';
   mettreAJourVisibiliteResume();
+  mettreAJourVisibiliteOeuvreIntegrale();
 }
 
 // Miroir client (affichage uniquement) de estResume() côté serveur : Expression
@@ -720,6 +850,236 @@ function masquerOptionCatalogue() {
   document.getElementById('catalogueOptionLibreGroup').style.display = 'none';
   document.getElementById('catalogueOptionTexte').value = '';
 }
+
+// ===================== ÉTUDE DE L'ŒUVRE INTÉGRALE (01/09) =====================
+// Mode 2 exclusif, totalement séparé du formulaire standard (aucun
+// catalogue). État gardé côté page uniquement (2 séquences indépendantes
+// n°1/n°2, jamais persisté serveur) -- seuls les champs de séquence
+// (œuvre/auteur/établissement/axe/situation d'apprentissage) et la
+// planification des 8 séances 2-9 doivent survivre aux changements de
+// séance/séquence ; les champs propres à UNE séance (pages, unités de
+// sens...) sont ressaisis à chaque génération, comme pour le formulaire
+// standard.
+function structureSequenceOIParDefaut() {
+  return {
+    titreOeuvre: '', auteurOeuvre: '', etablissement: '', classe: '6ème',
+    axeEtude: '', situationApprentissage: '',
+    planSeances: [null, null, null, null, null, null, null, null]
+  };
+}
+let sequencesOI = { 1: structureSequenceOIParDefaut(), 2: structureSequenceOIParDefaut() };
+let sequenceActiveOI = 1;
+
+function mettreAJourVisibiliteOeuvreIntegrale() {
+  const estOI = document.getElementById('activite').value === "Étude d'œuvre intégrale";
+  document.getElementById('formulaireStandardGroup').style.display = estOI ? 'none' : 'block';
+  document.getElementById('oeuvreIntegraleCard').style.display = estOI ? 'block' : 'none';
+  if (estOI) chargerSequenceOI();
+}
+
+function sauvegarderChampsSequenceOI() {
+  const seq = sequencesOI[sequenceActiveOI];
+  seq.titreOeuvre = document.getElementById('oiTitreOeuvre').value.trim();
+  seq.auteurOeuvre = document.getElementById('oiAuteurOeuvre').value.trim();
+  seq.etablissement = document.getElementById('oiEtablissement').value.trim();
+  seq.classe = document.getElementById('oiClasse').value;
+  seq.axeEtude = document.getElementById('oiAxeEtude').value.trim();
+  seq.situationApprentissage = document.getElementById('oiSituationApprentissage').value.trim();
+}
+
+function chargerSequenceOI() {
+  const seq = sequencesOI[sequenceActiveOI];
+  document.getElementById('oiTitreOeuvre').value = seq.titreOeuvre;
+  document.getElementById('oiAuteurOeuvre').value = seq.auteurOeuvre;
+  document.getElementById('oiEtablissement').value = seq.etablissement;
+  document.getElementById('oiClasse').value = seq.classe;
+  document.getElementById('oiAxeEtude').value = seq.axeEtude;
+  document.getElementById('oiSituationApprentissage').value = seq.situationApprentissage;
+  document.getElementById('tabSequence1').classList.toggle('active', sequenceActiveOI === 1);
+  document.getElementById('tabSequence2').classList.toggle('active', sequenceActiveOI === 2);
+  mettreAJourCompteurLM();
+  mettreAJourPanneauSeanceOI();
+}
+
+function choisirSequenceOI(n) {
+  sauvegarderChampsSequenceOI();
+  sequenceActiveOI = n;
+  chargerSequenceOI();
+}
+
+function mettreAJourCompteurLM() {
+  const plan = sequencesOI[sequenceActiveOI].planSeances;
+  const nbPlanifiees = plan.filter(Boolean).length;
+  const nbLM = plan.filter((t) => t === 'lecture_methodique').length;
+  const el = document.getElementById('oiCompteurLM');
+  el.textContent = `${nbLM}/8 en Lecture méthodique (exactement 2 requis) — ${nbPlanifiees}/8 séances planifiées`;
+  el.style.color = nbPlanifiees === 8 && nbLM !== 2 ? '#c0392b' : (nbLM === 2 && nbPlanifiees === 8 ? 'var(--vert)' : 'inherit');
+}
+
+function mettreAJourPanneauSeanceOI() {
+  const seanceNum = parseInt(document.getElementById('oiSeance').value, 10);
+  const est29 = seanceNum >= 2 && seanceNum <= 9;
+  const est11 = seanceNum === 11;
+  document.getElementById('oiPanneauSeances29').style.display = est29 ? 'block' : 'none';
+  document.getElementById('oiPanneauSeance11').style.display = est11 ? 'block' : 'none';
+  if (est29) {
+    const typeSauvegarde = sequencesOI[sequenceActiveOI].planSeances[seanceNum - 2] || '';
+    document.getElementById('oiTypeSeance').value = typeSauvegarde;
+    changerTypeSeanceOI();
+  }
+}
+
+function changerTypeSeanceOI() {
+  const seanceNum = parseInt(document.getElementById('oiSeance').value, 10);
+  const type = document.getElementById('oiTypeSeance').value;
+  if (seanceNum >= 2 && seanceNum <= 9) {
+    sequencesOI[sequenceActiveOI].planSeances[seanceNum - 2] = type || null;
+    mettreAJourCompteurLM();
+  }
+  document.getElementById('oiPanneauLectureSuivie').style.display = type === 'lecture_suivie' ? 'block' : 'none';
+  document.getElementById('oiPanneauLectureMethodique').style.display = type === 'lecture_methodique' ? 'block' : 'none';
+}
+
+function ajouterUniteSensOI() {
+  const div = document.createElement('div');
+  div.className = 'oi-unite-sens';
+  div.style.cssText = 'border:1.5px solid #e0e0e0;border-radius:8px;padding:10px;margin-bottom:8px';
+  div.innerHTML = `
+    <div class="form-row" style="margin-bottom:8px">
+      <div class="form-group"><label>Titre de l'unité</label><input class="oi-us-titre" type="text"/></div>
+      <div class="form-group" style="max-width:120px"><label>Pages</label><input class="oi-us-pages" type="text"/></div>
+    </div>
+    <div class="form-group" style="margin-bottom:8px"><label>Personnages présents</label><input class="oi-us-personnages" type="text"/></div>
+    <div class="form-group" style="margin-bottom:8px"><label>Faits/événements (un par ligne)</label><textarea class="oi-us-faits" style="min-height:60px"></textarea></div>
+    <button type="button" class="btn" style="width:auto;padding:5px 12px;font-size:12px;background:#c0392b" onclick="this.parentElement.remove()">🗑️ Retirer cette unité</button>`;
+  document.getElementById('oiUnitesSensListe').appendChild(div);
+}
+
+function lireUnitesSensOI() {
+  return Array.from(document.querySelectorAll('#oiUnitesSensListe .oi-unite-sens')).map((div) => ({
+    titre: div.querySelector('.oi-us-titre').value.trim(),
+    pages: div.querySelector('.oi-us-pages').value.trim(),
+    personnages: div.querySelector('.oi-us-personnages').value.trim(),
+    faits: div.querySelector('.oi-us-faits').value.split('\n').map((f) => f.trim()).filter(Boolean)
+  }));
+}
+
+async function genererFicheOeuvreIntegrale() {
+  sauvegarderChampsSequenceOI();
+  const seq = sequencesOI[sequenceActiveOI];
+  const seanceNum = parseInt(document.getElementById('oiSeance').value, 10);
+
+  if (!seq.titreOeuvre || !seq.auteurOeuvre) { toast("❗ Titre de l'œuvre et auteur sont obligatoires"); return; }
+  if (!seq.axeEtude) { toast('❗ L\'axe d\'étude est obligatoire (Séance 1, jamais deviné par le modèle)'); return; }
+  if (!seq.etablissement) { toast('❗ Établissement/classe est obligatoire (pour la situation d\'apprentissage)'); return; }
+
+  if (seanceNum >= 2) {
+    const plan = seq.planSeances;
+    if (plan.some((t) => !t)) { toast('❗ Planifiez les 8 séances (2 à 9) avant de générer'); return; }
+    const nbLM = plan.filter((t) => t === 'lecture_methodique').length;
+    if (nbLM !== 2) { toast(`❗ Exactement 2 séances en Lecture méthodique requises (actuellement ${nbLM})`); return; }
+    if (!seq.situationApprentissage) { toast('❗ Générez d\'abord la Séance 1, puis reportez la situation d\'apprentissage'); return; }
+  }
+
+  const champs = {
+    enseignantId: document.getElementById('enseignantId').value.trim() || 'anonyme',
+    niveau: 'secondaire',
+    discipline: 'Français',
+    classe: seq.classe,
+    sousModule: 'oeuvre_integrale',
+    numeroSequence: String(sequenceActiveOI),
+    lecon: `Œuvre intégrale n°${sequenceActiveOI}`,
+    titreOeuvre: seq.titreOeuvre,
+    auteurOeuvre: seq.auteurOeuvre,
+    etablissement: seq.etablissement,
+    axeEtude: seq.axeEtude,
+    situationApprentissageOeuvre: seq.situationApprentissage,
+    seance: String(seanceNum),
+    duree: '1 heure',
+    approche: 'APC',
+    planSeancesOI: JSON.stringify(seq.planSeances)
+  };
+
+  if (seanceNum >= 2 && seanceNum <= 9) {
+    const typeSeance = document.getElementById('oiTypeSeance').value;
+    if (!typeSeance) { toast('❗ Choisissez le sous-type de cette séance'); return; }
+    champs.typeSeanceOI = typeSeance;
+    if (typeSeance === 'lecture_suivie') {
+      const unites = lireUnitesSensOI();
+      const passagePages = document.getElementById('oiPassagePages').value.trim();
+      const contexteNarratif = document.getElementById('oiContexteNarratif').value.trim();
+      const bilanSynthese = document.getElementById('oiBilanSynthese').value.trim();
+      if (!passagePages || !unites.length || !bilanSynthese) { toast('❗ Pages, au moins une unité de sens et le bilan sont obligatoires'); return; }
+      champs.passagePages = passagePages;
+      champs.contexteNarratif = contexteNarratif;
+      champs.bilanSynthese = bilanSynthese;
+      champs.unitesSens = JSON.stringify(unites);
+    } else {
+      const themeLM = document.getElementById('oiThemeLM').value.trim();
+      const planCoursLM = document.getElementById('oiPlanCoursLM').value.trim();
+      const texteSupportLM = document.getElementById('oiTexteSupportLM').value.trim();
+      if (!themeLM || !planCoursLM || !texteSupportLM) { toast('❗ Thème/genre, plan de cours et texte support sont obligatoires'); return; }
+      champs.theme = themeLM;
+      champs.planCours = planCoursLM;
+      champs.texteSupport = texteSupportLM;
+    }
+  } else if (seanceNum === 11) {
+    const contenuLibre = document.getElementById('oiContenuLibre11').value.trim();
+    if (!contenuLibre) { toast("❗ Le contenu de l'Évaluation finale est obligatoire"); return; }
+    champs.contenuLibreSeance11 = contenuLibre;
+  }
+
+  document.getElementById('btnGenererOI').disabled = true;
+  document.getElementById('loader').classList.add('show');
+  document.getElementById('ficheViewer').classList.remove('show');
+  fermerBandeauAvertissement();
+
+  try {
+    const response = await fetch('/api/generer-fiche', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(champs)
+    });
+    if (!response.ok) throw new Error('Erreur serveur');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let contenuHTML = '';
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let json;
+        try { json = JSON.parse(line.slice(6)); } catch (e) { continue; }
+        if (json.avertissement) afficherAvertissement(json.avertissement);
+        if (json.chunk) contenuHTML += json.chunk;
+        if (json.done) {
+          contenuHTML = json.contenuFinal || contenuHTML
+            .replace(/^\s*```html\s*/i, '')
+            .replace(/^\s*```\s*/i, '')
+            .replace(/```\s*$/g, '')
+            .trim();
+          ficheEnCours = { id: json.ficheId, contenu: contenuHTML };
+          afficherFiche(contenuHTML);
+          toast('✅ Fiche générée avec succès !');
+        }
+        if (json.error) throw new Error(json.error);
+      }
+    }
+  } catch (e) {
+    toast('❌ Erreur : ' + e.message);
+  } finally {
+    document.getElementById('btnGenererOI').disabled = false;
+    document.getElementById('loader').classList.remove('show');
+  }
+}
+// =================== FIN ÉTUDE DE L'ŒUVRE INTÉGRALE (JS) ===================
 
 async function genererFiche() {
   const discipline = document.getElementById('discipline').value.trim();
