@@ -857,6 +857,20 @@ function echapperHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+// Remplacement déterministe du champ Activité de l'entête : la consigne
+// explicite donnée au modèle (cf. CHAMP ACTIVITÉ DE L'ENTÊTE) n'est pas
+// toujours respectée (il recopie parfois le titre de la leçon, ou reformule),
+// alors que la valeur attendue est toujours connue côté serveur -- même
+// principe de fiabilité que pour Leçon/Séance, mais appliqué en post-traitement
+// plutôt qu'en se fiant à l'obéissance du modèle. No-op si le champ Activité
+// n'apparaît pas dans le HTML généré (ex. niveau primaire).
+function injecterActiviteEntete(contenuHTML, activiteAttendue) {
+  if (!contenuHTML || !activiteAttendue) return contenuHTML;
+  const re = /(<div[^>]*>\s*Activité\s*:?\s*<\/div>\s*<div[^>]*>)([\s\S]*?)(<\/div>)/i;
+  if (!re.test(contenuHTML)) return contenuHTML;
+  return contenuHTML.replace(re, (m, avant, _valeur, apres) => avant + echapperHtml(activiteAttendue) + apres);
+}
+
 function texteSupportVersHtml(texte) {
   const paragraphes = (texte || '')
     .split(/\r?\n\s*\r?\n/)
@@ -4467,6 +4481,11 @@ function limiterGenerationParIp(req, res, next) {
     // seule fois ici, réutilisé tel quel dans stream.on('finalMessage', ...)
     // pour adapter le libellé imprimé et la validation de la portion.
     let modeEvaluationResumeEffectif = 'nouveau';
+    // Valeur exacte attendue pour le champ Activité de l'entête -- calculée
+    // une seule fois ici, réutilisée dans stream.on('finalMessage', ...)
+    // pour l'injection déterministe (le modèle n'obéit pas toujours à la
+    // consigne ci-dessous malgré sa formulation explicite, cf. injecterActiviteEntete).
+    let activiteAffichee = '';
 
     if (niveau !== 'primaire') {
       // Contrairement à Leçon/Séance, le champ Activité n'était jamais
@@ -4475,7 +4494,7 @@ function limiterGenerationParIp(req, res, next) {
       // La valeur est pourtant toujours connue côté serveur (champ dédié, ou
       // discipline pour la convention historique -- cf. calculerActiviteEffective
       // côté client), donc on l'injecte ici pour toute discipline/activité.
-      const activiteAffichee = (activite || '').toString().trim() || (discipline || '').toString().trim();
+      activiteAffichee = (activite || '').toString().trim() || (discipline || '').toString().trim();
       if (activiteAffichee) {
         systemPrompt += `\n\nCHAMP ACTIVITÉ DE L'ENTÊTE : écris EXACTEMENT "${activiteAffichee}" dans le champ Activité de l'entête (à droite du libellé "Activité :" déjà présent) -- jamais le titre de la leçon, jamais une autre discipline/activité devinée à partir du contexte, jamais une reformulation.`;
       }
@@ -4882,6 +4901,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     stream.on('finalMessage', async () => {
       clearInterval(heartbeat);
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
+      contenuHTML = injecterActiviteEntete(contenuHTML, activiteAffichee);
       // Contrôle des 3 marqueurs attendus du mode plan-enseignant, AVANT toute
       // injection -- un marqueur omis par le modèle ne doit jamais provoquer
       // une perte de contenu silencieuse (cf. verifierMarqueursPlanEnseignant).
