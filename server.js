@@ -1446,6 +1446,28 @@ function estExploitationDeTexte({ discipline, lecon, theme, activite }) {
   return cible.includes('exploitation de texte');
 }
 
+// Grammaire / Orthographe / Expression orale (17/08) : mêmes détections
+// simples par sous-chaîne que Lecture méthodique/Expression écrite --
+// aucun squelette dédié n'existe encore pour ces 3 activités (contrairement
+// à Lecture méthodique/Expression écrite/Exploitation de texte/Résumé) :
+// elles ne servent aujourd'hui qu'à déclencher la résolution Leçon/Séance
+// officielle DPFC (cf. gate plus bas dans /api/generer-fiche), le corps de
+// la fiche restant construit par le squelette générique.
+function estGrammaire({ discipline, lecon, theme, activite }) {
+  const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
+  return cible.includes('grammaire');
+}
+
+function estOrthographe({ discipline, lecon, theme, activite }) {
+  const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
+  return cible.includes('orthographe');
+}
+
+function estExpressionOrale({ discipline, lecon, theme, activite }) {
+  const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
+  return cible.includes('expression orale');
+}
+
 // Le résumé est une activité d'Expression écrite (catalogue DPFC, discipline
 // Français), mais sa démarche réelle (validée le 08/08 contre 2 fiches
 // réelles vérifiées, 3e et 4e) est INCOMPATIBLE avec le squelette générique
@@ -4456,6 +4478,13 @@ function limiterGenerationParIp(req, res, next) {
       const estResumeDetecte = estResume({ discipline, lecon, theme, activite });
       const estEE = estExpressionEcrite({ discipline, lecon, theme, activite });
       const estExploitation = estExploitationDeTexte({ discipline, lecon, theme, activite });
+      // Grammaire/Orthographe/Expression orale (17/08) : détectées uniquement
+      // pour la résolution Leçon/Séance officielle DPFC ci-dessous (gate plus
+      // bas) -- aucune branche de construction de squelette dédié pour elles,
+      // contrairement à estLM/estEE/estExploitation/estResumeDetecte.
+      const estGram = estGrammaire({ discipline, lecon, theme, activite });
+      const estOrtho = estOrthographe({ discipline, lecon, theme, activite });
+      const estEO = estExpressionOrale({ discipline, lecon, theme, activite });
 
       // Résolution par ID (menus dépendants de l'UI, cf. plus bas) faite ICI,
       // AVANT le matching du référentiel de type de texte ci-dessous : sinon
@@ -4576,12 +4605,13 @@ function limiterGenerationParIp(req, res, next) {
         }
       }
 
-      // Champ Leçon de l'entête : pour Lecture méthodique, Expression écrite et
-      // Exploitation de texte, remplace le titre générique que le modèle avait
-      // tendance à inventer par le vrai intitulé du programme DPFC (ou le message
-      // d'indisponibilité, jamais un titre inventé, si le catalogue ne couvre pas
-      // encore cette discipline/classe/sous-thème).
-      if (estLM || estEE || estExploitation) {
+      // Champ Leçon de l'entête : pour Lecture méthodique, Expression écrite,
+      // Exploitation de texte, Grammaire, Orthographe et Expression orale,
+      // remplace le titre générique que le modèle avait tendance à inventer
+      // par le vrai intitulé du programme DPFC (ou le message d'indisponibilité,
+      // jamais un titre inventé, si le catalogue ne couvre pas encore cette
+      // discipline/classe/sous-thème).
+      if (estLM || estEE || estExploitation || estGram || estOrtho || estEO) {
         // Le document source DPFC ("PROGRESSIONS DE FRANÇAIS") est une progression
         // UNIQUE couvrant toutes les activités de Français (lecture, expression
         // écrite, grammaire...) — la recherche se fait donc toujours sous la
@@ -4591,8 +4621,14 @@ function limiterGenerationParIp(req, res, next) {
         // Exploitation de texte réutilise volontairement la recherche "Lecture
         // méthodique" : le catalogue DPFC seedé ne référence cette activité que
         // sous cette entrée (même leçon, même texte support) -- aucune leçon
-        // "Exploitation de texte" séparée n'existe dans le catalogue.
-        const activiteRecherchee = (estLM || estExploitation) ? 'Lecture méthodique' : 'Expression écrite';
+        // "Exploitation de texte" séparée n'existe dans le catalogue. Grammaire/
+        // Orthographe/Expression orale (17/08), à l'inverse, sont chacune une
+        // entrée de catalogue à part entière (seedée séparément).
+        const activiteRecherchee = (estLM || estExploitation) ? 'Lecture méthodique'
+          : estEE ? 'Expression écrite'
+          : estGram ? 'Grammaire'
+          : estOrtho ? 'Orthographe'
+          : 'Expression orale';
 
         // Sélection via l'UI de menus dépendants (identification par ID, jamais
         // par le seul numéro qui peut se répéter dans l'année) : prioritaire sur
