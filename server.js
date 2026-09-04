@@ -4399,6 +4399,35 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
   }
 });
 
+// Inspection/purge du cache de recherche web Étude intégrale
+// (InfoOeuvreIntegrale, cf. rechercherInfosOeuvre). Ajouté le 04/09 :
+// les correctifs "citations exactes obligatoires" ont changé la logique de
+// vérification, mais les entrées déjà en cache AVANT ce correctif restent
+// servies telles quelles (les succès n'expirent jamais) -- possiblement
+// polluées par un fait inventé (constaté en prod sur "Maeva"/Fatou
+// Fanny-Cissé : date de décès et nom de prix fabriqués). GET liste tout
+// pour inspection avant purge ; DELETE vide tout le cache (succès ET
+// échecs) -- toute entrée existante à ce jour a été créée AVANT ce
+// correctif, donc aucun tri à faire : elle sera régénérée proprement (via
+// la nouvelle logique vérifiée) au prochain enseignant qui en a besoin.
+app.get('/api/admin/oeuvre-integrale/cache', verifierCleAdmin, async (req, res) => {
+  try {
+    const entrees = await InfoOeuvreIntegrale.find({}).sort({ dateRecherche: -1 }).lean();
+    res.json({ total: entrees.length, entrees });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/admin/oeuvre-integrale/cache', verifierCleAdmin, async (req, res) => {
+  try {
+    const resultat = await InfoOeuvreIntegrale.deleteMany({});
+    res.json({ success: true, supprimes: resultat.deletedCount });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/lecons-officielles', async (req, res) => {
   try {
     const { discipline, classe, lecon, theme, activite } = req.query;
