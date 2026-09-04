@@ -369,18 +369,28 @@ textarea { resize: vertical; min-height: 90px; }
         <div class="form-group" style="max-width:340px">
           <label>Séance à générer</label>
           <select id="oiSeance" onchange="mettreAJourPanneauSeanceOI()">
-            <option value="1">Séance 1 — Introduire l'étude</option>
+            <option value="1">Séance 1 — Introduction à l'étude</option>
             <option value="2">Séance 2</option><option value="3">Séance 3</option>
             <option value="4">Séance 4</option><option value="5">Séance 5</option>
             <option value="6">Séance 6</option><option value="7">Séance 7</option>
             <option value="8">Séance 8</option><option value="9">Séance 9</option>
-            <option value="10">Séance 10 — Conclure l'étude</option>
+            <option value="10">Séance 10 — Conclusion</option>
             <option value="11">Séance 11 — Évaluation finale</option>
           </select>
         </div>
         <div class="form-group" id="oiCompteurLMGroup" style="max-width:340px">
           <label>Planification Lecture méthodique (séances 2-9)</label>
           <div id="oiCompteurLM" style="padding:10px 12px;border-radius:8px;background:var(--gris);font-size:13px;font-weight:700"></div>
+        </div>
+      </div>
+
+      <div id="oiPanneauSeance1" style="display:none">
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Analyse de la couverture (optionnel)</label>
+          <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
+            Le modèle n'a pas accès à la couverture réelle du livre : décris-la toi-même si tu veux qu'elle apparaisse dans la fiche, sinon cette sous-section sera laissée à compléter.
+          </p>
+          <textarea id="oiAnalyseCouverture" style="min-height:60px" placeholder="Ex: On voit au premier plan..."></textarea>
         </div>
       </div>
 
@@ -398,7 +408,7 @@ textarea { resize: vertical; min-height: 90px; }
           <div class="form-row">
             <div class="form-group">
               <label>Pages du passage étudié *</label>
-              <input id="oiPassagePages" type="text" placeholder="Ex: p. 34 à 41"/>
+              <input id="oiPassagePages" type="text" placeholder="Ex: 06 à 10"/>
             </div>
           </div>
           <div class="form-group" style="margin-bottom:14px">
@@ -406,9 +416,17 @@ textarea { resize: vertical; min-height: 90px; }
             <textarea id="oiContexteNarratif" style="min-height:60px" placeholder="Ce qui vient de se passer juste avant ce passage..."></textarea>
           </div>
           <div class="form-group" style="margin-bottom:8px">
-            <label>Unités de sens *</label>
+            <label>Unités significatives *</label>
             <div id="oiUnitesSensListe"></div>
-            <button type="button" class="btn" style="width:auto;padding:7px 16px;font-size:13px" onclick="ajouterUniteSensOI()">➕ Ajouter une unité de sens</button>
+            <button type="button" class="btn" style="width:auto;padding:7px 16px;font-size:13px" onclick="ajouterUniteSensOI()">➕ Ajouter une unité significative</button>
+          </div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label>Situation d'évaluation (rattachée à la dernière unité significative) *</label>
+            <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
+              Une ligne = une question, avec sa réponse correspondante juste en dessous.
+            </p>
+            <div id="oiEvaluationListe"></div>
+            <button type="button" class="btn" style="width:auto;padding:7px 16px;font-size:13px" onclick="ajouterEvaluationOI()">➕ Ajouter une question</button>
           </div>
           <div class="form-group" style="margin-bottom:14px">
             <label>Bilan (résumé de synthèse du passage) *</label>
@@ -918,8 +936,10 @@ function mettreAJourCompteurLM() {
 
 function mettreAJourPanneauSeanceOI() {
   const seanceNum = parseInt(document.getElementById('oiSeance').value, 10);
+  const est1 = seanceNum === 1;
   const est29 = seanceNum >= 2 && seanceNum <= 9;
   const est11 = seanceNum === 11;
+  document.getElementById('oiPanneauSeance1').style.display = est1 ? 'block' : 'none';
   document.getElementById('oiPanneauSeances29').style.display = est29 ? 'block' : 'none';
   document.getElementById('oiPanneauSeance11').style.display = est11 ? 'block' : 'none';
   if (est29) {
@@ -946,22 +966,42 @@ function ajouterUniteSensOI() {
   div.style.cssText = 'border:1.5px solid #e0e0e0;border-radius:8px;padding:10px;margin-bottom:8px';
   div.innerHTML = `
     <div class="form-row" style="margin-bottom:8px">
-      <div class="form-group"><label>Titre de l'unité</label><input class="oi-us-titre" type="text"/></div>
-      <div class="form-group" style="max-width:120px"><label>Pages</label><input class="oi-us-pages" type="text"/></div>
+      <div class="form-group"><label>Pages</label><input class="oi-us-pages" type="text" placeholder="Ex: 06-07"/></div>
+      <div class="form-group"><label>Citation des bornes (premiers mots…derniers mots)</label><input class="oi-us-citation" type="text" placeholder="Ex: l'école des jeunes filles…presser le pas"/></div>
     </div>
-    <div class="form-group" style="margin-bottom:8px"><label>Personnages présents</label><input class="oi-us-personnages" type="text"/></div>
-    <div class="form-group" style="margin-bottom:8px"><label>Faits/événements (un par ligne)</label><textarea class="oi-us-faits" style="min-height:60px"></textarea></div>
+    <div class="form-group" style="margin-bottom:8px"><label>Titre de l'unité</label><input class="oi-us-titre" type="text"/></div>
+    <div class="form-group" style="margin-bottom:8px"><label>Résumé de l'unité (prose)</label><textarea class="oi-us-resume" style="min-height:60px"></textarea></div>
     <button type="button" class="btn" style="width:auto;padding:5px 12px;font-size:12px;background:#c0392b" onclick="this.parentElement.remove()">🗑️ Retirer cette unité</button>`;
   document.getElementById('oiUnitesSensListe').appendChild(div);
 }
 
 function lireUnitesSensOI() {
   return Array.from(document.querySelectorAll('#oiUnitesSensListe .oi-unite-sens')).map((div) => ({
-    titre: div.querySelector('.oi-us-titre').value.trim(),
     pages: div.querySelector('.oi-us-pages').value.trim(),
-    personnages: div.querySelector('.oi-us-personnages').value.trim(),
-    faits: div.querySelector('.oi-us-faits').value.split('\n').map((f) => f.trim()).filter(Boolean)
+    citation: div.querySelector('.oi-us-citation').value.trim(),
+    titre: div.querySelector('.oi-us-titre').value.trim(),
+    resume: div.querySelector('.oi-us-resume').value.trim()
   }));
+}
+
+// Situation d'évaluation : rattachée à la DERNIÈRE unité significative de
+// la séance (jamais une section Évaluation séparée), une question + sa
+// réponse par ligne.
+function ajouterEvaluationOI() {
+  const div = document.createElement('div');
+  div.className = 'oi-evaluation';
+  div.style.cssText = 'border:1.5px solid #e0e0e0;border-radius:8px;padding:10px;margin-bottom:8px';
+  div.innerHTML = `
+    <div class="form-group" style="margin-bottom:6px"><label>Question</label><input class="oi-eval-question" type="text"/></div>
+    <div class="form-group" style="margin-bottom:6px"><label>Réponse</label><input class="oi-eval-reponse" type="text"/></div>
+    <button type="button" class="btn" style="width:auto;padding:5px 12px;font-size:12px;background:#c0392b" onclick="this.parentElement.remove()">🗑️ Retirer cette question</button>`;
+  document.getElementById('oiEvaluationListe').appendChild(div);
+}
+
+function lireEvaluationOI() {
+  const questions = Array.from(document.querySelectorAll('#oiEvaluationListe .oi-eval-question')).map((el) => el.value.trim());
+  const reponses = Array.from(document.querySelectorAll('#oiEvaluationListe .oi-eval-reponse')).map((el) => el.value.trim());
+  return { questions, reponses };
 }
 
 async function genererFicheOeuvreIntegrale() {
@@ -988,7 +1028,6 @@ async function genererFicheOeuvreIntegrale() {
     classe: seq.classe,
     sousModule: 'oeuvre_integrale',
     numeroSequence: String(sequenceActiveOI),
-    lecon: `Œuvre intégrale n°${sequenceActiveOI}`,
     titreOeuvre: seq.titreOeuvre,
     auteurOeuvre: seq.auteurOeuvre,
     etablissement: seq.etablissement,
@@ -1000,6 +1039,10 @@ async function genererFicheOeuvreIntegrale() {
     planSeancesOI: JSON.stringify(seq.planSeances)
   };
 
+  if (seanceNum === 1) {
+    champs.analyseCouverture = document.getElementById('oiAnalyseCouverture').value.trim();
+  }
+
   if (seanceNum >= 2 && seanceNum <= 9) {
     const typeSeance = document.getElementById('oiTypeSeance').value;
     if (!typeSeance) { toast('❗ Choisissez le sous-type de cette séance'); return; }
@@ -1009,11 +1052,15 @@ async function genererFicheOeuvreIntegrale() {
       const passagePages = document.getElementById('oiPassagePages').value.trim();
       const contexteNarratif = document.getElementById('oiContexteNarratif').value.trim();
       const bilanSynthese = document.getElementById('oiBilanSynthese').value.trim();
-      if (!passagePages || !unites.length || !bilanSynthese) { toast('❗ Pages, au moins une unité de sens et le bilan sont obligatoires'); return; }
+      const { questions, reponses } = lireEvaluationOI();
+      if (!passagePages || !unites.length || !bilanSynthese) { toast('❗ Pages, au moins une unité significative et le bilan sont obligatoires'); return; }
+      if (!questions.length || !reponses.length) { toast('❗ La situation d\'évaluation (au moins 1 question + sa réponse) est obligatoire'); return; }
       champs.passagePages = passagePages;
       champs.contexteNarratif = contexteNarratif;
       champs.bilanSynthese = bilanSynthese;
       champs.unitesSens = JSON.stringify(unites);
+      champs.questionsEvaluationOI = JSON.stringify(questions);
+      champs.reponsesEvaluationOI = JSON.stringify(reponses);
     } else {
       const themeLM = document.getElementById('oiThemeLM').value.trim();
       const planCoursLM = document.getElementById('oiPlanCoursLM').value.trim();
