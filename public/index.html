@@ -385,12 +385,24 @@ textarea { resize: vertical; min-height: 90px; }
       </div>
 
       <div id="oiPanneauSeance1" style="display:none">
+        <p style="font-size:12px;color:var(--gris2);margin-bottom:10px">
+          Les 4 champs ci-dessous sont optionnels et indépendants : le modèle n'a pas accès au contenu réel du livre, donc sans ces informations la présentation de l'œuvre reste volontairement sobre et générale (aucune invention de nom de personnage, de lieu ou de détail visuel). Remplis ceux que tu connais précisément pour une fiche plus riche et plus fidèle — laisse les autres vides.
+        </p>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Thème de l'œuvre (optionnel)</label>
+          <textarea id="oiThemeOeuvre" style="min-height:50px" placeholder="Ex: la grossesse précoce en milieu scolaire"></textarea>
+        </div>
         <div class="form-group" style="margin-bottom:14px">
           <label>Analyse de la couverture (optionnel)</label>
-          <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
-            Le modèle n'a pas accès à la couverture réelle du livre : décris-la toi-même si tu veux qu'elle apparaisse dans la fiche, sinon cette sous-section sera laissée à compléter.
-          </p>
           <textarea id="oiAnalyseCouverture" style="min-height:60px" placeholder="Ex: On voit au premier plan..."></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Personnages (optionnel)</label>
+          <textarea id="oiPersonnagesOeuvre" style="min-height:70px" placeholder="Ex: Personnages principaux : ... Personnages secondaires : ..."></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Lieux / espace (optionnel)</label>
+          <textarea id="oiLieuxOeuvre" style="min-height:50px" placeholder="Ex: L'action se déroule à..."></textarea>
         </div>
       </div>
 
@@ -1041,6 +1053,9 @@ async function genererFicheOeuvreIntegrale() {
 
   if (seanceNum === 1) {
     champs.analyseCouverture = document.getElementById('oiAnalyseCouverture').value.trim();
+    champs.themeOeuvre = document.getElementById('oiThemeOeuvre').value.trim();
+    champs.personnagesOeuvre = document.getElementById('oiPersonnagesOeuvre').value.trim();
+    champs.lieuxOeuvre = document.getElementById('oiLieuxOeuvre').value.trim();
   }
 
   if (seanceNum >= 2 && seanceNum <= 9) {

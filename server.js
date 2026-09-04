@@ -4512,12 +4512,15 @@ function validerSequenceOeuvreIntegrale({ seance, titreOeuvre, auteurOeuvre, axe
   return null;
 }
 
-function construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, etablissement, axeEtude, analyseCouverture }) {
+function construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, etablissement, axeEtude, analyseCouverture, themeOeuvre, personnagesOeuvre, lieuxOeuvre }) {
   const titre = (titreOeuvre || '').toString().trim();
   const auteur = (auteurOeuvre || '').toString().trim();
   const etab = (etablissement || '').toString().trim();
   const axe = (axeEtude || '').toString().trim();
   const couverture = (analyseCouverture || '').toString().trim();
+  const theme = (themeOeuvre || '').toString().trim();
+  const personnages = (personnagesOeuvre || '').toString().trim();
+  const lieux = (lieuxOeuvre || '').toString().trim();
 
   // Structure I-II-III calibrée MOT POUR MOT sur la fiche de référence
   // "Maeva" (Fatou Fanny-Cissé, 3e, DPFC), fournie le 01/09 -- remplace
@@ -4529,6 +4532,25 @@ function construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, e
     ? `1- Analyse de la couverture : t'appuyer EXACTEMENT sur cette description fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${couverture}"`
     : `1- Analyse de la couverture : l'enseignant n'a fourni AUCUNE description de la couverture réelle -- tu n'as toi-même AUCUN accès visuel à cette couverture. N'invente donc AUCUN détail visuel (personnage, décor, couleur, expression...) : indique à la place, en une phrase, que cette sous-section est à compléter par l'enseignant à partir de la couverture réelle de l'ouvrage.`;
 
+  // Thème/Personnages/Lieux (02/09) : 3 champs enseignant INDÉPENDANTS et
+  // optionnels, couvrant toute la section "Présentation de l'œuvre" (pas
+  // seulement les personnages) -- chacun fourni ou non séparément. Mode 2
+  // (fourni) : injecté EXACTEMENT tel quel, jamais reformulé -- le modèle
+  // n'écrit RIEN de son cru pour cet aspect. Mode 1 (non fourni) : le
+  // modèle peut l'aborder, mais SANS inventer un détail précis (nom de
+  // personnage, lieu réel) qu'il ne connaît pas avec certitude -- même
+  // filet que pour la Biographie (rester général, présentation plus
+  // sobre, jamais un blocage ni un jeton visible).
+  const consigneTheme = theme
+    ? `Thème : t'appuyer EXACTEMENT sur ce thème fourni par l'enseignant, sans y ajouter ni en retirer aucun détail : "${theme}"`
+    : `Thème : l'enseignant n'a fourni aucun thème précis -- si tu n'es pas certain du thème réel de cette œuvre précise, reste général (genre, tonalité) plutôt que d'inventer un thème ou une intrigue précise que tu ne connais pas avec certitude.`;
+  const consignePersonnages = personnages
+    ? `2- Les personnages : t'appuyer EXACTEMENT sur cette liste fournie par l'enseignant, sans y ajouter ni en retirer aucun détail, mise en forme au format "Les personnages principaux sont : ... Les personnages secondaires sont : ..." si le contenu fourni le permet : "${personnages}"`
+    : `2- Les personnages : l'enseignant n'a fourni AUCUNE liste de personnages -- si tu n'es pas certain des personnages réels de cette œuvre précise (noms, rôles), N'INVENTE AUCUN nom de personnage : reste général (ex. "les personnages principaux sont des collégiens confrontés à..."), présentation plus sobre plutôt qu'un détail inventé.`;
+  const consigneLieux = lieux
+    ? `\n3- Lieux et espace : t'appuyer EXACTEMENT sur cette description fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${lieux}"`
+    : '';
+
   return `
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — SÉANCE 1, INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (cette fiche ouvre une séquence de 11 séances consacrée à l'étude intégrale de « ${titre} » de ${auteur}. Les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes décrits plus haut -- rédige UNIQUEMENT la structure I/II/III ci-dessous à la place. Le reste de l'entête (Discipline, Classe, Durée) et la Situation d'apprentissage restent inchangés et se rédigent normalement.) :
@@ -4538,9 +4560,10 @@ I- PRÉSENTATION DE L'AUTEUR
 2- Bibliographie : liste des œuvres majeures de l'auteur avec leur année de publication, au format "Titre en année, Titre en année..." -- à partir de tes connaissances réelles, jamais inventée si tu n'es pas certain.
 
 II- PRÉSENTATION DE L'ŒUVRE
-Présente le genre du récit (roman, recueil...), le nombre de chapitres si tu le sais, et le thème majeur de l'œuvre, en 2-3 phrases.
+Présente le genre du récit (roman, recueil...) et le nombre de chapitres si tu le sais, en 1-2 phrases (pas le thème -- traité séparément ci-dessous).
+${consigneTheme}
 ${consigneCouverture}
-2- Les personnages : "Les personnages principaux sont : [noms], [description commune brève]." puis "Les personnages secondaires sont : [Nom] : [rôle bref] ; [Nom] : [rôle bref] ; ..." -- format prose court, jamais un tableau, jamais une liste développée par personnage.
+${consignePersonnages}${consigneLieux}
 
 III- Axe d'étude
 "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Séance 10, la Conclusion de la séquence).
@@ -4763,7 +4786,7 @@ function limiterGenerationParIp(req, res, next) {
       // classique (même valeur d'Activité affichée, cf. ACTIVITE_OEUVRE_INTEGRALE).
       sousModule = '', numeroSequence = '1', titreOeuvre = '', auteurOeuvre = '',
       etablissement = '', axeEtude = '', situationApprentissageOeuvre = '',
-      analyseCouverture = '',
+      analyseCouverture = '', themeOeuvre = '', personnagesOeuvre = '', lieuxOeuvre = '',
       typeSeanceOI = '', passagePages = '', contexteNarratif = '', bilanSynthese = '',
       contenuLibreSeance11 = ''
     } = req.body;
@@ -4892,7 +4915,7 @@ function limiterGenerationParIp(req, res, next) {
       systemPrompt += `\n\nCHAMP SÉANCE DE L'ENTÊTE : écris EXACTEMENT "${seanceAfficheeOI}" dans le champ Séance de l'entête, sans reformulation.`;
 
       if (seanceNumOI === 1) {
-        systemPrompt += construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, etablissement, axeEtude, analyseCouverture });
+        systemPrompt += construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, etablissement, axeEtude, analyseCouverture, themeOeuvre, personnagesOeuvre, lieuxOeuvre });
       } else if (seanceNumOI === 10) {
         systemPrompt += construireInstructionsConclusionOeuvre({ titreOeuvre, auteurOeuvre, axeEtude });
       } else if (seanceNumOI >= 2 && seanceNumOI <= 9) {
