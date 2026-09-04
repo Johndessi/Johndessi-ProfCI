@@ -4484,9 +4484,49 @@ STRUCTURE OBLIGATOIRE SPÉCIFIQUE — SÉANCE 1, INTRODUCTION À L'ÉTUDE DE L'�
 
 Habiletés de cette séance : présente l'auteur (${auteur}) et son œuvre « ${titre} », situe l'œuvre dans son contexte (historique, social, littéraire), à partir de tes connaissances réelles sur cette œuvre et cet auteur -- si tu n'es pas certain d'un fait précis (date, détail biographique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude.
 
-Situation d'apprentissage : rédige-la normalement (ancrée dans le quotidien ivoirien), en t'appuyant sur le contexte suivant fourni par l'enseignant -- établissement/classe : "${etab}" -- et sur le titre/auteur de l'œuvre ci-dessus. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les 10 séances suivantes de cette même séquence -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance (n'y mentionne rien de spécifique à "aujourd'hui" ou à cette seule introduction).
+BIOGRAPHIE DE L'AUTEUR (01/09, calibré sur fiche de référence) : bref, JAMAIS un paragraphe développé -- uniquement l'essentiel, sous forme de quelques lignes concises : nom complet, identité/nationalité/profession, date de naissance (et de décès si l'auteur n'est plus vivant), activité principale (œuvres majeures, engagement). Ne développe ni son parcours détaillé, ni une analyse de son style, ni une liste exhaustive de ses œuvres.
 
-AXE D'ÉTUDE DE LA SÉQUENCE : "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix. Présente-le clairement dans le développement de cette séance (c'est lui qui sera repris tel quel en Séance 10, la Conclusion de la séquence) -- reproduis-le EXACTEMENT comme fourni ci-dessus, mot pour mot, sans reformulation.`;
+Situation d'apprentissage : rédige-la normalement (ancrée dans le quotidien ivoirien), en t'appuyant sur le contexte suivant fourni par l'enseignant -- établissement/classe : "${etab}" -- et sur le titre/auteur de l'œuvre ci-dessus. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les 10 séances suivantes de cette même séquence -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance (n'y mentionne rien de spécifique à "aujourd'hui" ou à cette seule introduction). N'Y MENTIONNE JAMAIS L'AXE D'ÉTUDE NI SON CONTENU (ci-dessous) : les deux champs sont distincts et ne doivent partager AUCUNE formulation -- la situation d'apprentissage amène vers la découverte de l'œuvre en général, jamais vers l'axe précis (qui est présenté séparément, ailleurs dans la fiche).
+
+AXE D'ÉTUDE DE LA SÉQUENCE : "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix. Présente-le clairement dans le développement de cette séance (c'est lui qui sera repris tel quel en Séance 10, la Conclusion de la séquence) -- reproduis-le EXACTEMENT comme fourni ci-dessus, mot pour mot, sans reformulation.
+
+${construireConsigneTaxonomiqueOeuvre(1)}`;
+}
+
+// Progression taxonomique (Bloom) des verbes d'Habiletés/consignes à travers
+// les 11 séances d'une séquence Étude de l'œuvre intégrale (01/09) : verbes
+// simples en Séance 1 et au début de la tranche 2-9, verbes de plus en plus
+// complexes vers la fin de cette tranche, verbes de haut niveau réservés à
+// la Séance 10 (Conclusion) -- jamais répétés à l'identique d'une séance à
+// l'autre de la même séquence. La Séance 11 (Évaluation finale) n'a pas
+// d'entrée ici : son contenu est intégralement saisi par l'enseignant,
+// aucun verbe n'y est généré par le modèle.
+function niveauTaxonomiqueOeuvre(seanceNum) {
+  if (seanceNum === 1) {
+    return { niveau: 'simple (début de séquence)', verbes: 'identifier, nommer, situer, présenter' };
+  }
+  if (seanceNum >= 2 && seanceNum <= 3) {
+    return { niveau: 'simple', verbes: 'identifier, nommer, situer, relever' };
+  }
+  if (seanceNum >= 4 && seanceNum <= 6) {
+    return { niveau: 'intermédiaire', verbes: 'analyser, comprendre, interpréter, expliquer, comparer' };
+  }
+  if (seanceNum >= 7 && seanceNum <= 9) {
+    return { niveau: 'intermédiaire supérieur', verbes: 'synthétiser, justifier, mettre en relation, dégager' };
+  }
+  if (seanceNum === 10) {
+    return { niveau: 'élevé (fin de séquence)', verbes: 'évaluer, juger, argumenter, apprécier' };
+  }
+  return null;
+}
+
+function construireConsigneTaxonomiqueOeuvre(seanceNum) {
+  const info = niveauTaxonomiqueOeuvre(seanceNum);
+  if (!info) return '';
+  const consigneReserve = seanceNum === 10
+    ? ''
+    : ' et évite en particulier les verbes de haut niveau (évaluer, juger, argumenter) réservés à la Conclusion (Séance 10)';
+  return `PROGRESSION TAXONOMIQUE (Bloom) DE LA SÉQUENCE : cette séance se situe à un niveau ${info.niveau} de la progression cognitive prévue sur les 11 séances de la séquence (verbes simples en début, verbes complexes en fin). Pour les Habiletés et les consignes de CETTE séance, privilégie des verbes du type : ${info.verbes} -- n'utilise PAS systématiquement les mêmes verbes qu'aux autres séances de cette séquence${consigneReserve}.`;
 }
 
 function construireInstructionsConclusionOeuvre({ titreOeuvre, auteurOeuvre, axeEtude }) {
@@ -4499,10 +4539,12 @@ STRUCTURE OBLIGATOIRE SPÉCIFIQUE — SÉANCE 10, CONCLUSION DE L'ÉTUDE DE L'Œ
 
 Habiletés de cette séance : rappelle les thèmes étudiés au fil de la séquence, relève les principaux faits d'écriture (procédés, style) étudiés, précise la portée de l'œuvre, porte un jugement critique sur l'œuvre (thème, écriture, visée).
 
-AXE D'ÉTUDE À REPRENDRE (fourni par l'enseignant en Séance 1, OBLIGATOIRE, jamais un autre axe de ton choix, jamais ressaisi par l'enseignant) : "${axe}" -- structure ton bilan et ton jugement critique autour de CET axe précis, reproduit ici EXACTEMENT tel que fourni, sans reformulation.`;
+AXE D'ÉTUDE À REPRENDRE (fourni par l'enseignant en Séance 1, OBLIGATOIRE, jamais un autre axe de ton choix, jamais ressaisi par l'enseignant) : "${axe}" -- structure ton bilan et ton jugement critique autour de CET axe précis, reproduit ici EXACTEMENT tel que fourni, sans reformulation.
+
+${construireConsigneTaxonomiqueOeuvre(10)}`;
 }
 
-function construireInstructionsLectureSuivie() {
+function construireInstructionsLectureSuivie(seanceNum) {
   return `
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — LECTURE SUIVIE (SÉANCE D'ÉTUDE D'ŒUVRE INTÉGRALE) (cette fiche porte sur un passage d'une œuvre intégrale étudiée en lecture suivie : les instructions ci-dessous REMPLACENT, pour cette fiche uniquement, la structure du tableau 5 colonnes (lignes DÉVELOPPEMENT et ÉVALUATION) décrite plus haut. L'entête, la Situation d'apprentissage, le tableau Habiletés/Contenus et le tableau Supports didactiques/Bibliographie restent inchangés et se rédigent normalement.) :
@@ -4513,7 +4555,9 @@ Juste après ce tableau réduit à sa seule ligne PRÉSENTATION, place EXACTEMEN
 
 Ce jeton sera remplacé automatiquement par le contenu réel de la séance (le passage étudié, ses personnages, les faits relevés et le bilan de synthèse ont déjà été rédigés par l'enseignant) : n'invente RIEN à sa place, ne rédige toi-même aucune section "Développement" ni "Évaluation" -- ce jeton doit être la SEULE chose que tu écris après le tableau réduit.
 
-Aucune section Évaluation séparée pour cette séance : la vérification de la lecture est déjà intégrée dans le contenu qui remplacera le jeton ci-dessus.`;
+Aucune section Évaluation séparée pour cette séance : la vérification de la lecture est déjà intégrée dans le contenu qui remplacera le jeton ci-dessus.
+
+${construireConsigneTaxonomiqueOeuvre(seanceNum)}`;
 }
 
 // Assemble déterministiquement les unités de sens saisies par l'enseignant
@@ -4777,6 +4821,12 @@ function limiterGenerationParIp(req, res, next) {
             return envoyerBlocageSSE(res, resultatPlanFourniOI.messageBlocage);
           }
           systemPrompt += resultatPlanFourniOI.instructions;
+          // La progression taxonomique (cf. construireConsigneTaxonomiqueOeuvre)
+          // ne fait pas partie de construireInstructionsLectureMethodiqueAvecPlanEnseignant
+          // (partagée avec la Lecture méthodique classique, hors séquence,
+          // qui n'a pas cette exigence) -- ajoutée séparément ici, uniquement
+          // pour Étude de l'œuvre intégrale.
+          systemPrompt += `\n\n${construireConsigneTaxonomiqueOeuvre(seanceNumOI)}`;
           planFourniInjection = resultatPlanFourniOI;
           if (resultatPlanFourniOI.avertissement) {
             avertissementRappel = avertissementRappel ? `${avertissementRappel} ${resultatPlanFourniOI.avertissement}` : resultatPlanFourniOI.avertissement;
@@ -4786,7 +4836,7 @@ function limiterGenerationParIp(req, res, next) {
           if (!(passagePages || '').toString().trim() || !unitesSens.length || !(bilanSynthese || '').toString().trim()) {
             return envoyerBlocageSSE(res, "Pour une séance de Lecture suivie, l'enseignant doit fournir les pages du passage, au moins une unité de sens et le bilan de synthèse.");
           }
-          systemPrompt += construireInstructionsLectureSuivie();
+          systemPrompt += construireInstructionsLectureSuivie(seanceNumOI);
           developpementLectureSuivieHTML = construireDeveloppementLectureSuivieHTML({ passagePages, contexteNarratif, axeEtude, unitesSens, bilanSynthese });
         } else {
           return envoyerBlocageSSE(res, 'Sous-type de séance invalide pour cette tranche (2 à 9) -- choisissez Lecture suivie ou Lecture méthodique.');
