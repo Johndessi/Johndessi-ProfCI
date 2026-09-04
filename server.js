@@ -1480,6 +1480,35 @@ function structureExploitationModeAutoPresente(contenuHTML) {
   return vocabulairePresent && grammairePresent;
 }
 
+// Filet déterministe (02/09), même principe que structureExploitationModeAutoPresente
+// ci-dessus : détecte si le modèle a malgré tout produit le squelette
+// générique (tableau Habiletés/Contenus + 3 phases Présentation/Développement/
+// Évaluation) au lieu de la structure I-II-III dédiée pour la Séance 1 ou la
+// Séance 10 d'Étude de l'œuvre intégrale, MALGRÉ la consigne "REMPLACE
+// INTÉGRALEMENT" (constaté en production le 02/09 : l'instruction seule
+// n'est pas fiable à 100% sur un système-prompt allongé -- même leçon que
+// pour Activité/Compétence plus tôt dans ce chantier). Recherche sur le
+// texte brut (headers en <h3>/<strong>, jamais dans une cellule de tableau à
+// colonnes fixes contrairement à Exploitation de texte) -- jamais un échec
+// silencieux, juste un avertissement à l'enseignant.
+function structureIntroductionOeuvrePresente(contenuHTML) {
+  if (!contenuHTML) return false;
+  const texteBrut = contenuHTML.replace(/<[^>]+>/g, ' ').toUpperCase();
+  const presentationAuteur = /\bI[\s.\-–—]{0,3}PR[EÉ]SENTATION\s+DE\s+L['’]AUTEUR\b/.test(texteBrut);
+  const presentationOeuvre = /\bII[\s.\-–—]{0,3}PR[EÉ]SENTATION\s+DE\s+L['’]ŒUVRE\b/.test(texteBrut);
+  const axeEtude = /\bIII[\s.\-–—]{0,3}AXE\s+D['’][EÉ]TUDE\b/.test(texteBrut);
+  return presentationAuteur && presentationOeuvre && axeEtude;
+}
+
+function structureConclusionOeuvrePresente(contenuHTML) {
+  if (!contenuHTML) return false;
+  const texteBrut = contenuHTML.replace(/<[^>]+>/g, ' ').toUpperCase();
+  const themesAbordes = /\bI[\s.\-–—]{0,3}LES\s+TH[EÈ]MES\s+ABORD[EÉ]S\b/.test(texteBrut);
+  const jugementCritique = /\bII[\s.\-–—]{0,3}JUGEMENT\s+CRITIQUE\b/.test(texteBrut);
+  const schemaActantiel = /\bIII[\s.\-–—]{0,3}SCH[EÉ]MA\s+ACTANTIEL\b/.test(texteBrut);
+  return themesAbordes && jugementCritique && schemaActantiel;
+}
+
 // Détection stricte : uniquement "lecture méthodique" (ni "lecture" seule, ni
 // "résumé de texte", ni "commentaire de texte", qui gardent la structure générique).
 function estLectureMethodique({ discipline, lecon, theme, activite }) {
@@ -4561,20 +4590,64 @@ async function rechercherInfosOeuvre(titreOeuvre, auteurOeuvre) {
     const reponse = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
-      system: `Tu es un assistant de recherche documentaire. On te donne le titre d'une œuvre littéraire et le nom de son auteur. Utilise l'outil de recherche web pour trouver des informations RÉELLES ET VÉRIFIABLES sur cet auteur et cette œuvre (identité/nationalité/profession de l'auteur, dates de naissance et de décès si applicable, distinctions notables, ainsi que le thème central de l'œuvre). N'INVENTE RIEN : si la recherche ne donne aucun résultat fiable et vérifiable sur CET auteur/CETTE œuvre précise (pas un homonyme, pas une œuvre différente du même auteur), indique-le clairement plutôt que de deviner.
+      system: `Tu es un assistant de recherche documentaire. On te donne le titre d'une œuvre littéraire et le nom de son auteur. Utilise l'outil de recherche web pour trouver des informations RÉELLES ET VÉRIFIABLES sur cet auteur et cette œuvre (identité/nationalité/profession de l'auteur, dates de naissance et de décès si applicable, distinctions notables, ainsi que le thème central de l'œuvre).
+
+RÈGLE STRICTE SUR LES FAITS PRÉCIS : toute date, tout nom de prix/distinction, tout chiffre et tout événement précis doit être accompagné d'une citation EXACTE (copiée mot pour mot, sans reformulation) tirée des résultats de recherche qui le justifie. Si tu ne peux pas retrouver de citation exacte et certaine pour un fait précis, NE L'INCLUS PAS -- une biographie incomplète vaut mieux qu'une biographie avec un détail inventé ou approximatif.
+
+N'INVENTE RIEN : si la recherche ne donne aucun résultat fiable et vérifiable sur CET auteur/CETTE œuvre précise (pas un homonyme, pas une œuvre différente du même auteur), indique-le clairement plutôt que de deviner.
 
 Réponds UNIQUEMENT avec un objet JSON, sans aucun texte avant ni après, au format exact :
-{"trouve": true|false, "biographieAuteur": "2-3 phrases maximum : identité/nationalité/profession, dates, activité principale/distinctions -- ou chaîne vide si non trouvé", "themeOeuvre": "1-2 phrases sur le thème central de l'œuvre -- ou chaîne vide si non trouvé", "sources": ["url1", "url2"]}`,
+{"trouve": true|false,
+ "biographieGenerale": "1-2 phrases générales SANS AUCUNE date, chiffre, nom de prix ni événement précis : identité/nationalité/profession/activité principale seulement -- ou chaîne vide si non trouvé",
+ "faitsAvecCitations": [{"fait": "une phrase courte énonçant UN SEUL fait précis (date, distinction, événement, chiffre)", "citationExacte": "citation copiée mot pour mot depuis les résultats de recherche, qui justifie ce fait précis"}],
+ "themeOeuvre": "1-2 phrases sur le thème central de l'œuvre -- ou chaîne vide si non trouvé",
+ "sources": ["url1", "url2"]}`,
       messages: [{ role: 'user', content: `Œuvre : "${titreOeuvre}"\nAuteur : "${auteurOeuvre}"` }],
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]
     });
+    // Filet déterministe (02/09) : ne JAMAIS faire confiance aux
+    // "citationExacte" auto-déclarées par le modèle -- elles pourraient
+    // elles-mêmes être inventées. Le pool ci-dessous vient du mécanisme de
+    // citations NATIF de l'API (citations[].cited_text sur les blocs texte),
+    // extrait par Anthropic lui-même depuis les vrais résultats de
+    // recherche, donc infalsifiable par le modèle. Un fait précis n'est
+    // conservé QUE si sa citation auto-déclarée se retrouve, une fois
+    // normalisée, dans ce pool réel -- sinon il est purement et simplement
+    // omis (cf. règle de l'enseignant : incomplet plutôt qu'inventé).
+    const poolCitationsReelles = reponse.content
+      .filter((b) => b.type === 'text' && Array.isArray(b.citations))
+      .flatMap((b) => b.citations)
+      .filter((c) => c && c.type === 'web_search_result_location' && typeof c.cited_text === 'string')
+      .map((c) => normaliserTexte(c.cited_text));
+
     const blocTexte = reponse.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     const correspondance = blocTexte.match(/\{[\s\S]*\}/);
     if (correspondance) {
       const parsed = JSON.parse(correspondance[0]);
+      const faits = Array.isArray(parsed.faitsAvecCitations) ? parsed.faitsAvecCitations : [];
+      const faitsVerifies = faits.filter((f) => {
+        if (!f || typeof f.fait !== 'string' || typeof f.citationExacte !== 'string') return false;
+        const citationNormalisee = normaliserTexte(f.citationExacte);
+        if (!citationNormalisee) return false;
+        return poolCitationsReelles.some((c) => c.includes(citationNormalisee) || citationNormalisee.includes(c));
+      });
+      // Filet supplémentaire sur la partie générale : aucune phrase ne doit
+      // contenir de chiffre (année, âge...) -- si le modèle en a malgré tout
+      // laissé un ici (hors du circuit faitsAvecCitations vérifié
+      // ci-dessus), la PHRASE ENTIÈRE est retirée (jamais une simple
+      // suppression du chiffre en place, qui laisserait un fragment de
+      // phrase grammaticalement cassé, ex. "née en.") plutôt que de risquer
+      // un chiffre non vérifié dans la fiche.
+      const biographieGeneraleBrute = (parsed.biographieGenerale || '').toString().trim();
+      const biographieGeneraleSure = biographieGeneraleBrute
+        .split(/(?<=[.!?])\s+/)
+        .filter((phrase) => !/\d/.test(phrase))
+        .join(' ')
+        .trim();
+      const biographieAuteur = [biographieGeneraleSure, ...faitsVerifies.map((f) => f.fait.toString().trim())].filter(Boolean).join(' ');
       resultat = {
-        succes: !!parsed.trouve,
-        biographieAuteur: (parsed.biographieAuteur || '').toString().trim(),
+        succes: !!parsed.trouve && !!(biographieAuteur || (parsed.themeOeuvre || '').toString().trim()),
+        biographieAuteur,
         themeOeuvre: (parsed.themeOeuvre || '').toString().trim(),
         sources: Array.isArray(parsed.sources) ? parsed.sources.filter((s) => typeof s === 'string') : []
       };
@@ -5514,6 +5587,19 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         }
         if (developpementLectureSuivieHTML) {
           contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{DEVELOPPEMENT_LECTURE_SUIVIE}}', developpementLectureSuivieHTML);
+        }
+        // Filet déterministe (02/09) : la consigne "REMPLACE INTÉGRALEMENT"
+        // n'est pas fiable à 100% sur ce système-prompt allongé (constaté en
+        // production le 02/09 -- le modèle a produit le squelette générique
+        // Habiletés/Contenus au lieu de la structure I-II-III dédiée, pour
+        // Séance 1 comme pour Séance 10). Jamais un échec silencieux : simple
+        // avertissement à l'enseignant, même mécanisme que pour Exploitation
+        // de texte (cf. structureExploitationModeAutoPresente ci-dessus).
+        const seanceNumOIFinal = parseInt(seance, 10);
+        if (seanceNumOIFinal === 1 && !structureIntroductionOeuvrePresente(contenuHTML)) {
+          res.write(`data: ${JSON.stringify({ avertissement: "La structure attendue (I- Présentation de l'auteur / II- Présentation de l'œuvre / III- Axe d'étude) n'a pas été générée correctement pour cette fiche -- le modèle a produit une autre structure (probablement le squelette générique Habiletés/Contenus). Ne pas utiliser cette fiche telle quelle : régénérez-la." })}\n\n`);
+        } else if (seanceNumOIFinal === 10 && !structureConclusionOeuvrePresente(contenuHTML)) {
+          res.write(`data: ${JSON.stringify({ avertissement: "La structure attendue (I- Les thèmes abordés / II- Jugement critique / III- Schéma actantiel) n'a pas été générée correctement pour cette fiche -- le modèle a produit une autre structure (probablement le squelette générique Habiletés/Contenus). Ne pas utiliser cette fiche telle quelle : régénérez-la." })}\n\n`);
         }
       }
       // Contrôle des 3 marqueurs attendus du mode plan-enseignant, AVANT toute
