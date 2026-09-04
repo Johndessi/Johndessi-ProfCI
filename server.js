@@ -1480,33 +1480,67 @@ function structureExploitationModeAutoPresente(contenuHTML) {
   return vocabulairePresent && grammairePresent;
 }
 
-// Filet déterministe (02/09), même principe que structureExploitationModeAutoPresente
-// ci-dessus : détecte si le modèle a malgré tout produit le squelette
-// générique (tableau Habiletés/Contenus + 3 phases Présentation/Développement/
-// Évaluation) au lieu de la structure I-II-III dédiée pour la Séance 1 ou la
-// Séance 10 d'Étude de l'œuvre intégrale, MALGRÉ la consigne "REMPLACE
-// INTÉGRALEMENT" (constaté en production le 02/09 : l'instruction seule
-// n'est pas fiable à 100% sur un système-prompt allongé -- même leçon que
-// pour Activité/Compétence plus tôt dans ce chantier). Recherche sur le
-// texte brut (headers en <h3>/<strong>, jamais dans une cellule de tableau à
-// colonnes fixes contrairement à Exploitation de texte) -- jamais un échec
-// silencieux, juste un avertissement à l'enseignant.
+// Filet déterministe (02/09, renforcé le 04/09 après test réel en prod --
+// v1 ne cherchait les 3 en-têtes attendus QUE dans le texte brut, sans
+// vérifier l'ABSENCE du squelette générique : sur 3/3 fiches réelles
+// testées, le modèle produit malgré tout le squelette générique complet
+// (tableau Habiletés/Contenus + tableau 5 colonnes Présentation/
+// Développement/Évaluation), soit EN PLUS de la structure I-II-III
+// (dupliquée, avec un fait halluciné dans la cellule PRÉSENTATION du
+// tableau 5 colonnes -- ex. date de décès inventée), soit à la place, avec
+// les libellés I/II/III simplement recopiés comme texte DANS une cellule du
+// tableau générique au lieu d'être de vraies sections. v1 ne détectait
+// AUCUN des deux cas (elle cherchait juste la présence du texte, n'importe
+// où). v2 exige désormais : 1) les 3 en-têtes présents HORS de tout
+// tableau (donc de vraies sections, jamais un simple texte recopié dans une
+// cellule) -- 2) ET l'absence du squelette générique (tableau Habiletés/
+// Contenus, ou tableau à 4+ colonnes avec une 1ère cellule PRÉSENTATION/
+// DÉVELOPPEMENT/ÉVALUATION), qui doit être entièrement REMPLACÉ selon la
+// consigne, jamais conservé en parallèle. Jamais un échec silencieux, juste
+// un avertissement à l'enseignant -- même mécanisme que pour Exploitation
+// de texte (structureExploitationModeAutoPresente ci-dessus).
+function squeletteGeneriqueOeuvrePresent($) {
+  let habiletesContenusPresent = false;
+  $('table').each((_, table) => {
+    const entete = $(table).find('tr').first().text().toUpperCase();
+    if (/HABILET[EÉ]S/.test(entete) && /CONTENUS/.test(entete)) habiletesContenusPresent = true;
+  });
+  let phaseGeneriquePresente = false;
+  $('tr').each((_, tr) => {
+    const $tds = $(tr).find('> td');
+    if ($tds.length < 4) return;
+    const premiereColonne = $tds.first().text().toUpperCase().trim();
+    if (/^PR[EÉ]SENTATION\b/.test(premiereColonne) || /^D[EÉ]VELOPPEMENT\b/.test(premiereColonne) || /^[EÉ]VALUATION\b/.test(premiereColonne)) phaseGeneriquePresente = true;
+  });
+  return habiletesContenusPresent || phaseGeneriquePresente;
+}
+
+function texteHorsTableauMajuscule($) {
+  const $sansTableaux = cheerio.load($.html());
+  $sansTableaux('table').remove();
+  return $sansTableaux.root().text().toUpperCase();
+}
+
 function structureIntroductionOeuvrePresente(contenuHTML) {
   if (!contenuHTML) return false;
-  const texteBrut = contenuHTML.replace(/<[^>]+>/g, ' ').toUpperCase();
-  const presentationAuteur = /\bI[\s.\-–—]{0,3}PR[EÉ]SENTATION\s+DE\s+L['’]AUTEUR\b/.test(texteBrut);
-  const presentationOeuvre = /\bII[\s.\-–—]{0,3}PR[EÉ]SENTATION\s+DE\s+L['’]ŒUVRE\b/.test(texteBrut);
-  const axeEtude = /\bIII[\s.\-–—]{0,3}AXE\s+D['’][EÉ]TUDE\b/.test(texteBrut);
-  return presentationAuteur && presentationOeuvre && axeEtude;
+  const $ = cheerio.load(contenuHTML);
+  const texteHorsTableau = texteHorsTableauMajuscule($);
+  const presentationAuteur = /\bI[\s.\-–—]{0,3}PR[EÉ]SENTATION\s+DE\s+L['’]AUTEUR\b/.test(texteHorsTableau);
+  const presentationOeuvre = /\bII[\s.\-–—]{0,3}PR[EÉ]SENTATION\s+DE\s+L['’]ŒUVRE\b/.test(texteHorsTableau);
+  const axeEtude = /\bIII[\s.\-–—]{0,3}AXE\s+D['’][EÉ]TUDE\b/.test(texteHorsTableau);
+  if (!(presentationAuteur && presentationOeuvre && axeEtude)) return false;
+  return !squeletteGeneriqueOeuvrePresent($);
 }
 
 function structureConclusionOeuvrePresente(contenuHTML) {
   if (!contenuHTML) return false;
-  const texteBrut = contenuHTML.replace(/<[^>]+>/g, ' ').toUpperCase();
-  const themesAbordes = /\bI[\s.\-–—]{0,3}LES\s+TH[EÈ]MES\s+ABORD[EÉ]S\b/.test(texteBrut);
-  const jugementCritique = /\bII[\s.\-–—]{0,3}JUGEMENT\s+CRITIQUE\b/.test(texteBrut);
-  const schemaActantiel = /\bIII[\s.\-–—]{0,3}SCH[EÉ]MA\s+ACTANTIEL\b/.test(texteBrut);
-  return themesAbordes && jugementCritique && schemaActantiel;
+  const $ = cheerio.load(contenuHTML);
+  const texteHorsTableau = texteHorsTableauMajuscule($);
+  const themesAbordes = /\bI[\s.\-–—]{0,3}LES\s+TH[EÈ]MES\s+ABORD[EÉ]S\b/.test(texteHorsTableau);
+  const jugementCritique = /\bII[\s.\-–—]{0,3}JUGEMENT\s+CRITIQUE\b/.test(texteHorsTableau);
+  const schemaActantiel = /\bIII[\s.\-–—]{0,3}SCH[EÉ]MA\s+ACTANTIEL\b/.test(texteHorsTableau);
+  if (!(themesAbordes && jugementCritique && schemaActantiel)) return false;
+  return !squeletteGeneriqueOeuvrePresent($);
 }
 
 // Détection stricte : uniquement "lecture méthodique" (ni "lecture" seule, ni
