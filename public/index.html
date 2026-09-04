@@ -386,8 +386,12 @@ textarea { resize: vertical; min-height: 90px; }
 
       <div id="oiPanneauSeance1" style="display:none">
         <p style="font-size:12px;color:var(--gris2);margin-bottom:10px">
-          Les 4 champs ci-dessous sont optionnels et indépendants : le modèle n'a pas accès au contenu réel du livre, donc sans ces informations la présentation de l'œuvre reste volontairement sobre et générale (aucune invention de nom de personnage, de lieu ou de détail visuel). Remplis ceux que tu connais précisément pour une fiche plus riche et plus fidèle — laisse les autres vides.
+          Les 5 champs ci-dessous sont optionnels et indépendants : le modèle n'a pas accès au contenu réel du livre, donc sans ces informations la présentation de l'œuvre reste volontairement sobre et générale (aucune invention de nom de personnage, de lieu ou de détail visuel). Remplis ceux que tu connais précisément pour une fiche plus riche et plus fidèle — laisse les autres vides. Si la biographie et le thème sont tous les deux vides, une recherche web automatique est tentée (résultat mis en cache pour ne jamais la refaire pour la même œuvre).
         </p>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Biographie de l'auteur (optionnel)</label>
+          <textarea id="oiBiographieAuteur" style="min-height:60px" placeholder="Ex: Fatou Fanny-Cissé est une ivoirienne née en 1971..."></textarea>
+        </div>
         <div class="form-group" style="margin-bottom:14px">
           <label>Thème de l'œuvre (optionnel)</label>
           <textarea id="oiThemeOeuvre" style="min-height:50px" placeholder="Ex: la grossesse précoce en milieu scolaire"></textarea>
@@ -1052,6 +1056,7 @@ async function genererFicheOeuvreIntegrale() {
   };
 
   if (seanceNum === 1) {
+    champs.biographieAuteur = document.getElementById('oiBiographieAuteur').value.trim();
     champs.analyseCouverture = document.getElementById('oiAnalyseCouverture').value.trim();
     champs.themeOeuvre = document.getElementById('oiThemeOeuvre').value.trim();
     champs.personnagesOeuvre = document.getElementById('oiPersonnagesOeuvre').value.trim();

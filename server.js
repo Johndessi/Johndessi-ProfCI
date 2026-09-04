@@ -611,12 +611,36 @@ const LeconOfficielleDPFCSchema = new mongoose.Schema({
   createdAt   : { type: Date, default: Date.now }
 });
 
+// Cache permanent des infos (biographie auteur + thème) trouvées par
+// recherche web pour une œuvre intégrale (02/09) -- clé (titre, auteur)
+// normalisés. Aucune expiration pour un succès (les faits biographiques
+// d'un auteur/thème d'une œuvre ne changent pas) : cf. rechercherInfosOeuvre.
+// Un échec de recherche (aucune info fiable trouvée) EST mis en cache, mais
+// avec `expireApres` positionné à +14 jours -- l'index TTL ci-dessous le
+// supprime alors automatiquement, permettant un nouvel essai plus tard (le
+// web s'enrichit). `expireApres` reste absent (undefined) sur un succès, ce
+// qui l'exclut de l'expiration TTL (MongoDB n'expire jamais un document où
+// le champ indexé est absent).
+const InfoOeuvreIntegraleSchema = new mongoose.Schema({
+  titreNormalise  : String,
+  auteurNormalise : String,
+  succes          : Boolean,
+  biographieAuteur: String,
+  themeOeuvre     : String,
+  sources         : [String],
+  dateRecherche   : { type: Date, default: Date.now },
+  expireApres     : Date
+});
+InfoOeuvreIntegraleSchema.index({ titreNormalise: 1, auteurNormalise: 1 }, { unique: true });
+InfoOeuvreIntegraleSchema.index({ expireApres: 1 }, { expireAfterSeconds: 0 });
+
 const Modele = mongoose.model('Modele', ModeleSchema);
 const Fiche  = mongoose.model('Fiche',  FicheSchema);
 const ProgressionLecon = mongoose.model('ProgressionLecon', ProgressionLeconSchema);
 const CompetenceDPFC = mongoose.model('CompetenceDPFC', CompetenceDPFCSchema);
 const CompetenceParActivite = mongoose.model('CompetenceParActivite', CompetenceParActiviteSchema);
 const LeconOfficielleDPFC = mongoose.model('LeconOfficielleDPFC', LeconOfficielleDPFCSchema);
+const InfoOeuvreIntegrale = mongoose.model('InfoOeuvreIntegrale', InfoOeuvreIntegraleSchema);
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -4512,7 +4536,78 @@ function validerSequenceOeuvreIntegrale({ seance, titreOeuvre, auteurOeuvre, axe
   return null;
 }
 
-function construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, etablissement, axeEtude, analyseCouverture, themeOeuvre, personnagesOeuvre, lieuxOeuvre }) {
+// Recherche web (02/09) : quand l'enseignant n'a fourni NI biographie NI
+// thème pour Séance 1, cherche l'auteur/l'œuvre réels via l'outil web_search
+// (variante de base 20250305 -- SEULE compatible avec Haiku, le modèle de
+// génération de l'app ; la variante récente 20260209 à filtrage dynamique
+// exige Opus/Sonnet 4.6+, cf. skill claude-api). Résultat mis en cache
+// PERMANENT en base (clé titre+auteur normalisés) -- jamais réévalué pour un
+// succès, jamais recherché deux fois pour la même œuvre par deux
+// enseignants différents. Le champ enseignant reste TOUJOURS prioritaire :
+// cette fonction n'est appelée QUE si au moins un des deux champs est vide,
+// jamais pour écraser un champ déjà rempli (cf. l'appelant dans /api/generer-fiche).
+async function rechercherInfosOeuvre(titreOeuvre, auteurOeuvre) {
+  const titreNormalise = normaliserTexte(titreOeuvre);
+  const auteurNormalise = normaliserTexte(auteurOeuvre);
+  if (!titreNormalise || !auteurNormalise) return { succes: false, biographieAuteur: '', themeOeuvre: '' };
+
+  const enCache = await InfoOeuvreIntegrale.findOne({ titreNormalise, auteurNormalise });
+  if (enCache) {
+    return { succes: enCache.succes, biographieAuteur: enCache.biographieAuteur || '', themeOeuvre: enCache.themeOeuvre || '' };
+  }
+
+  let resultat = { succes: false, biographieAuteur: '', themeOeuvre: '', sources: [] };
+  try {
+    const reponse = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system: `Tu es un assistant de recherche documentaire. On te donne le titre d'une œuvre littéraire et le nom de son auteur. Utilise l'outil de recherche web pour trouver des informations RÉELLES ET VÉRIFIABLES sur cet auteur et cette œuvre (identité/nationalité/profession de l'auteur, dates de naissance et de décès si applicable, distinctions notables, ainsi que le thème central de l'œuvre). N'INVENTE RIEN : si la recherche ne donne aucun résultat fiable et vérifiable sur CET auteur/CETTE œuvre précise (pas un homonyme, pas une œuvre différente du même auteur), indique-le clairement plutôt que de deviner.
+
+Réponds UNIQUEMENT avec un objet JSON, sans aucun texte avant ni après, au format exact :
+{"trouve": true|false, "biographieAuteur": "2-3 phrases maximum : identité/nationalité/profession, dates, activité principale/distinctions -- ou chaîne vide si non trouvé", "themeOeuvre": "1-2 phrases sur le thème central de l'œuvre -- ou chaîne vide si non trouvé", "sources": ["url1", "url2"]}`,
+      messages: [{ role: 'user', content: `Œuvre : "${titreOeuvre}"\nAuteur : "${auteurOeuvre}"` }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]
+    });
+    const blocTexte = reponse.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    const correspondance = blocTexte.match(/\{[\s\S]*\}/);
+    if (correspondance) {
+      const parsed = JSON.parse(correspondance[0]);
+      resultat = {
+        succes: !!parsed.trouve,
+        biographieAuteur: (parsed.biographieAuteur || '').toString().trim(),
+        themeOeuvre: (parsed.themeOeuvre || '').toString().trim(),
+        sources: Array.isArray(parsed.sources) ? parsed.sources.filter((s) => typeof s === 'string') : []
+      };
+    }
+  } catch (e) {
+    console.error('❌ rechercherInfosOeuvre:', e.message);
+    resultat = { succes: false, biographieAuteur: '', themeOeuvre: '', sources: [] };
+  }
+
+  try {
+    await InfoOeuvreIntegrale.findOneAndUpdate(
+      { titreNormalise, auteurNormalise },
+      {
+        titreNormalise, auteurNormalise,
+        succes: resultat.succes,
+        biographieAuteur: resultat.biographieAuteur,
+        themeOeuvre: resultat.themeOeuvre,
+        sources: resultat.sources,
+        dateRecherche: new Date(),
+        // Échec : nouvel essai permis dans 14 jours (le web peut s'enrichir).
+        // Succès : jamais réévalué (expireApres absent).
+        expireApres: resultat.succes ? undefined : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      },
+      { upsert: true }
+    );
+  } catch (e) {
+    console.error('❌ rechercherInfosOeuvre (cache):', e.message);
+  }
+
+  return resultat;
+}
+
+function construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, etablissement, axeEtude, analyseCouverture, themeOeuvre, personnagesOeuvre, lieuxOeuvre, biographieAuteur }) {
   const titre = (titreOeuvre || '').toString().trim();
   const auteur = (auteurOeuvre || '').toString().trim();
   const etab = (etablissement || '').toString().trim();
@@ -4521,6 +4616,18 @@ function construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, e
   const theme = (themeOeuvre || '').toString().trim();
   const personnages = (personnagesOeuvre || '').toString().trim();
   const lieux = (lieuxOeuvre || '').toString().trim();
+  const biographie = (biographieAuteur || '').toString().trim();
+
+  // Biographie (02/09) : même principe que Thème/Personnages/Lieux --
+  // "biographie" ici peut venir soit directement de l'enseignant, soit
+  // d'une recherche web mise en cache (cf. rechercherInfosOeuvre, appelée
+  // par l'appelant AVANT cette fonction) -- dans les deux cas la valeur
+  // arrive ici déjà résolue et est injectée verbatim, jamais reformulée.
+  // Absente dans les deux cas (enseignant + recherche) : repli générique
+  // inchangé (rester vague, jamais inventer un fait précis).
+  const consigneBiographie = biographie
+    ? `1- Biographie : t'appuyer EXACTEMENT sur ces informations (fournies par l'enseignant ou vérifiées par recherche documentaire), sans y ajouter ni en retirer aucun détail : "${biographie}"`
+    : `1- Biographie : bref, JAMAIS un paragraphe développé -- 2 à 3 phrases maximum, uniquement l'essentiel : nationalité/identité, date de naissance (et de décès si l'auteur n'est plus vivant), profession, activité principale (distinctions/prix notables). À partir de tes connaissances réelles sur cet auteur -- si tu n'es pas certain d'un fait précis (date exacte, détail biographique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude.`;
 
   // Structure I-II-III calibrée MOT POUR MOT sur la fiche de référence
   // "Maeva" (Fatou Fanny-Cissé, 3e, DPFC), fournie le 01/09 -- remplace
@@ -4556,7 +4663,7 @@ function construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, e
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — SÉANCE 1, INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (cette fiche ouvre une séquence de 11 séances consacrée à l'étude intégrale de « ${titre} » de ${auteur}. Les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes décrits plus haut -- rédige UNIQUEMENT la structure I/II/III ci-dessous à la place. Le reste de l'entête (Discipline, Classe, Durée) et la Situation d'apprentissage restent inchangés et se rédigent normalement.) :
 
 I- PRÉSENTATION DE L'AUTEUR
-1- Biographie : bref, JAMAIS un paragraphe développé -- 2 à 3 phrases maximum, uniquement l'essentiel : nationalité/identité, date de naissance (et de décès si l'auteur n'est plus vivant), profession, activité principale (distinctions/prix notables). À partir de tes connaissances réelles sur cet auteur -- si tu n'es pas certain d'un fait précis (date exacte, détail biographique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude.
+${consigneBiographie}
 2- Bibliographie : liste des œuvres majeures de l'auteur avec leur année de publication, au format "Titre en année, Titre en année..." -- à partir de tes connaissances réelles, jamais inventée si tu n'es pas certain.
 
 II- PRÉSENTATION DE L'ŒUVRE
@@ -4786,7 +4893,7 @@ function limiterGenerationParIp(req, res, next) {
       // classique (même valeur d'Activité affichée, cf. ACTIVITE_OEUVRE_INTEGRALE).
       sousModule = '', numeroSequence = '1', titreOeuvre = '', auteurOeuvre = '',
       etablissement = '', axeEtude = '', situationApprentissageOeuvre = '',
-      analyseCouverture = '', themeOeuvre = '', personnagesOeuvre = '', lieuxOeuvre = '',
+      analyseCouverture = '', themeOeuvre = '', personnagesOeuvre = '', lieuxOeuvre = '', biographieAuteur = '',
       typeSeanceOI = '', passagePages = '', contexteNarratif = '', bilanSynthese = '',
       contenuLibreSeance11 = ''
     } = req.body;
@@ -4915,7 +5022,20 @@ function limiterGenerationParIp(req, res, next) {
       systemPrompt += `\n\nCHAMP SÉANCE DE L'ENTÊTE : écris EXACTEMENT "${seanceAfficheeOI}" dans le champ Séance de l'entête, sans reformulation.`;
 
       if (seanceNumOI === 1) {
-        systemPrompt += construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, etablissement, axeEtude, analyseCouverture, themeOeuvre, personnagesOeuvre, lieuxOeuvre });
+        // Recherche web + cache (02/09) : uniquement si l'enseignant n'a
+        // fourni NI biographie NI thème -- jamais appelée si les deux sont
+        // déjà remplis, jamais utilisée pour écraser un champ enseignant
+        // déjà rempli (seul le champ VIDE reçoit la valeur trouvée/cachée).
+        let biographieEffective = (biographieAuteur || '').toString().trim();
+        let themeEffectif = (themeOeuvre || '').toString().trim();
+        if ((!biographieEffective || !themeEffectif) && titreOeuvre && auteurOeuvre) {
+          const infosTrouvees = await rechercherInfosOeuvre(titreOeuvre, auteurOeuvre);
+          if (infosTrouvees.succes) {
+            if (!biographieEffective) biographieEffective = infosTrouvees.biographieAuteur;
+            if (!themeEffectif) themeEffectif = infosTrouvees.themeOeuvre;
+          }
+        }
+        systemPrompt += construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, etablissement, axeEtude, analyseCouverture, themeOeuvre: themeEffectif, personnagesOeuvre, lieuxOeuvre, biographieAuteur: biographieEffective });
       } else if (seanceNumOI === 10) {
         systemPrompt += construireInstructionsConclusionOeuvre({ titreOeuvre, auteurOeuvre, axeEtude });
       } else if (seanceNumOI >= 2 && seanceNumOI <= 9) {
