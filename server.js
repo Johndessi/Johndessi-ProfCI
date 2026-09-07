@@ -1917,6 +1917,22 @@ const REFERENTIEL_TYPES_TEXTE = {
       { categorie: 'types_phrases', axe: 2, libelle: 'Les types de phrases', description: `types de phrases (${TYPES_PHRASES_OFFICIELS}) selon l'objet de la demande, dominante déclarative pour exposer la requête` },
       { categorie: 'lexique', axe: 2, libelle: 'Le lexique', description: "vocabulaire administratif propre à l'objet précis de la lettre (motif de la demande, pièce/document sollicité, autorité destinataire)" }
     ]
+  },
+  // Ajouté le 07/09 : leçon officielle DPFC 3e "L'article de journal" (Lecture
+  // méthodique/Exploitation de texte, portant sur un fait dont on a été
+  // témoin/un fait rapporté) -- absente du référentiel jusqu'ici, ce qui
+  // aurait bloqué Exploitation de texte sur cette leçon (cf.
+  // construireMessageBlocageTypeTexteNonCouvert). Caractéristiques standards
+  // du genre journalistique (titre/chapô, pyramide inversée, discours
+  // rapporté attribué).
+  'article de journal': {
+    caracteristiques: [
+      { categorie: 'structure', axe: 1, libelle: 'La structure de l\'article', description: "titre accrocheur, chapô (résumé synthétique en tête reprenant l'essentiel : qui, quoi, où, quand), corps organisé en pyramide inversée (l'information la plus importante en premier)" },
+      { categorie: 'discours_rapporte', axe: 1, libelle: 'Le discours rapporté', description: "témoignages/déclarations rapportés, au style direct (entre guillemets, attribués nommément) ou indirect, avec verbes déclaratifs (déclarer, affirmer, expliquer, témoigner...)" },
+      { categorie: 'temps_verbaux', axe: 1, libelle: 'Les temps verbaux', description: "passé composé pour les faits rapportés, présent d'actualité pour leurs conséquences ou leur portée" },
+      { categorie: 'registre_langue', axe: 2, libelle: 'Le registre de langue', description: "registre neutre et informatif, visée d'objectivité (jamais de jugement personnel du journaliste)" },
+      { categorie: 'lexique', axe: 2, libelle: 'Le lexique thématique', description: "vocabulaire précis du fait rapporté (lieu, circonstances, personnes impliquées)" }
+    ]
   }
 };
 
