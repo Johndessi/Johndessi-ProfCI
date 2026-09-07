@@ -4444,6 +4444,57 @@ app.delete('/api/admin/oeuvre-integrale/cache', verifierCleAdmin, async (req, re
   }
 });
 
+// Ajouté le 07/09 : pose manuellement une entrée de cache PERMANENTE
+// (succes: true, jamais d'expiration) à partir d'une source déjà vérifiée
+// par l'enseignant (fiche de référence réelle, PDF officiel...) -- jamais
+// une recherche web, jamais un fait extrapolé : la biographie/le thème
+// fournis ici sont pris tels quels, sans passer par le circuit de
+// vérification par citations de rechercherInfosOeuvre (qui ne s'applique
+// qu'aux résultats de web_search). Mêmes règles de priorité que d'habitude :
+// une entrée posée ici sera quand même écrasée par un champ enseignant
+// rempli au moment de la génération (cf. dispatch Séance 1), jamais
+// l'inverse. Second cas de référence après Maeva (posée à la main avec le
+// PDF complet) : "La voie de ma rue" / Sylvain Kéan Zoh.
+app.post('/api/admin/oeuvre-integrale/cache', verifierCleAdmin, async (req, res) => {
+  try {
+    const { titreOeuvre, auteurOeuvre, biographieAuteur, themeOeuvre, sources } = req.body || {};
+    const titreNormalise = normaliserTexte(titreOeuvre);
+    const auteurNormalise = normaliserTexte(auteurOeuvre);
+    if (!titreNormalise || !auteurNormalise) {
+      return res.status(400).json({ error: 'titreOeuvre et auteurOeuvre requis' });
+    }
+    const bio = (biographieAuteur || '').toString().trim();
+    const theme = (themeOeuvre || '').toString().trim();
+    if (!bio && !theme) {
+      return res.status(400).json({ error: 'biographieAuteur et/ou themeOeuvre requis' });
+    }
+    const doc = await InfoOeuvreIntegrale.findOneAndUpdate(
+      { titreNormalise, auteurNormalise },
+      {
+        // $unset explicite : un simple "expireApres: undefined" ne suffit
+        // PAS à retirer un TTL déjà posé sur une entrée existante (Mongoose
+        // omet silencieusement les clés undefined de l'update au lieu de
+        // les envoyer à Mongo) -- ce qui aurait laissé une entrée "posée
+        // comme permanente" expirer quand même si elle avait d'abord été un
+        // échec en cache. $set / $unset séparés lèvent l'ambiguïté.
+        $set: {
+          titreNormalise, auteurNormalise,
+          succes: true,
+          biographieAuteur: bio,
+          themeOeuvre: theme,
+          sources: Array.isArray(sources) ? sources.filter((s) => typeof s === 'string') : [],
+          dateRecherche: new Date()
+        },
+        $unset: { expireApres: '' }
+      },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true, entree: doc });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/lecons-officielles', async (req, res) => {
   try {
     const { discipline, classe, lecon, theme, activite } = req.query;
