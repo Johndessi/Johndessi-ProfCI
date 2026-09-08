@@ -3537,7 +3537,7 @@ async function genererDeroulementExploitationAuto({ texteSupport, lecon, classe 
 
 ${consigneTexte}
 
-Réponds UNIQUEMENT avec un objet JSON, sans aucun texte avant ni après, au format EXACT :
+Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ni après, sans bloc de code ni \`\`\`. RÈGLE CRITIQUE POUR UN JSON VALIDE : à l'intérieur de chaque valeur texte, si tu cites un mot ou une expression du texte, utilise TOUJOURS des guillemets français « » -- JAMAIS le caractère guillemet droit ("), qui casserait le JSON. Format EXACT :
 {"texteSupport": ${texteFourni ? 'null' : '"le texte que tu as inventé"'},
  "vocabulaire": {"strategie": "...", "enseignant": "...", "eleves": "...", "traces": "..."},
  "grammaire": {"strategie": "...", "enseignant": "...", "eleves": "...", "traces": "..."},
@@ -3559,12 +3559,15 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
   try {
     const reponse = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1536,
+      max_tokens: 2048,
       system,
       messages: [{ role: 'user', content: 'Génère le JSON demandé.' }]
     });
     const blocTexte = reponse.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-    const correspondance = blocTexte.match(/\{[\s\S]*\}/);
+    // Retire un éventuel bloc de code markdown (```json ... ```) avant
+    // extraction, au cas où le modèle en ajouterait un malgré la consigne.
+    const blocTexteNettoye = blocTexte.replace(/```(?:json)?/gi, '');
+    const correspondance = blocTexteNettoye.match(/\{[\s\S]*\}/);
     if (!correspondance) throw new Error('JSON introuvable dans la réponse du modèle');
     const parsed = JSON.parse(correspondance[0]);
 
@@ -5463,6 +5466,20 @@ function limiterGenerationParIp(req, res, next) {
             ? resoudreIntituleAvecOption(seanceDoc.intitule, seanceOptionsChoix, optionChoisieTexte)
             : seanceDoc.intitule;
           systemPrompt += `\n\nSÉANCE OFFICIELLE DPFC : Séance ${seanceDoc.numeroSeance} : ${intituleSeanceResolu}\n\nDans le champ Séance de l'entête (à droite du libellé "Séance :" déjà présent), écris EXACTEMENT "${seanceDoc.numeroSeance} : ${intituleSeanceResolu}" -- le numéro et l'intitulé SEULEMENT, SANS répéter le mot "Séance" qui est déjà dans le libellé, sans reformulation ni troncature.`;
+          // Corrige un cas de confusion réel (08/09) : pour Exploitation de
+          // texte, cet intitulé officiel contient littéralement les mots
+          // "Lecture méthodique" (catalogue partagé par design, cf.
+          // estExploitationDeTexte plus haut -- aucune leçon "Exploitation
+          // de texte" séparée n'existe). Constaté en production : le modèle,
+          // voyant cette instruction d'entête EXACTEMENT au même endroit que
+          // les autres consignes structurantes, régénère alors une fiche de
+          // Lecture méthodique complète (entête "Activité" y compris),
+          // malgré l'instruction contraire donnée par ailleurs pour le
+          // développement. Cette précision désamorce l'ambiguïté à la
+          // source, immédiatement après l'instruction qui la crée.
+          if (estExploitation) {
+            systemPrompt += ` (Cet intitulé officiel mentionne "Lecture méthodique" uniquement parce qu'Exploitation de texte réutilise la même séance du référentiel DPFC, portant sur le même texte support -- cela ne change RIEN à la nature de CETTE fiche : recopie l'intitulé tel quel dans le champ Séance de l'entête, mais le champ Activité de l'entête et tout le reste de la fiche restent ceux d'une Exploitation de texte, jamais d'une Lecture méthodique.)`;
+          }
 
           if (optionChoisieTexte) {
             systemPrompt += `\n\nOPTION CHOISIE PAR L'ENSEIGNANT (séance à choix) : "${optionChoisieTexte}"\n\nReprends EXACTEMENT ce texte pour préciser le support/thème traité dans cette séance, sans reformulation.`;
