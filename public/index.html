@@ -238,6 +238,9 @@ textarea { resize: vertical; min-height: 90px; }
         <p id="modeSaisieLeconIndisponible" style="display:none;font-size:12px;color:var(--gris2);margin-top:4px">
           Catalogue officiel pas encore disponible pour cette classe/activité — utilisez la saisie libre, ou complétez-le si vous avez la progression.
         </p>
+        <p id="modeSaisieLeconExploitationPartagee" style="display:none;font-size:12px;color:var(--gris2);margin-top:4px">
+          Les leçons ci-dessous sont celles de Lecture méthodique : Exploitation de texte porte sur le même texte support, il n'existe pas de leçons distinctes pour cette activité.
+        </p>
       </div>
 
       <div class="form-row">
@@ -758,6 +761,21 @@ function calculerActiviteEffective() {
   return estFrancais ? document.getElementById('activite').value.trim() : disciplineTexte;
 }
 
+// Exploitation de texte n'a JAMAIS sa propre entrée dans le catalogue
+// (même règle côté serveur, cf. estExploitationDeTexte/activiteRecherchee
+// dans server.js -- "aucune leçon 'Exploitation de texte' séparée n'existe
+// dans le catalogue") : elle porte sur le MÊME texte support qu'une séance
+// de Lecture méthodique de la même leçon. Sans cette correspondance, la
+// requête catalogue interrogeait littéralement "Exploitation de texte",
+// qui ne renvoie jamais rien -- le sélecteur catalogue restait donc
+// indisponible pour cette activité dans TOUTES les classes, y compris là
+// où Lecture méthodique existe (bug corrigé le 08/09, distinct du risque
+// de confusion signalé par l'enseignant -- cf. #modeSaisieLeconExploitationPartagee
+// pour le second volet du correctif : rendre ce partage visible dans l'UI).
+function activitePourCatalogue(activite) {
+  return activite === 'Exploitation de texte' ? 'Lecture méthodique' : activite;
+}
+
 async function verifierCatalogueOfficiel() {
   mettreAJourVisibiliteActivite();
   const activite = calculerActiviteEffective();
@@ -771,7 +789,7 @@ async function verifierCatalogueOfficiel() {
   modeSaisieLeconChoisi = null;
   if (activite && classe) {
     try {
-      const res = await fetch(`/api/lecons-officielles/liste?discipline=${encodeURIComponent('Français')}&classe=${encodeURIComponent(classe)}&activite=${encodeURIComponent(activite)}`);
+      const res = await fetch(`/api/lecons-officielles/liste?discipline=${encodeURIComponent('Français')}&classe=${encodeURIComponent(classe)}&activite=${encodeURIComponent(activitePourCatalogue(activite))}`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length) {
@@ -812,6 +830,7 @@ function appliquerModeCatalogue() {
   document.getElementById('modeSaisieLeconCatalogue').checked = catalogueActif;
   document.getElementById('modeSaisieLeconLibre').checked = !catalogueActif;
   document.getElementById('modeSaisieLeconIndisponible').style.display = catalogueDisponible ? 'none' : 'block';
+  document.getElementById('modeSaisieLeconExploitationPartagee').style.display = (catalogueDisponible && activite === 'Exploitation de texte') ? 'block' : 'none';
 
   document.getElementById('leconLibreBox').style.display = catalogueActif ? 'none' : 'block';
   document.getElementById('seanceGroup').style.display = catalogueActif ? 'none' : 'block';
