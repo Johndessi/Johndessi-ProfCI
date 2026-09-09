@@ -3765,6 +3765,43 @@ function forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, lignesHTML) {
   return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
 }
 
+// Filet déterministe complémentaire (09/09) : même après le filet ci-dessus
+// (qui protège le tableau développement lui-même), constaté en test réel
+// que le modèle peut ajouter, EN PLUS de la fiche correcte, un bloc entier
+// de Lecture méthodique non sollicité ailleurs dans le document -- un
+// paragraphe "Hypothèse générale de lecture : ..." flottant (hors tableau),
+// et/ou un tableau supplémentaire complet "Entrée | Indices relevés |
+// Analyse | Interprétation" avec des en-têtes "Axe 1"/"Axe 2"/"Axe 3" --
+// jamais à la place du contenu attendu (déjà protégé), mais EN PLUS de
+// celui-ci. Supprime tout table contenant un en-tête "Axe N" (sauf le
+// tableau développement lui-même, repéré par ses lignes data-expl-auto) et
+// tout paragraphe commençant par "Hypothèse générale".
+function supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+
+  $('table').each((_, table) => {
+    const $table = $(table);
+    if ($table.find('tr[data-expl-auto="1"]').length > 0) return;
+    if (/Axe\s*\d/i.test($table.text().slice(0, 300))) {
+      $table.remove();
+      modifie = true;
+    }
+  });
+
+  $('p').each((_, p) => {
+    if (/^Hypoth[eè]se g[eé]n[eé]rale/i.test($(p).text().trim())) {
+      $(p).remove();
+      modifie = true;
+    }
+  });
+
+  if (!modifie) return contenuHTML;
+  const $racine = $('.fiche-cours').first();
+  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+}
+
 // --- Mode "plan fourni par l'enseignant" pour Exploitation de texte ---
 //
 // Même principe que construireInstructionsLectureMethodiqueAvecPlanEnseignant
@@ -5894,6 +5931,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{DEROULEMENT_EXPLOITATION_AUTO}}', exploitationAutoResultat.lignesHTML);
         contenuHTML = supprimerLignesExploitationAutoDupliquees(contenuHTML);
         contenuHTML = forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, exploitationAutoResultat.lignesHTML);
+        contenuHTML = supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML);
       }
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
