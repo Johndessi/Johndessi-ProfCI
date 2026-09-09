@@ -3668,7 +3668,7 @@ function construireInstructionsExploitationDeTexte({ sectionIIIIncluse }) {
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE (cette fiche porte sur le MÊME texte support qu'une séance de Lecture méthodique de la même leçon, mais avec un objectif différent : vocabulaire et grammaire, PAS d'analyse par axes, PAS de production écrite notée. Les instructions ci-dessous REMPLACENT intégralement, pour CETTE fiche uniquement, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION décrits plus haut. L'entête garde son format standard.) :
 
-INTERDICTION EXPLICITE, PARTOUT dans le document (y compris la Situation d'apprentissage et n'importe quelle autre partie de la fiche, pas seulement le tableau développement) : n'utilise JAMAIS, pour cette fiche, le vocabulaire ni la structure de la Lecture méthodique -- pas de "Hypothèse générale", pas de "Axe 1"/"Axe 2"/"Axe 3", pas de tableau d'entrées Indices/Analyse/Interprétation.
+INTERDICTION EXPLICITE, PARTOUT dans le document (y compris la Situation d'apprentissage et n'importe quelle autre partie de la fiche, pas seulement le tableau développement) : n'utilise JAMAIS, pour cette fiche, le vocabulaire ni la structure de la Lecture méthodique -- pas de "Hypothèse générale", pas de "Axe 1"/"Axe 2"/"Axe 3", pas de tableau d'entrées Indices/Analyse/Interprétation. PIÈGE FRÉQUENT si le texte support est un texte argumentatif : sa thèse et ses arguments NE sont PAS des axes de lecture -- n'écris JAMAIS "Axe 1 : la formulation de la thèse" ni "Axe 2 : les arguments" ni rien de similaire ; le seul découpage autorisé pour CETTE fiche est vocabulaire/grammaire(/technique d'expression), jamais une analyse de l'argumentation elle-même.
 
 ORDRE OBLIGATOIRE DES ÉLÉMENTS : Entête, PUIS Tableau Habiletés/Contenus, PUIS Situation d'apprentissage, PUIS Tableau Supports didactiques/Bibliographie, PUIS Texte support (marqueur {{TEXTE_SUPPORT}}, une seule fois, jamais {{TEXTE_SUPPORT_COPIE}}), PUIS Tableau 5 colonnes.
 
@@ -5529,7 +5529,7 @@ function limiterGenerationParIp(req, res, next) {
           // développement. Cette précision désamorce l'ambiguïté à la
           // source, immédiatement après l'instruction qui la crée.
           if (estExploitation) {
-            systemPrompt += ` (Cet intitulé officiel mentionne "Lecture méthodique" uniquement parce qu'Exploitation de texte réutilise la même séance du référentiel DPFC, portant sur le même texte support -- cela ne change RIEN à la nature de CETTE fiche : recopie l'intitulé tel quel dans le champ Séance de l'entête, mais le champ Activité de l'entête et tout le reste de la fiche restent ceux d'une Exploitation de texte, jamais d'une Lecture méthodique.)`;
+            systemPrompt += ` (Cet intitulé officiel mentionne "Lecture méthodique" uniquement parce qu'Exploitation de texte réutilise la même séance du référentiel DPFC, portant sur le même texte support -- cela ne change RIEN à la nature de CETTE fiche : recopie l'intitulé tel quel dans le champ Séance de l'entête, mais le champ Activité de l'entête et tout le reste de la fiche restent ceux d'une Exploitation de texte, jamais d'une Lecture méthodique. Piège fréquent si le texte support est un texte argumentatif : NE l'analyse PAS par "Axe 1 : la thèse" / "Axe 2 : les arguments" -- même une lettre, un portrait ou un texte argumentatif s'exploitent ICI exclusivement par vocabulaire et grammaire, jamais par axes de lecture, quel que soit le type de texte.)`;
           }
 
           if (optionChoisieTexte) {
