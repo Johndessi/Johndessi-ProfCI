@@ -3556,6 +3556,11 @@ TECHNIQUE D'EXPRESSION (optionnelle) : détermine D'ABORD si le texte contient r
 EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le sujet" ; eleves="travaillent seuls, à l'écrit" ; traces=quelques questions testant UNIQUEMENT ce qui vient d'être enseigné dans CETTE séance précise (vocabulaire et grammaire ci-dessus, et technique d'expression si présente) -- jamais un nouveau texte, jamais une consigne de rédaction.`;
 
   let resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: null };
+  // DIAGNOSTIC TEMPORAIRE (09/09) : blocTexte est déclaré ici (hors du try
+  // interne) uniquement pour rester lisible depuis le catch ci-dessous, le
+  // temps d'identifier la cause exacte des échecs JSON en production --
+  // à retirer une fois la cause corrigée à la source.
+  let blocTexte = '';
   try {
     const reponse = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -3563,7 +3568,7 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
       system,
       messages: [{ role: 'user', content: 'Génère le JSON demandé.' }]
     });
-    const blocTexte = reponse.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    blocTexte = reponse.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     // Retire un éventuel bloc de code markdown (```json ... ```) avant
     // extraction, au cas où le modèle en ajouterait un malgré la consigne.
     const blocTexteNettoye = blocTexte.replace(/```(?:json)?/gi, '');
@@ -3602,8 +3607,11 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
 
     resultat = { succes: true, texteSupportFinal, lignesHTML: lignes.join('\n'), sectionIIIIncluse, erreur: null };
   } catch (e) {
-    console.error('❌ genererDeroulementExploitationAuto:', e.message);
-    resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: e.message };
+    console.error('❌ genererDeroulementExploitationAuto:', e.message, '\n--- RAW blocTexte ---\n', blocTexte);
+    // DIAGNOSTIC TEMPORAIRE (09/09) : la sortie brute du modèle est incluse
+    // ci-dessous dans erreur, faute d'accès aux logs serveur en production --
+    // à retirer une fois la cause corrigée à la source (cf. commentaire plus haut).
+    resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: `${e.message} [[RAW:${blocTexte.slice(0, 3000)}]]` };
   }
   return resultat;
 }
