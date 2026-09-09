@@ -3577,8 +3577,13 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
     required: ['vocabulaire', 'grammaire', 'techniqueExpressionPresente', 'evaluation']
   };
 
-  let resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: null };
-  try {
+  // Une seule tentative -- appelée jusqu'à 2 fois (cf. boucle plus bas) car
+  // l'échec résiduel constaté (~1/8 en test réel, contre ~20-40% avant le
+  // passage à tool_use ci-dessus) est un aléa stochastique du modèle
+  // (champ rendu vide malgré le schéma), pas un bug déterministe -- un
+  // simple retry suffit à le résorber côté serveur, invisible pour
+  // l'enseignant, plutôt que de le laisser régénérer lui-même.
+  async function tenterUneFois() {
     const reponse = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
@@ -3592,7 +3597,7 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
       tool_choice: { type: 'tool', name: 'fournir_deroulement_exploitation' }
     });
     const toolUse = reponse.content.find((b) => b.type === 'tool_use');
-    if (!toolUse) throw new Error("le modèle n'a pas utilisé l'outil demandé");
+    if (!toolUse) throw new Error(`le modèle n'a pas utilisé l'outil demandé (stop_reason: ${reponse.stop_reason})`);
     const parsed = toolUse.input || {};
 
     // Filet défensif : si le modèle dévie malgré le schéma (ex. un champ
@@ -3603,13 +3608,13 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
       return (val || '').toString().trim();
     };
     const validerChamp = (obj, nom) => {
-      if (!obj) throw new Error(`champ "${nom}" manquant dans la réponse du modèle`);
+      if (!obj) throw new Error(`champ "${nom}" manquant dans la réponse du modèle (stop_reason: ${reponse.stop_reason})`);
       obj.strategie = versTexte(obj.strategie);
       obj.enseignant = versTexte(obj.enseignant);
       obj.eleves = versTexte(obj.eleves);
       obj.traces = versTexte(obj.traces);
       if (!obj.strategie || !obj.enseignant || !obj.eleves || !obj.traces) {
-        throw new Error(`champ "${nom}" incomplet dans la réponse du modèle`);
+        throw new Error(`champ "${nom}" incomplet dans la réponse du modèle (stop_reason: ${reponse.stop_reason})`);
       }
     };
     validerChamp(parsed.vocabulaire, 'vocabulaire');
@@ -3636,10 +3641,20 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
     if (sectionIIIIncluse) lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.III, parsed.techniqueExpression));
     lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.EVAL, parsed.evaluation));
 
-    resultat = { succes: true, texteSupportFinal, lignesHTML: lignes.join('\n'), sectionIIIIncluse, erreur: null };
-  } catch (e) {
-    console.error('❌ genererDeroulementExploitationAuto:', e.message);
-    resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: e.message };
+    return { succes: true, texteSupportFinal, lignesHTML: lignes.join('\n'), sectionIIIIncluse, erreur: null };
+  }
+
+  let resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: null };
+  const NB_TENTATIVES_MAX = 2;
+  for (let tentative = 1; tentative <= NB_TENTATIVES_MAX; tentative++) {
+    try {
+      resultat = await tenterUneFois();
+      break;
+    } catch (e) {
+      const prefixe = tentative < NB_TENTATIVES_MAX ? '⚠️ (nouvelle tentative)' : '❌';
+      console.error(`${prefixe} genererDeroulementExploitationAuto (tentative ${tentative}/${NB_TENTATIVES_MAX}):`, e.message);
+      resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: e.message };
+    }
   }
   return resultat;
 }
