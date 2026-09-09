@@ -3767,15 +3767,17 @@ function forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, lignesHTML) {
 
 // Filet déterministe complémentaire (09/09) : même après le filet ci-dessus
 // (qui protège le tableau développement lui-même), constaté en test réel
-// que le modèle peut ajouter, EN PLUS de la fiche correcte, un bloc entier
-// de Lecture méthodique non sollicité ailleurs dans le document -- un
-// paragraphe "Hypothèse générale de lecture : ..." flottant (hors tableau),
-// et/ou un tableau supplémentaire complet "Entrée | Indices relevés |
-// Analyse | Interprétation" avec des en-têtes "Axe 1"/"Axe 2"/"Axe 3" --
-// jamais à la place du contenu attendu (déjà protégé), mais EN PLUS de
-// celui-ci. Supprime tout table contenant un en-tête "Axe N" (sauf le
-// tableau développement lui-même, repéré par ses lignes data-expl-auto) et
-// tout paragraphe commençant par "Hypothèse générale".
+// que le modèle peut ajouter, EN PLUS de la fiche correcte, du contenu de
+// Lecture méthodique non sollicité ailleurs dans le document, sous 3 formes
+// observées séparément : un paragraphe "Hypothèse générale de lecture : ..."
+// flottant (hors tableau) ; un tableau supplémentaire complet "Entrée |
+// Indices relevés | Analyse | Interprétation" avec des en-têtes "Axe 1"/
+// "Axe 2"/"Axe 3" ; ou -- constaté le 09/09 sur une 5e, cas le plus
+// sournois -- une phrase "Hypothèse générale : ..." collée EN PLUS à la
+// fin de la cellule "traces" de la ligne PRÉSENTATION elle-même (ligne
+// volontairement conservée telle quelle par forcerDeveloppementExploitationAutoSiAbsent
+// ci-dessus, donc jamais nettoyée par lui). Jamais à la place du contenu
+// attendu (déjà protégé), toujours EN PLUS de celui-ci.
 function supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML) {
   if (!contenuHTML) return contenuHTML;
   const $ = cheerio.load(contenuHTML);
@@ -3795,6 +3797,22 @@ function supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML) {
       $(p).remove();
       modifie = true;
     }
+  });
+
+  // Troncature en ligne (dans une cellule autrement légitime, ex. la
+  // cellule "traces" de PRÉSENTATION) : jamais un remplacement -- juste la
+  // suppression du fragment "Hypothèse générale : ..." / "Axe N : ..." et
+  // de tout ce qui suit dans CETTE cellule, en conservant le contenu
+  // légitime qui précède.
+  $('td').each((_, td) => {
+    const $td = $(td);
+    const html = $td.html();
+    if (!html) return;
+    const m = html.match(/(<strong>\s*)?Hypoth[eè]se g[eé]n[eé]rale|Axe\s*\d\s*[:\-–—]/i);
+    if (!m || m.index === undefined) return;
+    const tronque = html.slice(0, m.index).replace(/(<br\s*\/?>\s*)+$/i, '').trim();
+    $td.html(tronque);
+    modifie = true;
   });
 
   if (!modifie) return contenuHTML;
