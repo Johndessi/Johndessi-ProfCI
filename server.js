@@ -3672,7 +3672,7 @@ INTERDICTION EXPLICITE, PARTOUT dans le document (y compris la Situation d'appre
 
 ORDRE OBLIGATOIRE DES ÉLÉMENTS : Entête, PUIS Tableau Habiletés/Contenus, PUIS Situation d'apprentissage, PUIS Tableau Supports didactiques/Bibliographie, PUIS Texte support (marqueur {{TEXTE_SUPPORT}}, une seule fois, jamais {{TEXTE_SUPPORT_COPIE}}), PUIS Tableau 5 colonnes.
 
-TABLEAU HABILETÉS ET CONTENUS : verbes taxonomiques centrés sur le vocabulaire et la grammaire${sectionIIIIncluse ? ", plus la technique d'expression (ex. Identifier, Relever, Expliquer, Utiliser)" : " (ex. Identifier, Relever, Expliquer -- la technique d'expression n'est pas pertinente pour ce texte, ne l'inclus pas)"} -- jamais "Produire un texte", qui n'a pas sa place ici.
+TABLEAU HABILETÉS ET CONTENUS : verbes taxonomiques centrés sur le vocabulaire et la grammaire${sectionIIIIncluse ? ", plus la technique d'expression (ex. Identifier, Relever, Expliquer, Utiliser)" : " (ex. Identifier, Relever, Expliquer -- la technique d'expression n'est pas pertinente pour ce texte, ne l'inclus pas)"} -- jamais "Produire un texte", qui n'a pas sa place ici. La colonne Contenus reste elle aussi centrée sur le vocabulaire et la grammaire : jamais "Hypothèse générale", jamais "Axe 1"/"Axe 2"/"I-"/"II-" numérotant une analyse du texte (thèse, arguments, structure...), même sous une autre formulation -- ce n'est le rôle d'aucune partie de cette fiche.
 
 DÉVELOPPEMENT — le contenu du tableau DÉROULEMENT (lignes I. VOCABULAIRE, II. GRAMMAIRE${sectionIIIIncluse ? ", III. TECHNIQUE D'EXPRESSION" : ''}, ÉVALUATION) est ENTIÈREMENT DÉJÀ RÉDIGÉ et sera injecté automatiquement par le serveur -- tu n'écris JAMAIS toi-même une seule ligne de ce tableau, ni son contenu, ni ses intitulés. Ta SEULE tâche pour ce tableau : écrire la ligne PRÉSENTATION rituelle du début de séance (identique à toutes les autres fiches, celle-ci reste à ta charge comme d'habitude), puis, juste après son </tr>, place EXACTEMENT le marqueur {{DEROULEMENT_EXPLOITATION_AUTO}} comme SEUL contenu à cet endroit (pas de <tr>/<td> autour, rien d'autre). N'écris RIEN sur le vocabulaire, la grammaire, une hypothèse de lecture ou des axes -- ce n'est pas ton rôle pour cette fiche.`;
 }
@@ -3720,6 +3720,46 @@ function supprimerLignesExploitationAutoDupliquees(contenuHTML) {
       if ($tr !== aGarder) $tr.remove();
     }
   }
+
+  const $racine = $('.fiche-cours').first();
+  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+}
+
+// Filet déterministe final (09/09) : constaté en test réel que le modèle
+// principal peut ignorer le marqueur {{DEROULEMENT_EXPLOITATION_AUTO}} et
+// écrire lui-même sa propre analyse du texte -- y compris en contournant
+// l'interdiction explicite des mots "Axe"/"Hypothèse générale" en la
+// reformulant sous une autre forme (ex. numérotation "I- La structure du
+// texte / II- Les arguments..." observée sur un texte argumentatif, 3e,
+// 09/09). Interdire des formulations une à une est un jeu perdu d'avance --
+// dans ce cas, AUCUNE ligne data-expl-auto="1" n'existe dans le document
+// (supprimerLignesExploitationAutoDupliquees n'a donc rien à faire) : on
+// repère alors la ligne PRÉSENTATION (toujours rédigée par le modèle, jamais
+// générée côté serveur) dans le tableau à 5 colonnes, on supprime toutes les
+// AUTRES lignes à 5 colonnes de ce même tableau -- quel que soit leur
+// contenu ou leur formulation -- et on insère à la place le contenu déjà
+// construit côté serveur. Jamais un simple avertissement quand on peut
+// corriger déterministiquement.
+function forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, lignesHTML) {
+  if (!contenuHTML || !contenuHTML.includes('<tr') || !lignesHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  if ($('tr[data-expl-auto="1"]').length > 0) return contenuHTML;
+
+  let presentationEl = null;
+  $('tr').each((_, tr) => {
+    if (presentationEl) return;
+    const $tds = $(tr).find('> td');
+    if ($tds.length !== 5) return;
+    if (/PR[ÉE]SENTATION/i.test($tds.first().text())) presentationEl = tr;
+  });
+  if (!presentationEl) return contenuHTML;
+
+  const $table = $(presentationEl).closest('table');
+  $table.find('tr').each((_, tr) => {
+    if (tr === presentationEl) return;
+    if ($(tr).find('> td').length === 5) $(tr).remove();
+  });
+  $(presentationEl).after(lignesHTML);
 
   const $racine = $('.fiche-cours').first();
   return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
@@ -5853,6 +5893,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       if (modeAutoExploitationDeterministe && exploitationAutoResultat) {
         contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{DEROULEMENT_EXPLOITATION_AUTO}}', exploitationAutoResultat.lignesHTML);
         contenuHTML = supprimerLignesExploitationAutoDupliquees(contenuHTML);
+        contenuHTML = forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, exploitationAutoResultat.lignesHTML);
       }
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
