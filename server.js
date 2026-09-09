@@ -3537,15 +3537,7 @@ async function genererDeroulementExploitationAuto({ texteSupport, lecon, classe 
 
 ${consigneTexte}
 
-Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ni après, sans bloc de code ni \`\`\`. RÈGLE CRITIQUE POUR UN JSON VALIDE : à l'intérieur de chaque valeur texte, si tu cites un mot ou une expression du texte, utilise TOUJOURS des guillemets français « » -- JAMAIS le caractère guillemet droit ("), qui casserait le JSON. Format EXACT :
-{"texteSupport": ${texteFourni ? 'null' : '"le texte que tu as inventé"'},
- "vocabulaire": {"strategie": "...", "enseignant": "...", "eleves": "...", "traces": "..."},
- "grammaire": {"strategie": "...", "enseignant": "...", "eleves": "...", "traces": "..."},
- "techniqueExpressionPresente": true|false,
- "techniqueExpression": {"strategie": "...", "enseignant": "...", "eleves": "...", "traces": "..."} (ou null si techniqueExpressionPresente est false),
- "evaluation": {"strategie": "...", "enseignant": "...", "eleves": "...", "traces": "..."}}
-
-Pour chaque section, "strategie" = résumé très court de la démarche ; "enseignant" = questions/consignes posées par l'enseignant ; "eleves" = réponses attendues, alignées 1 pour 1 avec les questions ; "traces" = ce qui reste écrit au tableau (contenu réel, jamais un jeton).
+Utilise l'outil fourni pour transmettre ce contenu. Pour chaque section (vocabulaire, grammaire, techniqueExpression, evaluation) : "strategie" = résumé très court de la démarche ; "enseignant" = questions/consignes posées par l'enseignant ; "eleves" = réponses attendues, alignées 1 pour 1 avec les questions ; "traces" = ce qui reste écrit au tableau (contenu réel, jamais un jeton). IMPORTANT : chaque champ (strategie, enseignant, eleves, traces) est TOUJOURS une seule chaîne de caractères -- si tu as plusieurs questions/réponses pour une même section, sépare-les par des retours à la ligne À L'INTÉRIEUR de cette même chaîne, jamais sous forme de liste séparée.
 
 VOCABULAIRE : pas seulement des mots isolés -- selon ce que CE texte permet réellement (jamais forcé, jamais inventé), choisis parmi sens en contexte, sens propre/figuré d'un mot (SANS nommer de figure de style -- réservé à techniqueExpression), dérivation/famille de mots, synonymes/antonymes, niveau de langue ; explique chaque point EN CONTEXTE et fais employer le mot dans une phrase nouvelle ; plusieurs points si le texte le permet, jamais réduit à un seul par principe. JAMAIS les mots comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style ici.
 
@@ -3555,30 +3547,69 @@ TECHNIQUE D'EXPRESSION (optionnelle) : détermine D'ABORD si le texte contient r
 
 EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le sujet" ; eleves="travaillent seuls, à l'écrit" ; traces=quelques questions testant UNIQUEMENT ce qui vient d'être enseigné dans CETTE séance précise (vocabulaire et grammaire ci-dessus, et technique d'expression si présente) -- jamais un nouveau texte, jamais une consigne de rédaction.`;
 
+  // Schéma d'un bloc strategie/enseignant/eleves/traces -- réutilisé pour
+  // vocabulaire/grammaire/techniqueExpression/evaluation. Type strict
+  // "string" (jamais "array") : avec tool_use, le modèle respecte ce type
+  // par construction (sortie structurée, pas de JSON à taper à la main) --
+  // cf. versTexte ci-dessous pour un filet défensif si jamais il déviait.
+  const champSchema = {
+    type: 'object',
+    properties: {
+      strategie: { type: 'string', description: 'Résumé très court de la démarche.' },
+      enseignant: { type: 'string', description: "Questions/consignes posées par l'enseignant, une seule chaîne (retours à la ligne si plusieurs)." },
+      eleves: { type: 'string', description: "Réponses attendues, alignées 1 pour 1 avec les questions, une seule chaîne (retours à la ligne si plusieurs)." },
+      traces: { type: 'string', description: 'Ce qui reste écrit au tableau (contenu réel, jamais un jeton).' }
+    },
+    required: ['strategie', 'enseignant', 'eleves', 'traces']
+  };
+  const inputSchema = {
+    type: 'object',
+    properties: {
+      texteSupport: texteFourni
+        ? { type: ['string', 'null'], description: 'Toujours null ici : le texte support est déjà fourni par l\'enseignant.' }
+        : { type: 'string', description: 'Le texte court inventé (3 à 6 phrases), jamais vide.' },
+      vocabulaire: champSchema,
+      grammaire: champSchema,
+      techniqueExpressionPresente: { type: 'boolean' },
+      techniqueExpression: { ...champSchema, type: ['object', 'null'] },
+      evaluation: champSchema
+    },
+    required: ['vocabulaire', 'grammaire', 'techniqueExpressionPresente', 'evaluation']
+  };
+
   let resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: null };
-  // DIAGNOSTIC TEMPORAIRE (09/09) : blocTexte est déclaré ici (hors du try
-  // interne) uniquement pour rester lisible depuis le catch ci-dessous, le
-  // temps d'identifier la cause exacte des échecs JSON en production --
-  // à retirer une fois la cause corrigée à la source.
-  let blocTexte = '';
   try {
     const reponse = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
+      max_tokens: 4096,
       system,
-      messages: [{ role: 'user', content: 'Génère le JSON demandé.' }]
+      messages: [{ role: 'user', content: 'Génère le contenu demandé.' }],
+      tools: [{
+        name: 'fournir_deroulement_exploitation',
+        description: "Fournit le contenu structuré (vocabulaire, grammaire, technique d'expression optionnelle, évaluation) d'une séance d'Exploitation de texte.",
+        input_schema: inputSchema
+      }],
+      tool_choice: { type: 'tool', name: 'fournir_deroulement_exploitation' }
     });
-    blocTexte = reponse.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-    // Retire un éventuel bloc de code markdown (```json ... ```) avant
-    // extraction, au cas où le modèle en ajouterait un malgré la consigne.
-    const blocTexteNettoye = blocTexte.replace(/```(?:json)?/gi, '');
-    const correspondance = blocTexteNettoye.match(/\{[\s\S]*\}/);
-    if (!correspondance) throw new Error('JSON introuvable dans la réponse du modèle');
-    const parsed = JSON.parse(correspondance[0]);
+    const toolUse = reponse.content.find((b) => b.type === 'tool_use');
+    if (!toolUse) throw new Error("le modèle n'a pas utilisé l'outil demandé");
+    const parsed = toolUse.input || {};
 
+    // Filet défensif : si le modèle dévie malgré le schéma (ex. un champ
+    // rendu sous forme de liste plutôt que de chaîne), on normalise au lieu
+    // de rejeter -- jamais de perte de contenu pour un simple écart de forme.
+    const versTexte = (val) => {
+      if (Array.isArray(val)) return val.map((v) => (v || '').toString().trim()).filter(Boolean).join('\n');
+      return (val || '').toString().trim();
+    };
     const validerChamp = (obj, nom) => {
-      if (!obj || typeof obj.strategie !== 'string' || typeof obj.enseignant !== 'string' || typeof obj.eleves !== 'string' || typeof obj.traces !== 'string') {
-        throw new Error(`champ "${nom}" manquant ou incomplet dans la réponse du modèle`);
+      if (!obj) throw new Error(`champ "${nom}" manquant dans la réponse du modèle`);
+      obj.strategie = versTexte(obj.strategie);
+      obj.enseignant = versTexte(obj.enseignant);
+      obj.eleves = versTexte(obj.eleves);
+      obj.traces = versTexte(obj.traces);
+      if (!obj.strategie || !obj.enseignant || !obj.eleves || !obj.traces) {
+        throw new Error(`champ "${nom}" incomplet dans la réponse du modèle`);
       }
     };
     validerChamp(parsed.vocabulaire, 'vocabulaire');
@@ -3607,11 +3638,8 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
 
     resultat = { succes: true, texteSupportFinal, lignesHTML: lignes.join('\n'), sectionIIIIncluse, erreur: null };
   } catch (e) {
-    console.error('❌ genererDeroulementExploitationAuto:', e.message, '\n--- RAW blocTexte ---\n', blocTexte);
-    // DIAGNOSTIC TEMPORAIRE (09/09) : la sortie brute du modèle est incluse
-    // ci-dessous dans erreur, faute d'accès aux logs serveur en production --
-    // à retirer une fois la cause corrigée à la source (cf. commentaire plus haut).
-    resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: `${e.message} [[RAW:${blocTexte.slice(0, 3000)}]]` };
+    console.error('❌ genererDeroulementExploitationAuto:', e.message);
+    resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: e.message };
   }
   return resultat;
 }
