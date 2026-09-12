@@ -6310,6 +6310,46 @@ app.get('/api/fiche/:id', async (req, res) => {
   }
 });
 
+// Recherche admin (10/09) : retrouver des fiches réelles précises en base
+// pour correction manuelle d'un résidu de génération constaté par
+// l'enseignant -- filtre par sous-chaîne insensible à la casse sur
+// discipline/classe/lecon, jamais un remplacement de /api/fiches/:enseignantId
+// (qui reste la liste normale d'un enseignant). contenu exclu par défaut
+// (peut être volumineux sur 100 résultats) -- ajouter avecContenu=1 pour
+// l'inclure une fois la fiche précise identifiée.
+app.get('/api/admin/fiches/recherche', verifierCleAdmin, async (req, res) => {
+  try {
+    const { discipline, classe, lecon, avecContenu } = req.query;
+    const filtre = {};
+    if (discipline) filtre.discipline = new RegExp(discipline, 'i');
+    if (classe) filtre.classe = new RegExp(classe, 'i');
+    if (lecon) filtre.lecon = new RegExp(lecon, 'i');
+    const projection = avecContenu === '1' ? {} : { contenu: 0 };
+    const fiches = await Fiche.find(filtre, projection).sort({ createdAt: -1 }).limit(100);
+    res.json(fiches);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Correction admin (10/09) : mise à jour ciblée du contenu d'une fiche
+// existante en base -- utilisé pour corriger un résidu de génération
+// constaté sur une fiche réelle déjà produite (jamais pour créer une
+// nouvelle fiche, ni pour changer autre chose que le contenu HTML).
+app.put('/api/admin/fiche/:id', verifierCleAdmin, async (req, res) => {
+  try {
+    const { contenu } = req.body || {};
+    if (!contenu || typeof contenu !== 'string') {
+      return res.status(400).json({ error: 'contenu (string) requis' });
+    }
+    const fiche = await Fiche.findByIdAndUpdate(req.params.id, { contenu }, { new: true });
+    if (!fiche) return res.status(404).json({ error: 'Fiche introuvable' });
+    res.json({ success: true, fiche });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/fiche/:id/pdf', async (req, res) => {
   try {
     const fiche = await Fiche.findById(req.params.id);
