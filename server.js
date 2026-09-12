@@ -606,7 +606,18 @@ const LeconOfficielleDPFCSchema = new mongoose.Schema({
     // cette séance par catalogue SANS fournir son propre texte -- ne prend
     // jamais le pas sur un texte fourni par l'enseignant (cf. route
     // /api/generer-fiche).
-    texteSupportOfficiel : String
+    texteSupportOfficiel : String,
+    // Vocabulaire de référence vérifié (12/09, ex. Orthographe lexicale 4e
+    // "consonnes doublées"/"consonnes finales muettes") -- optionnel : absent
+    // pour la grande majorité des séances. Utilisé pour les séances où le
+    // contenu attendu est une liste de mots illustrant un point d'orthographe
+    // lexicale (constaté : laissé libre, le modèle invente des mots, des
+    // anglicismes ou des orthographes fausses pour remplir ces listes -- cf.
+    // signalement du 12/09 sur "Les consonnes doublées" 4e). Objet
+    // { catégorie: [mots vérifiés] }, injecté tel quel dans le prompt comme
+    // vocabulaire exclusif -- jamais un remplacement du contenu grammatical
+    // du reste de la fiche, uniquement un cadrage des exemples lexicaux.
+    vocabulaireReference : mongoose.Schema.Types.Mixed
   }],
   createdAt   : { type: Date, default: Date.now }
 });
@@ -4263,6 +4274,7 @@ STRUCTURE OBLIGATOIRE EN HTML :
 
 ADAPTATIONS PAR DISCIPLINE :
 - GRAMMAIRE : ajoute un corpus de phrases numérotées P1 P2 P3... avant le tableau habiletés
+- ORTHOGRAPHE (notamment Orthographe lexicale) : quand la séance porte sur un point nécessitant une liste de mots-exemples (consonnes muettes/doublées, homophones, paronymes...), chaque mot cité doit être un mot français réel, correctement orthographié, et illustrant effectivement le point traité -- jamais un mot inventé pour compléter une liste
 - LECTURE MÉTHODIQUE : inclus présentation du texte, hypothèse générale, axes de lecture avec tableaux de vérification (Entrée | Relevés | Analyse | Interprétation)
 - EXPRESSION ÉCRITE : inclus le texte support, questions de compréhension, vocabulaire, résumé
 - EXPLOITATION DE TEXTE : ce tableau DÉVELOPPEMENT générique NE S'APPLIQUE PAS à cette activité -- la structure exacte (I. Vocabulaire / II. Grammaire / III. Technique d'expression optionnelle, PUIS Évaluation) est intégralement définie plus bas dans ce message (section "STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE"), suis-la à la lettre plutôt que ce modèle générique. JAMAIS d'axes de lecture (réservés à la Lecture méthodique), JAMAIS de production écrite notée (réservée à l'Expression écrite).
@@ -4280,7 +4292,8 @@ ${reglesVerbesTaxonomiques}- Si le champ Séance n° est supérieur à 1 pour la
 - Toujours 3 phases = 3 lignes du tableau : Présentation / Développement / Évaluation. La ligne Développement est UNIQUE (jamais une ligne par point) : les paragraphes de questions/réponses sont alignés à la même position dans les colonnes Activités de l'enseignant / Activités des élèves (tirets simples "- ", SANS numérotation), la numérotation I-1, I-2, II-1... restant réservée aux colonnes Plan du cours et Traces écrites
 - La colonne Traces écrites de la ligne PRÉSENTATION (rituelle, début de séance) contient UNIQUEMENT le titre de la Leçon et de la Séance (même contenu que les champs Leçon/Séance de l'entête) -- jamais la Situation d'apprentissage ni aucun autre contenu déjà présent ailleurs dans la fiche, qui ne doit jamais y être recopié.
 - Tout le contenu de la fiche (corpus, dialogues, exemples, exercices, corrections) est rédigé EXCLUSIVEMENT en français -- n'insère jamais un mot ou une expression d'une autre langue (anglais compris) au milieu d'une phrase française.
-- Cohérence interne obligatoire : toute règle énoncée dans une Trace écrite doit être appliquée de façon identique partout ailleurs dans la même fiche (corpus, dialogue enseignant/élèves, corrections d'exercices) -- ne jamais laisser un exemple du corpus ou une réponse du dialogue contredire la règle donnée par cette même fiche. Avant de finaliser, vérifie que chaque exemple concret cité (phrase du corpus, réponse d'élève, correction) respecte bien la règle qu'il est censé illustrer, y compris son orthographe/accord.
+- Cohérence interne obligatoire : toute règle énoncée dans une Trace écrite doit être appliquée de façon identique partout ailleurs dans la même fiche (corpus, dialogue enseignant/élèves, corrections d'exercices) -- ne jamais laisser un exemple du corpus ou une réponse du dialogue contredire la règle donnée par cette même fiche. Avant de finaliser, vérifie que chaque exemple concret cité (phrase du corpus, réponse d'élève, correction) respecte bien la règle qu'il est censé illustrer, y compris son orthographe/accord. Une observation/remarque qui commente une phrase précise ne doit citer entre guillemets QUE des mots présents mot pour mot dans cette phrase -- jamais une forme vue ailleurs dans la fiche (ex. dans un tableau de conjugaison) si elle n'apparaît pas réellement dans la phrase commentée.
+- Vocabulaire (listes de mots-exemples illustrant une notion d'orthographe ou de grammaire) : chaque mot cité doit être un mot français réel, correctement orthographié, et effectivement illustrer le point traité -- jamais un mot inventé, un anglicisme, ni une forme approximative justifiée par une mention comme "(variante)", "(ancien)", "(dialectal)" ou "(populaire)" : si un mot semble incertain, choisis-en un autre, certain, plutôt que de l'utiliser quand même.
 
 RÈGLES DE VÉRIFICATION GRAMMATICALE — à respecter strictement dans tout contenu généré :
 
@@ -4565,7 +4578,8 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
           optionsChoix: Array.isArray(s.optionsChoix) ? s.optionsChoix.map((o) => String(o).trim()).filter(Boolean) : [],
           choixLibre: !!s.choixLibre,
           choixLibreLabel: (s.choixLibreLabel || '').toString().trim(),
-          texteSupportOfficiel: (s.texteSupportOfficiel || '').toString().trim()
+          texteSupportOfficiel: (s.texteSupportOfficiel || '').toString().trim(),
+          vocabulaireReference: (s.vocabulaireReference && typeof s.vocabulaireReference === 'object') ? s.vocabulaireReference : undefined
         });
       }
       if (seancesInvalides) { ignores++; continue; }
@@ -5665,6 +5679,21 @@ function limiterGenerationParIp(req, res, next) {
             ? resoudreIntituleAvecOption(seanceDoc.intitule, seanceOptionsChoix, optionChoisieTexte)
             : seanceDoc.intitule;
           systemPrompt += `\n\nSÉANCE OFFICIELLE DPFC : Séance ${seanceDoc.numeroSeance} : ${intituleSeanceResolu}\n\nDans le champ Séance de l'entête (à droite du libellé "Séance :" déjà présent), écris EXACTEMENT "${seanceDoc.numeroSeance} : ${intituleSeanceResolu}" -- le numéro et l'intitulé SEULEMENT, SANS répéter le mot "Séance" qui est déjà dans le libellé, sans reformulation ni troncature.`;
+
+          // Vocabulaire de référence vérifié (12/09) : quand cette séance en
+          // porte un (cf. schéma), il remplace toute liberté du modèle pour
+          // les listes d'exemples lexicaux -- constaté en production : laissé
+          // libre, le modèle invente des mots, des anglicismes ou des
+          // orthographes fausses (ex. "riffifi", "teammate", "burreau" pour
+          // "les consonnes doublées" 4e).
+          if (seanceDoc.vocabulaireReference && typeof seanceDoc.vocabulaireReference === 'object') {
+            const categories = Object.entries(seanceDoc.vocabulaireReference)
+              .filter(([, mots]) => Array.isArray(mots) && mots.length);
+            if (categories.length) {
+              const listesFormatees = categories.map(([categorie, mots]) => `- ${categorie} : ${mots.join(', ')}`).join('\n');
+              systemPrompt += `\n\nVOCABULAIRE DE RÉFÉRENCE VÉRIFIÉ (obligatoire pour cette séance) : pour toute liste d'exemples illustrant cette notion, utilise EXCLUSIVEMENT les mots suivants, déjà vérifiés -- n'invente aucun autre mot, n'utilise aucun mot d'une langue étrangère, ne modifie jamais leur orthographe, et n'ajoute jamais de mention du type "(variante)", "(ancien)", "(dialectal)" ou "(populaire)" pour justifier un mot douteux (si un mot te semble incertain, ne l'utilise pas). Si tu as besoin de plus d'exemples que cette liste n'en contient pour un exercice, réutilise des mots de cette même liste plutôt que d'en inventer :\n${listesFormatees}`;
+            }
+          }
           // Corrige un cas de confusion réel (08/09) : pour Exploitation de
           // texte, cet intitulé officiel contient littéralement les mots
           // "Lecture méthodique" (catalogue partagé par design, cf.
