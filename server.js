@@ -3820,6 +3820,48 @@ function supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML) {
   return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
 }
 
+// Filet déterministe UNIVERSEL (12/09) : la cellule Traces écrites de la
+// ligne PRÉSENTATION rituelle (RÈGLES ABSOLUES de construirePromptSecondaire)
+// ne doit contenir QUE Date/Activité/Leçon/Séance -- jamais un contenu déjà
+// présent ailleurs dans la fiche. Une 1ère version de cette règle (texte
+// seul, sans filet) avait déjà été contournée une fois par la Situation
+// d'apprentissage (corrigé alors dans 2 fiches réelles), puis une 2e fois
+// par le Corpus de phrases (constaté le 12/09 sur 2 fiches réelles
+// d'Orthographe 5e) -- la même leçon que pour Exploitation de texte
+// s'applique : interdire des contenus un à un dans le texte du prompt ne
+// suffit jamais durablement contre un modèle qui recopie autre chose la
+// fois suivante. S'applique à TOUTE fiche (pas seulement Grammaire/
+// Orthographe) : le format de cette cellule est universel, jamais
+// spécifique à une activité -- le filet ne fait rien si la cellule est
+// déjà propre (repli sûr, jamais de perte de contenu légitime).
+function nettoyerCellulePresentationRituelle(contenuHTML) {
+  if (!contenuHTML || !contenuHTML.includes('<tr')) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+
+  $('tr').each((_, tr) => {
+    const $tds = $(tr).find('> td');
+    if ($tds.length !== 5) return;
+    if (!/^PR[ÉE]SENTATION/i.test($tds.first().text().trim())) return;
+
+    const $traces = $tds.last();
+    const html = $traces.html();
+    if (!html) return;
+    // Découpe sur les séparateurs "<br><br>" (double saut de ligne) --
+    // c'est ainsi que Date/Activité/Leçon/Séance sont toujours séparés.
+    const segments = html.split(/(?:<br\s*\/?>\s*){2,}/i);
+    const indexSeance = segments.findIndex((s) => /^\s*S[ée]ance\b/i.test(s));
+    if (indexSeance === -1 || indexSeance >= segments.length - 1) return;
+
+    $traces.html(segments.slice(0, indexSeance + 1).join('<br><br>\n        '));
+    modifie = true;
+  });
+
+  if (!modifie) return contenuHTML;
+  const $racine = $('.fiche-cours').first();
+  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+}
+
 // --- Mode "plan fourni par l'enseignant" pour Exploitation de texte ---
 //
 // Même principe que construireInstructionsLectureMethodiqueAvecPlanEnseignant
@@ -5854,6 +5896,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       clearInterval(heartbeat);
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
       contenuHTML = injecterActiviteEntete(contenuHTML, activiteAffichee);
+      contenuHTML = nettoyerCellulePresentationRituelle(contenuHTML);
       if (estOeuvreIntegrale) {
         contenuHTML = injecterChampEntete(contenuHTML, 'Compétence', COMPETENCE_OEUVRE_INTEGRALE);
         contenuHTML = injecterChampEntete(contenuHTML, 'Leçon', leconAfficheeOI);
