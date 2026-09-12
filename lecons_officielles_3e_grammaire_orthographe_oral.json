@@ -6,16 +6,56 @@
     "numeroLecon": 1,
     "titreLecon": "L'expression des circonstances dans la phrase simple et dans la phrase complexe",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "L'expression de la cause, de la conséquence et du but dans la phrase simple" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "L'expression de la cause dans la phrase complexe" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "L'expression de la conséquence dans la phrase complexe" },
-      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "L'expression du but dans la phrase complexe" },
-      { "numeroSeance": 5, "activite": "Grammaire", "intitule": "L'expression du temps et de la comparaison dans la phrase simple" },
-      { "numeroSeance": 6, "activite": "Grammaire", "intitule": "L'expression du temps dans la phrase complexe" },
-      { "numeroSeance": 7, "activite": "Grammaire", "intitule": "L'expression de la comparaison dans la phrase complexe" },
-      { "numeroSeance": 8, "activite": "Grammaire", "intitule": "L'expression de la condition et de l'opposition dans la phrase simple" },
-      { "numeroSeance": 9, "activite": "Grammaire", "intitule": "L'expression de la condition dans la phrase complexe" },
-      { "numeroSeance": 10, "activite": "Grammaire", "intitule": "L'expression de l'opposition dans la phrase complexe" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la cause, de la conséquence et du but dans la phrase simple"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la cause dans la phrase complexe"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la conséquence dans la phrase complexe"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "L'expression du but dans la phrase complexe"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "L'expression du temps et de la comparaison dans la phrase simple"
+      },
+      {
+        "numeroSeance": 6,
+        "activite": "Grammaire",
+        "intitule": "L'expression du temps dans la phrase complexe"
+      },
+      {
+        "numeroSeance": 7,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la comparaison dans la phrase complexe"
+      },
+      {
+        "numeroSeance": 8,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la condition et de l'opposition dans la phrase simple"
+      },
+      {
+        "numeroSeance": 9,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la condition dans la phrase complexe"
+      },
+      {
+        "numeroSeance": 10,
+        "activite": "Grammaire",
+        "intitule": "L'expression de l'opposition dans la phrase complexe"
+      }
     ]
   },
   {
@@ -25,7 +65,11 @@
     "numeroLecon": 2,
     "titreLecon": "La coordination",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "Les coordonnants" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les coordonnants"
+      }
     ]
   },
   {
@@ -35,7 +79,11 @@
     "numeroLecon": 3,
     "titreLecon": "Le groupe nominal : la pronominalisation",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "La pronominalisation" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "La pronominalisation"
+      }
     ]
   },
   {
@@ -45,10 +93,26 @@
     "numeroLecon": 4,
     "titreLecon": "Le verbe : l'infinitif et le participe",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "Le mode infinitif" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Les emplois de l'infinitif : verbe ou noyau d'une proposition" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Le participe passé" },
-      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "Le participe présent" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Le mode infinitif"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les emplois de l'infinitif : verbe ou noyau d'une proposition"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Le participe passé"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Le participe présent"
+      }
     ]
   },
   {
@@ -58,9 +122,16 @@
     "numeroLecon": 5,
     "titreLecon": "L'adverbe et le groupe adverbial",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "L'adverbe" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Le groupe adverbial" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Le comparatif et le superlatif de l'adverbe" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "L'adverbe et le groupe adverbial"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Le comparatif et le superlatif de l'adverbe"
+      }
     ]
   },
   {
@@ -70,10 +141,26 @@
     "numeroLecon": 6,
     "titreLecon": "La communication",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "La communication" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Les marques de l'oral et de l'écrit" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Les registres de langue" },
-      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "Les modalités du discours" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "La communication"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les marques de l'oral et de l'écrit"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Les registres de langue"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Les modalités du discours"
+      }
     ]
   },
   {
@@ -83,9 +170,21 @@
     "numeroLecon": 1,
     "titreLecon": "Orthographe lexicale",
     "seances": [
-      { "numeroSeance": 1, "activite": "Orthographe", "intitule": "La formation de l'adjectif verbal et du participe présent de certains verbes : « adhérent/adhérant, convaincant/convainquant... »" },
-      { "numeroSeance": 2, "activite": "Orthographe", "intitule": "Les homophones non homographes : « quoique/quoi que ; quelque/quel que... »" },
-      { "numeroSeance": 3, "activite": "Orthographe", "intitule": "Les paronymes : « éminent/imminent ; éruption/irruption... »" }
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "La formation de l'adjectif verbal et du participe présent de certains verbes : « adhérent/adhérant, convaincant/convainquant... »"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Orthographe",
+        "intitule": "Les homophones non homographes : « quoique/quoi que ; quelque/quel que... »"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Orthographe",
+        "intitule": "Les paronymes : « éminent/imminent ; éruption/irruption... »"
+      }
     ]
   },
   {
@@ -95,10 +194,26 @@
     "numeroLecon": 2,
     "titreLecon": "Orthographe grammaticale",
     "seances": [
-      { "numeroSeance": 1, "activite": "Orthographe", "intitule": "L'accord de « même, tout, tel »" },
-      { "numeroSeance": 2, "activite": "Orthographe", "intitule": "L'accord de l'adjectif qualificatif : cas du masculin dans une énumération" },
-      { "numeroSeance": 3, "activite": "Orthographe", "intitule": "L'accord des participes passés employés avec « avoir » et précédés de « en »" },
-      { "numeroSeance": 4, "activite": "Orthographe", "intitule": "Les différents cas d'accord des verbes pronominaux" }
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "L'accord de « même, tout, tel »"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Orthographe",
+        "intitule": "L'accord de l'adjectif qualificatif : cas du masculin dans une énumération"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Orthographe",
+        "intitule": "L'accord des participes passés employés avec « avoir » et précédés de « en »"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Orthographe",
+        "intitule": "Les différents cas d'accord des verbes pronominaux"
+      }
     ]
   },
   {
@@ -108,7 +223,11 @@
     "numeroLecon": 1,
     "titreLecon": "Le dialogue oral",
     "seances": [
-      { "numeroSeance": 1, "activite": "Expression orale", "intitule": "Le dialogue oral" }
+      {
+        "numeroSeance": 1,
+        "activite": "Expression orale",
+        "intitule": "Le dialogue oral. Thème : Environnement, Hygiène et Assainissement : salubrité de la cour de l'établissement et des salles de classe / comportement face aux ordures, aux déchets plastiques et aux eaux usées"
+      }
     ]
   },
   {
@@ -118,7 +237,11 @@
     "numeroLecon": 2,
     "titreLecon": "L'exposé oral",
     "seances": [
-      { "numeroSeance": 1, "activite": "Expression orale", "intitule": "La technique de l'exposé oral" }
+      {
+        "numeroSeance": 1,
+        "activite": "Expression orale",
+        "intitule": "La technique de l'exposé oral. Thème : Orientation et entrepreneuriat : des exemples d'entrepreneurs inspirants"
+      }
     ]
   },
   {
@@ -128,7 +251,11 @@
     "numeroLecon": 3,
     "titreLecon": "Le débat",
     "seances": [
-      { "numeroSeance": 1, "activite": "Expression orale", "intitule": "Participation à un débat / animation d'un débat" }
+      {
+        "numeroSeance": 1,
+        "activite": "Expression orale",
+        "intitule": "Participation à un débat / animation d'un débat. Thèmes : (1. Économie d'énergie et économie circulaire, lutte contre le gaspillage : électricité, eau, nourriture ; 2. Environnement et développement durable : l'agriculture et la préservation de l'environnement, dérèglement climatique et reforestation)"
+      }
     ]
   }
 ]
