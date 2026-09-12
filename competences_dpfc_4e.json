@@ -1,0 +1,32 @@
+[
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "numero": 1,
+    "libelle": "Traiter des situations relatives à la production d'énoncés oraux. (Expression orale)"
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "numero": 2,
+    "libelle": "Traiter des situations relatives à la construction du sens de textes divers. (Lecture)"
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "numero": 3,
+    "libelle": "Traiter des situations relatives à la rédaction des écrits divers. (Expression écrite)"
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "numero": 4,
+    "libelle": "Traiter des situations relatives à l'utilisation des outils grammaticaux divers. (Grammaire)"
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "numero": 5,
+    "libelle": "Traiter des situations relatives à l'orthographe correcte des mots. (Orthographe)"
+  }
+]
