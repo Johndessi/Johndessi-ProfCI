@@ -4230,6 +4230,9 @@ RÈGLES ABSOLUES :
 - Traces écrites = contenu réel complet du cours (définitions, règles, exemples concrets)
 ${reglesVerbesTaxonomiques}- Si le champ Séance n° est supérieur à 1 pour la même leçon, la PRÉSENTATION doit obligatoirement inclure un rappel explicite (question de l'enseignant + réponse attendue + trace écrite) du contenu vu à la ou les séance(s) précédente(s) de cette leçon, avant d'entamer le contenu nouveau.
 - Toujours 3 phases = 3 lignes du tableau : Présentation / Développement / Évaluation. La ligne Développement est UNIQUE (jamais une ligne par point) : les paragraphes de questions/réponses sont alignés à la même position dans les colonnes Activités de l'enseignant / Activités des élèves (tirets simples "- ", SANS numérotation), la numérotation I-1, I-2, II-1... restant réservée aux colonnes Plan du cours et Traces écrites
+- La colonne Traces écrites de la ligne PRÉSENTATION (rituelle, début de séance) contient UNIQUEMENT le titre de la Leçon et de la Séance (même contenu que les champs Leçon/Séance de l'entête) -- jamais la Situation d'apprentissage ni aucun autre contenu déjà présent ailleurs dans la fiche, qui ne doit jamais y être recopié.
+- Tout le contenu de la fiche (corpus, dialogues, exemples, exercices, corrections) est rédigé EXCLUSIVEMENT en français -- n'insère jamais un mot ou une expression d'une autre langue (anglais compris) au milieu d'une phrase française.
+- Cohérence interne obligatoire : toute règle énoncée dans une Trace écrite doit être appliquée de façon identique partout ailleurs dans la même fiche (corpus, dialogue enseignant/élèves, corrections d'exercices) -- ne jamais laisser un exemple du corpus ou une réponse du dialogue contredire la règle donnée par cette même fiche. Avant de finaliser, vérifie que chaque exemple concret cité (phrase du corpus, réponse d'élève, correction) respecte bien la règle qu'il est censé illustrer, y compris son orthographe/accord.
 
 RÈGLES DE VÉRIFICATION GRAMMATICALE — à respecter strictement dans tout contenu généré :
 
@@ -4251,7 +4254,9 @@ RÈGLES DE VÉRIFICATION GRAMMATICALE — à respecter strictement dans tout con
 
 9. Pronoms personnels toniques : moi, toi, lui, elle, soi, nous, vous, eux, elles. "Leur" est un pronom atone (complément d'objet indirect), jamais un pronom tonique.
 
-Avant de finaliser une fiche, relis silencieusement chaque exemple grammatical généré contre ces 9 règles et corrige toute violation avant de produire la réponse finale.`;
+10. Déterminants possessifs (ton/ta/tes, mon/ma/mes, son/sa/ses) : le choix entre la forme masculine et féminine dépend UNIQUEMENT du genre du nom qui suit (ex. "ta famille" car "famille" est féminin, jamais "ton famille"), jamais du genre de la personne qui parle ou dont on parle.
+
+Avant de finaliser une fiche, relis silencieusement chaque exemple grammatical généré contre ces 10 règles et corrige toute violation avant de produire la réponse finale.`;
 }
 
 const PROMPT_PRIMAIRE = `Tu es un expert en pédagogie ivoirienne pour l'enseignement primaire.
