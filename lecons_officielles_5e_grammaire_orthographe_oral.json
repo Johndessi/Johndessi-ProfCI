@@ -6,11 +6,31 @@
     "numeroLecon": 1,
     "titreLecon": "Le groupe nominal",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "Les expansions du nom : l'adjectif qualificatif" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Les expansions du nom : la subordonnée relative" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Les expansions du nom : le groupe prépositionnel" },
-      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "Le pluriel des noms simples et des noms composés (1)" },
-      { "numeroSeance": 5, "activite": "Grammaire", "intitule": "Le pluriel des noms simples et des noms composés (2) : les pluriels irréguliers" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les expansions du nom : l'adjectif qualificatif"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les expansions du nom : la subordonnée relative"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Les expansions du nom : le groupe prépositionnel"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Le pluriel des noms simples et des noms composés (1)"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "Le pluriel des noms simples et des noms composés (2) : les pluriels irréguliers"
+      }
     ]
   },
   {
@@ -20,10 +40,26 @@
     "numeroLecon": 2,
     "titreLecon": "Le groupe adjectif",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "La morphologie : genre et nombre" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Les degrés de comparaison de l'adjectif qualificatif" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Les 3 fonctions de l'adjectif qualificatif" },
-      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "L'expansion de l'adjectif qualificatif" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "La morphologie : genre et nombre"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les degrés de comparaison de l'adjectif qualificatif"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Les 3 fonctions de l'adjectif qualificatif"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "L'expansion de l'adjectif qualificatif"
+      }
     ]
   },
   {
@@ -33,10 +69,26 @@
     "numeroLecon": 3,
     "titreLecon": "La pronominalisation",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "Les pronoms personnels sujets" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Les pronoms personnels compléments" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Les pronoms « en » et « y »" },
-      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "Les pronoms « en » et « y » (suite)" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms personnels sujets"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms personnels compléments"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms « en » et « y »"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms « en » et « y » (suite)"
+      }
     ]
   },
   {
@@ -46,14 +98,46 @@
     "numeroLecon": 4,
     "titreLecon": "Le verbe : formes et emplois",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "La tournure pronominale" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "La tournure pronominale" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "La tournure impersonnelle" },
-      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "La morphologie du verbe : bases et marques temporelles (les verbes irréguliers du 1er et du 3ème groupe)" },
-      { "numeroSeance": 5, "activite": "Grammaire", "intitule": "Les verbes irréguliers du 1er groupe" },
-      { "numeroSeance": 6, "activite": "Grammaire", "intitule": "Les verbes du 3ème groupe (les plus fréquents) : devoir, pouvoir, savoir, faire, vouloir, lire, écrire, dire..." },
-      { "numeroSeance": 7, "activite": "Grammaire", "intitule": "Les temps simples et les temps composés : valeurs aspectuelles" },
-      { "numeroSeance": 8, "activite": "Grammaire", "intitule": "La transformation passive (révision et approfondissement)" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "La tournure pronominale"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "La tournure pronominale (1)"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "La tournure impersonnelle (2)"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "La morphologie du verbe : bases et marques temporelles (les verbes irréguliers du 1er et du 3ème groupe)"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "Les verbes irréguliers du 1er groupe"
+      },
+      {
+        "numeroSeance": 6,
+        "activite": "Grammaire",
+        "intitule": "Les verbes du 3ème groupe (les plus fréquents) : devoir, pouvoir, savoir, faire, vouloir, lire, écrire, dire..."
+      },
+      {
+        "numeroSeance": 7,
+        "activite": "Grammaire",
+        "intitule": "Les temps simples et les temps composés : valeurs aspectuelles"
+      },
+      {
+        "numeroSeance": 8,
+        "activite": "Grammaire",
+        "intitule": "La transformation passive (révision et approfondissement)"
+      }
     ]
   },
   {
@@ -63,9 +147,21 @@
     "numeroLecon": 5,
     "titreLecon": "De la phrase simple à la phrase complexe",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "L'expansion du nom : la proposition subordonnée relative (« qui » et « que » exclusivement)" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "L'expansion du verbe : la proposition subordonnée complétive" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "L'expansion de la phrase : la proposition subordonnée circonstancielle" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "L'expansion du nom : la proposition subordonnée relative (« qui » et « que » exclusivement)"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "L'expansion du verbe : la proposition subordonnée complétive"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "L'expansion de la phrase : la proposition subordonnée circonstancielle"
+      }
     ]
   },
   {
@@ -75,7 +171,11 @@
     "numeroLecon": 1,
     "titreLecon": "Orthographe lexicale",
     "seances": [
-      { "numeroSeance": 1, "activite": "Orthographe", "intitule": "Formation des mots par dérivation" }
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "Formation des mots par dérivation"
+      }
     ]
   },
   {
@@ -85,11 +185,26 @@
     "numeroLecon": 2,
     "titreLecon": "Orthographe grammaticale",
     "seances": [
-      { "numeroSeance": 1, "activite": "Orthographe", "intitule": "Distinction entre \"on\" et \"ont\"" },
-      { "numeroSeance": 2, "activite": "Orthographe", "intitule": "Distinction entre adjectif verbal et participe présent" },
-      { "numeroSeance": 3, "activite": "Orthographe", "intitule": "Accord de l'adjectif de couleur simple ou composé" },
-      { "numeroSeance": 4, "activite": "Orthographe", "intitule": "Orthographe des adjectifs et des adverbes : nu, mi, demi, semi" },
-      { "numeroSeance": 5, "activite": "Orthographe", "intitule": "Formation des adverbes à partir des adjectifs correspondants" }
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "Distinction entre \"on\" et \"ont\""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Orthographe",
+        "intitule": "Distinction entre adjectif verbal et participe présent"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Orthographe",
+        "intitule": "Accord de l'adjectif de couleur simple ou composé"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Orthographe",
+        "intitule": "Orthographe des adjectifs et des adverbes : nu, mi, demi, semi"
+      }
     ]
   },
   {
@@ -99,9 +214,21 @@
     "numeroLecon": 1,
     "titreLecon": "L'exposé oral",
     "seances": [
-      { "numeroSeance": 1, "activite": "Expression orale", "intitule": "Utiliser la technique de l'exposé oral pour donner un point de vue sur un thème donné (life skills : le comportement à risques)" },
-      { "numeroSeance": 2, "activite": "Expression orale", "intitule": "Utiliser la technique de l'exposé oral pour rendre compte des lectures" },
-      { "numeroSeance": 3, "activite": "Expression orale", "intitule": "Utiliser la technique de l'exposé oral pour donner un point de vue / pour rendre compte des lectures" }
+      {
+        "numeroSeance": 1,
+        "activite": "Expression orale",
+        "intitule": "Utiliser la technique de l'exposé oral pour donner un point de vue sur un thème d'actualité. Thème : Économie circulaire, économie d'énergie, santé et bien-être, hygiène corporelle, civisme fiscal, ..."
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Expression orale",
+        "intitule": "Utiliser la technique de l'exposé oral pour rendre compte des lectures"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Expression orale",
+        "intitule": "Utiliser la technique de l'exposé oral pour donner un point de vue sur un thème d'actualité (renforcement)"
+      }
     ]
   }
 ]

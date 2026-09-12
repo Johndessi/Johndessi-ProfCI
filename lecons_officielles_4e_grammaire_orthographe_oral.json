@@ -6,8 +6,16 @@
     "numeroLecon": 1,
     "titreLecon": "Le groupe nominal",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "Les différentes expansions du groupe nominal" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Le déterminant zéro" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les différentes expansions du groupe nominal"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Le déterminant zéro"
+      }
     ]
   },
   {
@@ -17,11 +25,31 @@
     "numeroLecon": 2,
     "titreLecon": "La pronominalisation",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "Les pronoms personnels sujets" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Les pronoms personnels compléments" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Les pronoms démonstratifs et les pronoms possessifs" },
-      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "Les pronoms interrogatifs" },
-      { "numeroSeance": 5, "activite": "Grammaire", "intitule": "Les pronoms indéfinis" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms personnels sujets"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms personnels compléments"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms démonstratifs et les pronoms possessifs"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms interrogatifs"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms indéfinis"
+      }
     ]
   },
   {
@@ -31,14 +59,46 @@
     "numeroLecon": 3,
     "titreLecon": "Le verbe : formes et emplois",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "La morphologie des verbes du 3ème groupe" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Les modalités verbales de l'indicatif" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Les emplois de « avoir » et « être » comme auxiliaires ou verbes autonomes" },
-      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "Les emplois des auxiliaires « avoir » et « être » avec un participe passé" },
-      { "numeroSeance": 5, "activite": "Grammaire", "intitule": "Les emplois de « avoir » et « être » comme éléments de locutions verbales" },
-      { "numeroSeance": 6, "activite": "Grammaire", "intitule": "Les semi-auxiliaires" },
-      { "numeroSeance": 7, "activite": "Grammaire", "intitule": "Le mode conditionnel" },
-      { "numeroSeance": 8, "activite": "Grammaire", "intitule": "Le mode subjonctif" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "La morphologie des verbes du 3ème groupe"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les modalités verbales de l'indicatif"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Les emplois de « avoir » et « être » comme auxiliaires ou verbes autonomes"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Les emplois des auxiliaires « avoir » et « être » avec un participe passé"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "Les emplois de « avoir » et « être » comme éléments de locutions verbales"
+      },
+      {
+        "numeroSeance": 6,
+        "activite": "Grammaire",
+        "intitule": "Les semi-auxiliaires"
+      },
+      {
+        "numeroSeance": 7,
+        "activite": "Grammaire",
+        "intitule": "Le mode conditionnel"
+      },
+      {
+        "numeroSeance": 8,
+        "activite": "Grammaire",
+        "intitule": "Le mode subjonctif"
+      }
     ]
   },
   {
@@ -48,15 +108,51 @@
     "numeroLecon": 4,
     "titreLecon": "Étude de quelques propositions subordonnées",
     "seances": [
-      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "La proposition subordonnée relative : la fonction de la subordonnée relative" },
-      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "La proposition subordonnée relative : les fonctions du pronom relatif" },
-      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "La subordonnée complétive" },
-      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "Les fonctions et les modes de la subordonnée complétive introduite par « que »" },
-      { "numeroSeance": 5, "activite": "Grammaire", "intitule": "La proposition subordonnée circonstancielle de cause" },
-      { "numeroSeance": 6, "activite": "Grammaire", "intitule": "La proposition subordonnée circonstancielle de conséquence" },
-      { "numeroSeance": 7, "activite": "Grammaire", "intitule": "La proposition subordonnée circonstancielle de concession / opposition" },
-      { "numeroSeance": 8, "activite": "Grammaire", "intitule": "La proposition subordonnée circonstancielle de temps" },
-      { "numeroSeance": 9, "activite": "Grammaire", "intitule": "La proposition subordonnée circonstancielle de but" }
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée relative : la fonction de la subordonnée relative"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée relative : les fonctions du pronom relatif"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "La subordonnée complétive"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Les fonctions et les modes de la subordonnée complétive introduite par « que »"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée circonstancielle de cause"
+      },
+      {
+        "numeroSeance": 6,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée circonstancielle de conséquence"
+      },
+      {
+        "numeroSeance": 7,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée circonstancielle de concession / opposition"
+      },
+      {
+        "numeroSeance": 8,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée circonstancielle de temps"
+      },
+      {
+        "numeroSeance": 9,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée circonstancielle de but"
+      }
     ]
   },
   {
@@ -66,9 +162,21 @@
     "numeroLecon": 1,
     "titreLecon": "Orthographe lexicale",
     "seances": [
-      { "numeroSeance": 1, "activite": "Orthographe", "intitule": "Formation des mots par composition / par dérivation simple" },
-      { "numeroSeance": 2, "activite": "Orthographe", "intitule": "Les consonnes finales muettes" },
-      { "numeroSeance": 3, "activite": "Orthographe", "intitule": "Les consonnes doublées" }
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "Formation des mots par composition / par dérivation simple"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Orthographe",
+        "intitule": "Les consonnes finales muettes"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Orthographe",
+        "intitule": "Les consonnes doublées"
+      }
     ]
   },
   {
@@ -78,9 +186,21 @@
     "numeroLecon": 2,
     "titreLecon": "Orthographe grammaticale",
     "seances": [
-      { "numeroSeance": 1, "activite": "Orthographe", "intitule": "L'accord du verbe avec le sujet dont le déterminant est « beaucoup, assez, peu »" },
-      { "numeroSeance": 2, "activite": "Orthographe", "intitule": "Les homophones grammaticaux : quand / quant / qu'en" },
-      { "numeroSeance": 3, "activite": "Orthographe", "intitule": "Les homophones grammaticaux : plutôt / plus tôt / aussitôt / aussi tôt" }
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "L'accord du verbe avec le sujet dont le déterminant est « beaucoup, assez, peu »"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Orthographe",
+        "intitule": "Les homophones grammaticaux : quand / quant / qu'en"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Orthographe",
+        "intitule": "Les homophones grammaticaux : plutôt / plus tôt / aussitôt / aussi tôt"
+      }
     ]
   },
   {
@@ -90,9 +210,21 @@
     "numeroLecon": 1,
     "titreLecon": "Le débat",
     "seances": [
-      { "numeroSeance": 1, "activite": "Expression orale", "intitule": "Participer à un débat" },
-      { "numeroSeance": 2, "activite": "Expression orale", "intitule": "Animer un débat sur un thème des contenus intégrés" },
-      { "numeroSeance": 3, "activite": "Expression orale", "intitule": "Animer un débat sur un thème des contenus intégrés (révision)" }
+      {
+        "numeroSeance": 1,
+        "activite": "Expression orale",
+        "intitule": "Participer à un débat. Thème : Économie d'énergie : la gestion des appareils électro-ménagers"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Expression orale",
+        "intitule": "Animer un débat sur un thème des contenus intégrés. Thème : La sécurité dans un état démocratique (CADEG)"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Expression orale",
+        "intitule": "Animer un débat sur un thème des contenus intégrés (révision). Thème : Internet et technologie : utilisation de l'internet, des réseaux sociaux et de l'intelligence artificielle (IA)"
+      }
     ]
   }
 ]
