@@ -6433,6 +6433,26 @@ app.put('/api/admin/fiche/:id', verifierCleAdmin, async (req, res) => {
   }
 });
 
+// Inspection admin (12/09) : document catalogue brut (tous champs, y compris
+// vocabulaireReference) -- l'endpoint public /api/lecons-officielles/liste
+// ne renvoie qu'une projection restreinte pour l'UI enseignant, insuffisante
+// pour vérifier qu'un champ interne comme vocabulaireReference a bien été
+// persisté après un seed.
+app.get('/api/admin/lecons-officielles/brut', verifierCleAdmin, async (req, res) => {
+  try {
+    const { discipline, classe, activite, numeroLecon } = req.query;
+    const filtre = {};
+    if (discipline) filtre.discipline = new RegExp(discipline, 'i');
+    if (classe) filtre.classe = new RegExp(classe, 'i');
+    if (activite) filtre.activite = new RegExp(activite, 'i');
+    if (numeroLecon) filtre.numeroLecon = parseInt(numeroLecon, 10);
+    const lecons = await LeconOfficielleDPFC.find(filtre).limit(50);
+    res.json(lecons);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/fiche/:id/pdf', async (req, res) => {
   try {
     const fiche = await Fiche.findById(req.params.id);
