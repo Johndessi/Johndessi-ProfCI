@@ -3847,10 +3847,16 @@ function nettoyerCellulePresentationRituelle(contenuHTML) {
     const $traces = $tds.last();
     const html = $traces.html();
     if (!html) return;
-    // Découpe sur les séparateurs "<br><br>" (double saut de ligne) --
-    // c'est ainsi que Date/Activité/Leçon/Séance sont toujours séparés.
+    // Découpe sur "<br><br>" (Date/Activité/Leçon/Séance sont toujours séparés ainsi).
+    // On cherche "Séance <chiffre>" n'importe où dans le segment, pas seulement en
+    // tête : Leçon et Séance sont parfois réunies sur un seul segment via un simple
+    // <br> ("Leçon 1 : ...<br>Séance 1 : ..."), auquel cas un test en tête de
+    // segment raterait le contenu recopié juste après.
     const segments = html.split(/(?:<br\s*\/?>\s*){2,}/i);
-    const indexSeance = segments.findIndex((s) => /^\s*S[ée]ance\b/i.test(s));
+    let indexSeance = -1;
+    for (let i = segments.length - 1; i >= 0; i--) {
+      if (/S[ée]ance\s*\d/i.test(segments[i])) { indexSeance = i; break; }
+    }
     if (indexSeance === -1 || indexSeance >= segments.length - 1) return;
 
     $traces.html(segments.slice(0, indexSeance + 1).join('<br><br>\n        '));
