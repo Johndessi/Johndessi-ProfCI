@@ -3879,6 +3879,67 @@ function nettoyerCellulePresentationRituelle(contenuHTML) {
   return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
 }
 
+// Filet déterministe (12/09) : le squelette PRÉSENTATION de
+// construirePromptSecondaire décrit chaque étape rituelle via un texte entre
+// crochets ("- [Salutation : ...]") destiné à être REMPLACÉ par du contenu
+// réel, jamais recopié tel quel. Deux manifestations constatées en
+// production, sur un corpus de 189 fiches réelles (toutes activités) :
+// (a) l'instruction conditionnelle elle-même recopiée littéralement
+// ("[Rappel de la séance précédente ... UNIQUEMENT si Séance n° > 1 ...]")
+// au lieu d'être exécutée -- 1 seule occurrence dans tout le corpus, sur la
+// ligne "Rappel de la séance précédente", et déjà supprimée à la source
+// (cf. avecRappelSeancePrecedente, qui résout cette condition côté serveur
+// avant même de construire le prompt : le modèle ne voit donc plus jamais
+// cette instruction conditionnelle) ;
+// (b) bien plus fréquent (27 des 189 fiches) : du contenu réel et correct,
+// simplement laissé entre crochets par erreur (ex. "[Fait l'appel des
+// élèves un à un]") -- ici le contenu lui-même n'est pas en cause, seuls les
+// crochets doivent disparaître, jamais la ligne entière.
+// Ce filet couvre les deux cas : toute ligne encore au format de
+// l'instruction conditionnelle (repérable par "UNIQUEMENT"/"SUPPRIME
+// entièrement") est retirée en entier (son contenu n'est pas un contenu de
+// fiche valide) ; toute AUTRE ligne contenant des crochets littéraux les
+// perd, en conservant le texte qu'ils entourent.
+function nettoyerPlaceholdersNonExecutes(contenuHTML) {
+  if (!contenuHTML || !contenuHTML.includes('<tr')) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+
+  $('tr').each((_, tr) => {
+    const $tds = $(tr).find('> td');
+    if ($tds.length !== 5) return;
+    if (!/^PR[ÉE]SENTATION/i.test($tds.first().text().trim())) return;
+
+    [2, 3].forEach((idx) => {
+      const $cell = $tds.eq(idx);
+      const html = $cell.html();
+      if (!html || !html.includes('[')) return;
+      // Les colonnes Activités enseignant/élèves séparent leurs puces par de
+      // simples retours à la ligne "\n" (parfois des <br> selon les fiches)
+      // -- on découpe sur les deux séparateurs pour rester robuste aux deux styles.
+      const lignes = html.split(/<br\s*\/?>|\n/i);
+      let cellModifiee = false;
+      const lignesTraitees = lignes.filter((ligne) => {
+        if (!/\[[^\]]*(?:UNIQUEMENT|SUPPRIME entièrement)[^\]]*\]/i.test(ligne)) return true;
+        cellModifiee = true;
+        return false;
+      }).map((ligne) => {
+        if (!/\[[^\]]*\]/.test(ligne)) return ligne;
+        cellModifiee = true;
+        return ligne.replace(/\[([^\]]*)\]/g, '$1');
+      });
+      if (cellModifiee) {
+        $cell.html(lignesTraitees.join('\n'));
+        modifie = true;
+      }
+    });
+  });
+
+  if (!modifie) return contenuHTML;
+  const $racine = $('.fiche-cours').first();
+  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+}
+
 // --- Mode "plan fourni par l'enseignant" pour Exploitation de texte ---
 //
 // Même principe que construireInstructionsLectureMethodiqueAvecPlanEnseignant
@@ -4148,7 +4209,7 @@ function resumerSeancesPrecedentes(fichesPrecedentes) {
   }).join('\n\n');
 }
 
-function construirePromptSecondaire(avecVerbesTaxonomiques) {
+function construirePromptSecondaire(avecVerbesTaxonomiques, avecRappelSeancePrecedente) {
   const commentaireHabiletes = avecVerbesTaxonomiques
     ? '<!-- lignes avec verbes taxonomiques : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire -->'
     : '<!-- lignes avec les habiletés/objectifs pertinents pour cette leçon -->';
@@ -4161,30 +4222,45 @@ function construirePromptSecondaire(avecVerbesTaxonomiques) {
 `
     : '';
 
+  // Rappel de la séance précédente (12/09) : la condition "séance > 1" est
+  // désormais résolue ICI, côté serveur, au moment de construire le prompt --
+  // jamais laissée au modèle sous forme d'instruction conditionnelle entre
+  // crochets dans le texte à générer. Constaté en production : le modèle
+  // recopiait parfois littéralement l'instruction ("[...UNIQUEMENT si Séance
+  // n° > 1...]") au lieu de l'exécuter, quand Séance = 1. En n'incluant la
+  // ligne concernée dans la liste à puces QUE lorsque avecRappelSeancePrecedente
+  // est vrai, le modèle ne voit jamais cette instruction conditionnelle : soit
+  // la ligne (simple, sans condition) est présente, soit elle est absente.
+  const lignesPresentationEnseignant = [
+    '- [Salutation : ex. « Bonjour les élèves, comment allez-vous ? »]',
+    "- [Appel : fait l'appel des élèves un à un]",
+    "- [Date du jour : « Quelle est la date d'aujourd'hui ? »]",
+    "- [Identification de l'activité du jour selon la répartition : « Quelle est notre activité aujourd'hui ? »]",
+    ...(avecRappelSeancePrecedente ? ['- [Rappel de la séance précédente : « Que retenons-nous de la séance précédente ? »]'] : []),
+    "- [Annonce d'une nouvelle leçon/séance]",
+    "- [Lecture de la situation d'apprentissage et mise au tableau du corpus/support]",
+    "- [Identification de la notion à partir de la situation : « D'après cette situation, quelle notion allons-nous étudier aujourd'hui ? »]",
+    '- [Annonce du titre officiel de la leçon]',
+    '- [Transition vers la première notion de la séance du jour]'
+  ];
   const presentationActiviteEnseignant = avecVerbesTaxonomiques
-    ? `- [Salutation : ex. « Bonjour les élèves, comment allez-vous ? »]
-- [Appel : fait l'appel des élèves un à un]
-- [Date du jour : « Quelle est la date d'aujourd'hui ? »]
-- [Identification de l'activité du jour selon la répartition : « Quelle est notre activité aujourd'hui ? »]
-- [Rappel de la séance précédente : « Que retenons-nous de la séance précédente ? » — UNIQUEMENT si Séance n° > 1 ; si Séance n° = 1, SUPPRIME entièrement cette ligne ainsi que la ligne correspondante côté élèves]
-- [Annonce d'une nouvelle leçon/séance]
-- [Lecture de la situation d'apprentissage et mise au tableau du corpus/support]
-- [Identification de la notion à partir de la situation : « D'après cette situation, quelle notion allons-nous étudier aujourd'hui ? »]
-- [Annonce du titre officiel de la leçon]
-- [Transition vers la première notion de la séance du jour]`
+    ? lignesPresentationEnseignant.join('\n')
     : '« Bonjour la classe » / « Bonjour les élèves », PUIS questions précises de rappel des prérequis';
 
+  const lignesPresentationEleves = [
+    '- [Réponse de salutation]',
+    '- [Réponse à l\'appel : « Présent(e) »]',
+    '- [Élèves donnent la date du jour]',
+    "- [Élèves identifient la discipline/activité du jour]",
+    ...(avecRappelSeancePrecedente ? ["- [Élèves rappellent le titre et l'essentiel de la leçon précédente]"] : []),
+    "- [Élèves écoutent l'annonce de la nouvelle leçon/séance]",
+    '- [Élèves observent le corpus/support mis au tableau]',
+    "- [Élèves proposent/identifient la notion à étudier]",
+    '- [Élèves notent le titre officiel de la leçon]',
+    '- [Élèves suivent la transition vers la première notion]'
+  ];
   const presentationActiviteEleves = avecVerbesTaxonomiques
-    ? `- [Réponse de salutation]
-- [Réponse à l'appel : « Présent(e) »]
-- [Élèves donnent la date du jour]
-- [Élèves identifient la discipline/activité du jour]
-- [Élèves rappellent le titre et l'essentiel de la leçon précédente — UNIQUEMENT si Séance n° > 1]
-- [Élèves écoutent l'annonce de la nouvelle leçon/séance]
-- [Élèves observent le corpus/support mis au tableau]
-- [Élèves proposent/identifient la notion à étudier]
-- [Élèves notent le titre officiel de la leçon]
-- [Élèves suivent la transition vers la première notion]`
+    ? lignesPresentationEleves.join('\n')
     : 'Réponse d\'accueil des élèves, PUIS réponses attendues aux questions de rappel';
 
   const presentationTraces = avecVerbesTaxonomiques
@@ -4192,7 +4268,7 @@ function construirePromptSecondaire(avecVerbesTaxonomiques) {
     : '[activité/leçon/séance]';
 
   const commentairePresentation = avecVerbesTaxonomiques
-    ? `<!-- PRÉSENTATION : ordre FIXE des étapes rituelles ci-dessous, chaque étape = un ÉCHANGE professeur/élèves aligné 1 pour 1 entre les colonnes Activités de l'enseignant et Activités des élèves (JAMAIS un monologue du professeur seul) : (a) Salutation (b) Appel (c) Date du jour (d) Identification de l'activité du jour selon la répartition (e) Rappel de la séance précédente [UNIQUEMENT si Séance n° > 1, sinon omets entièrement cette étape des deux colonnes] (f) Annonce d'une nouvelle leçon/séance (g) Lecture de la situation d'apprentissage et mise au tableau du corpus/support (h) Identification de la notion à partir de la situation (i) Annonce du titre officiel de la leçon (j) Transition vers la première notion de la séance du jour. -->`
+    ? `<!-- PRÉSENTATION : ordre FIXE des étapes rituelles ci-dessous, chaque étape = un ÉCHANGE professeur/élèves aligné 1 pour 1 entre les colonnes Activités de l'enseignant et Activités des élèves (JAMAIS un monologue du professeur seul) : (a) Salutation (b) Appel (c) Date du jour (d) Identification de l'activité du jour selon la répartition${avecRappelSeancePrecedente ? ' (e) Rappel de la séance précédente' : ''} (f) Annonce d'une nouvelle leçon/séance (g) Lecture de la situation d'apprentissage et mise au tableau du corpus/support (h) Identification de la notion à partir de la situation (i) Annonce du titre officiel de la leçon (j) Transition vers la première notion de la séance du jour. -->`
     : '';
 
   return `Tu es un expert en pédagogie ivoirienne (APC/DPFC).
@@ -5352,7 +5428,8 @@ function limiterGenerationParIp(req, res, next) {
       modelePersonnel = await Modele.findOne({ enseignantId, niveau });
     }
 
-    let systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : construirePromptSecondaire(avecVerbesTaxonomiques);
+    const avecRappelSeancePrecedente = Number.isFinite(parseInt(seance, 10)) && parseInt(seance, 10) > 1;
+    let systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : construirePromptSecondaire(avecVerbesTaxonomiques, avecRappelSeancePrecedente);
 
     let avertissementRappel = null;
     // Blocs HTML déjà construits par construireDeroulementPlanEnseignantHTML,
@@ -5932,6 +6009,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
       contenuHTML = injecterActiviteEntete(contenuHTML, activiteAffichee);
       contenuHTML = nettoyerCellulePresentationRituelle(contenuHTML);
+      contenuHTML = nettoyerPlaceholdersNonExecutes(contenuHTML);
       if (estOeuvreIntegrale) {
         contenuHTML = injecterChampEntete(contenuHTML, 'Compétence', COMPETENCE_OEUVRE_INTEGRALE);
         contenuHTML = injecterChampEntete(contenuHTML, 'Leçon', leconAfficheeOI);
