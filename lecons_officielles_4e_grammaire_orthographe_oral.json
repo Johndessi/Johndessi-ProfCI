@@ -170,12 +170,31 @@
       {
         "numeroSeance": 2,
         "activite": "Orthographe",
-        "intitule": "Les consonnes finales muettes"
+        "intitule": "Les consonnes finales muettes",
+        "vocabulaireReference": {
+          "t muet": ["respect", "doigt", "appétit", "fruit", "bruit", "esprit", "nuit", "salut", "circuit", "défaut", "exploit"],
+          "d muet": ["pied", "fonds", "hasard", "canard", "nid"],
+          "s muet": ["poids", "temps", "corps", "pas", "cas", "repas", "jus", "gros"],
+          "g muet": ["rang", "sang", "étang", "poing"],
+          "p muet": ["beaucoup", "coup", "loup", "sirop"],
+          "x muet": ["deux", "jeux", "veux", "peux", "beaux", "cheveux"]
+        }
       },
       {
         "numeroSeance": 3,
         "activite": "Orthographe",
-        "intitule": "Les consonnes doublées"
+        "intitule": "Les consonnes doublées",
+        "vocabulaireReference": {
+          "ll": ["belle", "celle", "celle-ci", "collection", "excellent", "fille", "intelligent", "intelligence", "installation", "mille", "nouvelle", "pelle", "ruelle", "tellement", "villa"],
+          "ss": ["classe", "dossier", "fossé", "intéressant", "lisse", "masse", "message", "nécessaire", "passé", "possédé", "possible", "ressembler", "tasse"],
+          "tt": ["attacher", "attaquer", "attention", "attentif", "attentat", "batterie", "lettre", "littéraire", "lutte", "pittoresque"],
+          "pp": ["appel", "apparence", "appartenance", "appliquer", "apport", "appétit", "frappé", "happé", "nappé", "rappel"],
+          "mm": ["ammoniaque", "commerce", "commencer", "communauté", "grammaire", "homme", "pomme", "sommeil", "sommet"],
+          "nn": ["année", "annonce", "bannière", "donnée", "mannequin", "panne", "personne", "renne", "sonnerie"],
+          "rr": ["arrangé", "barrage", "barrique", "carreau", "carrière", "terrain", "terrasse"],
+          "ff": ["affaire", "affecter", "affiche", "affluent", "affront", "biffé", "chiffre", "coffre", "diffère", "effort", "étoffe", "graffiti", "offre", "raffinement", "souffert", "taffetas"],
+          "cc": ["accent", "accepter", "accès", "accident", "acclamation", "acclimatation", "accolade", "accommodement", "accompagnement", "accord", "accordéon", "accoste", "accouchement", "accoudoir", "accoutrement", "accoutumance", "accréditation", "accroc", "accrochage", "accroissement", "accroît", "accroupir", "accueil", "acculturation", "accumulation", "accusation"]
+        }
       }
     ]
   },
