@@ -521,6 +521,21 @@ const FicheSchema = new mongoose.Schema({
   niveau       : String,
   contenu      : String,
   approche     : String,
+  // Origine de la génération (12/09) : jusqu'ici, TOUTE requête vers
+  // /api/generer-fiche -- qu'elle vienne d'un vrai enseignant depuis l'appli,
+  // ou d'un appel direct fait pendant une investigation/un débogage --
+  // produit un document Fiche strictement identique, sans aucun marqueur.
+  // Conséquence concrète constatée : impossible de distinguer après coup les
+  // fiches de test accumulées en base de prod des vraies fiches enseignant
+  // (cf. l'audit du 12/09 sur le filet crochets non exécutés). Ce champ ne
+  // change rien pour les enseignants (valeur par défaut 'enseignant',
+  // jamais envoyée explicitement par le frontend) ; un script de débogage
+  // peut désormais passer "origineGeneration": "session_debug" dans le
+  // corps de la requête pour marquer ses propres générations -- purement
+  // déclaratif (rien ne peut empêcher un appel direct de mentir), mais
+  // suffisant pour filtrer/purger a posteriori les fiches de test qui
+  // suivent cette convention.
+  origineGeneration : { type: String, enum: ['enseignant', 'session_debug'], default: 'enseignant' },
   createdAt    : { type: Date, default: Date.now }
 });
 
@@ -5363,10 +5378,14 @@ function limiterGenerationParIp(req, res, next) {
       sousModule = '', numeroSequence = '1', titreOeuvre = '', auteurOeuvre = '',
       etablissement = '', axeEtude = '', situationApprentissageOeuvre = '',
       analyseCouverture = '', themeOeuvre = '', personnagesOeuvre = '', lieuxOeuvre = '', biographieAuteur = '',
+      // cf. FicheSchema.origineGeneration : jamais envoyé par le frontend,
+      // réservé aux scripts de débogage/investigation appelant l'API directement.
+      origineGeneration = 'enseignant',
       typeSeanceOI = '', passagePages = '', contexteNarratif = '', bilanSynthese = '',
       contenuLibreSeance11 = ''
     } = req.body;
     const estOeuvreIntegrale = sousModule === 'oeuvre_integrale';
+    const origineGenerationNormalisee = origineGeneration === 'session_debug' ? 'session_debug' : 'enseignant';
     // planSeancesOI/unitesSens/questionsEvaluation/reponsesEvaluation :
     // tableaux -- reçus tels quels en JSON, ou en chaîne JSON quand la
     // requête passe par FormData (upload de fichier).
@@ -5412,7 +5431,7 @@ function limiterGenerationParIp(req, res, next) {
           enseignantId: enseignantId || 'anonyme',
           discipline: discipline || 'Français', classe,
           lecon: construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre), seance, duree, niveau,
-          approche: approcheNormalisee, contenu: contenuHTML11
+          approche: approcheNormalisee, contenu: contenuHTML11, origineGeneration: origineGenerationNormalisee
         });
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
@@ -6429,7 +6448,8 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         enseignantId: enseignantId || 'anonyme',
         discipline, classe, lecon, seance, duree, niveau,
         approche: approcheNormalisee,
-        contenu: contenuHTML
+        contenu: contenuHTML,
+        origineGeneration: origineGenerationNormalisee
       });
       res.write(`data: ${JSON.stringify({ done: true, ficheId: fiche._id, contenuFinal: contenuHTML })}\n\n`);
       res.end();
@@ -6480,11 +6500,14 @@ app.get('/api/fiche/:id', async (req, res) => {
 // l'inclure une fois la fiche précise identifiée.
 app.get('/api/admin/fiches/recherche', verifierCleAdmin, async (req, res) => {
   try {
-    const { discipline, classe, lecon, avecContenu } = req.query;
+    const { discipline, classe, lecon, avecContenu, origineGeneration } = req.query;
     const filtre = {};
     if (discipline) filtre.discipline = new RegExp(discipline, 'i');
     if (classe) filtre.classe = new RegExp(classe, 'i');
     if (lecon) filtre.lecon = new RegExp(lecon, 'i');
+    if (origineGeneration === 'enseignant' || origineGeneration === 'session_debug') {
+      filtre.origineGeneration = origineGeneration;
+    }
     const projection = avecContenu === '1' ? {} : { contenu: 0 };
     const fiches = await Fiche.find(filtre, projection).sort({ createdAt: -1 }).limit(100);
     res.json(fiches);
