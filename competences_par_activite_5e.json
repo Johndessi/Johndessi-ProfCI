@@ -1,0 +1,51 @@
+[
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Expression orale",
+    "numero": 1,
+    "intitule": "Traiter des situations relatives à la production des énoncés oraux."
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Lecture méthodique",
+    "numero": 2,
+    "intitule": "Traiter des situations relatives à la construction du sens de textes divers."
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Étude d'œuvre intégrale",
+    "numero": 2,
+    "intitule": "Traiter des situations relatives à la construction du sens de textes divers."
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Exploitation de texte",
+    "numero": 2,
+    "intitule": "Traiter des situations relatives à la construction du sens de textes divers."
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Expression écrite",
+    "numero": 3,
+    "intitule": "Traiter des situations relatives à la rédaction des écrits divers."
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Grammaire",
+    "numero": 4,
+    "intitule": "Traiter des situations relatives à l'utilisation des outils grammaticaux divers."
+  },
+  {
+    "discipline": "Français",
+    "classe": "5ème",
+    "activite": "Orthographe",
+    "numero": 5,
+    "intitule": "Traiter des situations relatives à l'orthographe correcte des mots."
+  }
+]
