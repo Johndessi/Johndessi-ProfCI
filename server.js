@@ -895,6 +895,36 @@ function competenceNonDisponible({ discipline, classe }) {
   return COMPETENCES_NON_DISPONIBLES.some((x) => normaliserTexte(x.discipline) === d && normaliserTexte(x.classe) === c);
 }
 
+// Second cycle Français (chantier 2026-2027, 13/09) : le menu Classe distingue
+// déjà les séries (2nde, 1ère A, 1ère C, 1ère D, Tle A, Tle C, Tle D), mais le
+// programme DPFC réel ne connaît que 5 profils -- 1ère C et 1ère D partagent
+// un programme strictement identique (idem Tle C/D), et 2nde n'a qu'un seul
+// programme pour les deux séries. Le catalogue (à venir) est seedé et
+// interrogé PAR PROFIL, jamais par classe brute, pour ne jamais laisser deux
+// copies du même contenu (1ère C vs 1ère D) diverger silencieusement au
+// premier correctif oublié d'un côté. Retourne null pour toute classe
+// collège/primaire ou non reconnue -- sert de garde côté dispatch (avant
+// même de regarder l'activité : "Expression écrite" ne veut pas dire la même
+// chose selon qu'on est au collège ou au second cycle).
+function resoudreProfilSecondCycle(classe) {
+  const c = normaliserTexte(classe);
+  if (!c) return null;
+  if (/^2\s*nde\b|^seconde\b/.test(c)) {
+    return { profil: '2nde', niveau: '2nde', serie: null };
+  }
+  if (/^1\s*[èe]?re\b|^premiere\b/.test(c)) {
+    if (/\ba\b/.test(c)) return { profil: '1ereA', niveau: '1ere', serie: 'A' };
+    if (/\bc\b|\bd\b/.test(c)) return { profil: '1ereCD', niveau: '1ere', serie: 'CD' };
+    return null;
+  }
+  if (/^tle\b|^terminale\b/.test(c)) {
+    if (/\ba\b/.test(c)) return { profil: 'TleA', niveau: 'Tle', serie: 'A' };
+    if (/\bc\b|\bd\b/.test(c)) return { profil: 'TleCD', niveau: 'Tle', serie: 'CD' };
+    return null;
+  }
+  return null;
+}
+
 // --- Texte support fourni par l'enseignant : injecté par simple substitution
 // de chaîne côté serveur, jamais régénéré par l'IA, pour garantir sa fidélité exacte ---
 
