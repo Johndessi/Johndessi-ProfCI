@@ -602,10 +602,25 @@ const LeconOfficielleDPFCSchema = new mongoose.Schema({
   numeroLecon : Number,   // peut se répéter dans l'année, y compris au sein d'une même activité — jamais utilisé seul comme identifiant
   titreLecon  : String,
   ordre       : Number,
+  // Genre de l'œuvre étudiée (13/09, second cycle uniquement) : narrative/
+  // poétique/théâtre. Un des 3 genres, par LEÇON = séquence (numeroLecon),
+  // jamais par séance. Sert de repère structurel au catalogue (cf.
+  // resoudreSequenceOeuvreLycee) -- ne sert JAMAIS à juger si le livre
+  // réellement choisi par l'enseignant correspond à ce genre (impossible à
+  // vérifier côté serveur, et pas son rôle : seule la correspondance
+  // séance<->type déclaré au catalogue est vérifiée, cf. validerSeanceOeuvreLycee).
+  genreOeuvre : String,
   seances: [{
     numeroSeance    : Number,
     intitule        : String,    // intitulé officiel complet de la séance
     activite        : String,    // "Expression écrite" | "Lecture méthodique" | ...
+    // Sous-type de séance pour Étude de l'œuvre intégrale, second cycle
+    // uniquement (13/09) : 'culture_litteraire' | 'introduction' |
+    // 'lecture_methodique' | 'lecture_dirigee' | 'expose' | 'conclusion' |
+    // 'evaluation' | 'correction'. Absent pour toute séance hors Étude de
+    // l'œuvre intégrale lycée (collège continue d'utiliser son propre
+    // système fixe S1-S11, cf. construireSeanceAfficheeOeuvre -- inchangé).
+    typeSeanceOeuvre : String,
     optionsChoix    : [String],  // non vide -> menu déroulant d'options pour l'enseignant
     // Les deux choix ci-dessous sont indépendants : une séance peut porter
     // UNIQUEMENT optionsChoix, UNIQUEMENT choixLibre, LES DEUX à la fois (ex.
@@ -861,10 +876,18 @@ async function listerLeconsOfficielles({ discipline, classe, activite }) {
       _id: l._id,
       numeroLecon: l.numeroLecon,
       titreLecon: l.titreLecon,
+      // Étude de l'œuvre intégrale, second cycle uniquement (13/09) -- cf.
+      // LeconOfficielleDPFCSchema.genreOeuvre. Absent (undefined) pour toute
+      // autre activité/le collège, sans impact sur leur usage existant.
+      genreOeuvre: l.genreOeuvre || undefined,
       seances: (l.seances || [])
         .filter((s) => normaliserTexte(s.activite) === activiteNorm)
         .flatMap((s) => {
-          const base = { _id: s._id, numeroSeance: s.numeroSeance, choixLibre: !!s.choixLibre, choixLibreLabel: s.choixLibreLabel || '' };
+          const base = {
+            _id: s._id, numeroSeance: s.numeroSeance, choixLibre: !!s.choixLibre, choixLibreLabel: s.choixLibreLabel || '',
+            // cf. LeconOfficielleDPFCSchema.seances.typeSeanceOeuvre (second cycle uniquement).
+            typeSeanceOeuvre: s.typeSeanceOeuvre || undefined
+          };
           if (s.optionsChoix && s.optionsChoix.length) {
             return s.optionsChoix.map((option) => ({
               ...base,
@@ -4701,13 +4724,19 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
           choixLibre: !!s.choixLibre,
           choixLibreLabel: (s.choixLibreLabel || '').toString().trim(),
           texteSupportOfficiel: (s.texteSupportOfficiel || '').toString().trim(),
-          vocabulaireReference: (s.vocabulaireReference && typeof s.vocabulaireReference === 'object') ? s.vocabulaireReference : undefined
+          vocabulaireReference: (s.vocabulaireReference && typeof s.vocabulaireReference === 'object') ? s.vocabulaireReference : undefined,
+          // Étude de l'œuvre intégrale, second cycle uniquement (13/09) --
+          // cf. LeconOfficielleDPFCSchema.seances.typeSeanceOeuvre.
+          typeSeanceOeuvre: (s.typeSeanceOeuvre || '').toString().trim() || undefined
         });
       }
       if (seancesInvalides) { ignores++; continue; }
 
       const donnees = { discipline, classe, activite: activiteLecon, numeroLecon, titreLecon, seances };
       if (Number.isFinite(ordre)) donnees.ordre = ordre;
+      // cf. LeconOfficielleDPFCSchema.genreOeuvre (second cycle uniquement).
+      const genreOeuvre = (item && item.genreOeuvre || '').toString().trim();
+      if (genreOeuvre) donnees.genreOeuvre = genreOeuvre;
 
       // Clé d'upsert incluant l'activité : Grammaire Leçon 1 et Expression
       // écrite Leçon 1 sont des documents distincts, même numeroLecon, même
@@ -5006,6 +5035,95 @@ function validerSequenceOeuvreIntegrale({ seance, titreOeuvre, auteurOeuvre, axe
 
   return null;
 }
+
+// =============== ÉTUDE DE L'ŒUVRE INTÉGRALE -- SECOND CYCLE (13/09) ===============
+// Contrairement au collège (structure fixe S1-S11, cf. ci-dessus, INCHANGÉE),
+// le second cycle est piloté par catalogue : nombre de séquences par profil,
+// nombre de séances par séquence et type de chaque séance (culture
+// littéraire/introduction/lecture méthodique/lecture dirigée/exposé/
+// conclusion/évaluation/correction) varient réellement d'un profil à l'autre
+// (constaté sur le PDF DPFC 2026-2027 réel, 2nde : 14/10/14 séances selon la
+// séquence -- pas 11 partout). Toujours interrogé PAR PROFIL (jamais par
+// classe brute, cf. resoudreProfilSecondCycle) : "1ère C" et "1ère D"
+// partagent un seul catalogue, jamais deux copies indépendantes.
+async function resoudreSequenceOeuvreLycee(profil, numeroSequence) {
+  const numSeq = parseInt(numeroSequence, 10);
+  if (!profil || !Number.isFinite(numSeq)) return null;
+  return LeconOfficielleDPFC.findOne({
+    discipline: 'Français',
+    activite: "Étude de l'œuvre intégrale",
+    classe: profil,
+    numeroLecon: numSeq
+  }).lean();
+}
+
+// Vérification structurelle SEULE : le numéro de séquence existe au
+// catalogue pour ce profil, le numéro de séance existe dans cette séquence,
+// et le type de séance annoncé par l'enseignant correspond à celui déclaré
+// au catalogue pour ce numéro -- jamais un jugement sur le livre réellement
+// choisi par l'enseignant (impossible à vérifier côté serveur, et hors de
+// propos : cf. réponse donnée le 13/09 sur la portée de ce contrôle).
+function validerSeanceOeuvreLycee(leconCatalogue, numeroSeance, typeSeanceOI) {
+  if (!leconCatalogue) {
+    return "Séquence inconnue au catalogue pour ce profil -- vérifiez le numéro de séquence.";
+  }
+  const seances = Array.isArray(leconCatalogue.seances) ? leconCatalogue.seances : [];
+  const numSeance = parseInt(numeroSeance, 10);
+  const seanceCatalogue = seances.find((s) => s.numeroSeance === numSeance);
+  if (!seanceCatalogue) {
+    return `Numéro de séance invalide pour cette séquence (catalogue : ${seances.length} séances).`;
+  }
+  if (seanceCatalogue.typeSeanceOeuvre !== typeSeanceOI) {
+    return "Le type de séance ne correspond pas à la planification du catalogue pour ce numéro de séance -- vérifiez votre sélection.";
+  }
+  return null;
+}
+
+// Partie I (Portion de texte à lire) -- entièrement déterministe : simple
+// rappel des références déjà connues (titre/auteur/pages), aucun risque de
+// fabrication puisqu'aucun fait sur le CONTENU de l'œuvre n'y figure.
+// Injectée après génération à la place du jeton {{PORTION_LECTURE_DIRIGEE}}
+// (cf. injecterMarqueurUneFois dans /api/generer-fiche), même mécanisme que
+// {{DEVELOPPEMENT_LECTURE_SUIVIE}} pour la Lecture suivie du collège.
+function construireSectionPortionLectureDirigeeHTML({ titreOeuvre, auteurOeuvre, passagePages }) {
+  const titre = echapperHtml((titreOeuvre || '').toString().trim());
+  const auteur = echapperHtml((auteurOeuvre || '').toString().trim());
+  const pages = echapperHtml((passagePages || '').toString().trim());
+  return `<p><strong>I. Portion de texte à lire</strong><br>
+Lecture autonome de « ${titre} » de ${auteur}, ${pages}.</p>`;
+}
+
+// Parties II (Questionnaire de compréhension) et III (Corrigé) -- rédigées
+// par le modèle, mais bornées au résumé fourni par l'enseignant (resumePassage).
+// Mécanisme différent de la Lecture méthodique/suivie (spec exacte de
+// l'enseignant, 13/09) : PAS le squelette Hypothèse/Axes/Entrées-Indices-
+// Analyse-Interprétation -- un contrôle de lecture guidé (faits, personnages,
+// chronologie, enjeux), jamais une analyse littéraire. Contrainte anti-
+// fabrication calquée sur le principe déjà établi pour Lecture suivie
+// (contexteNarratif/unitesSens, jamais le savoir propre du modèle) : le
+// modèle ne "connaît" pas réellement le contenu du livre au-delà de ce que
+// l'enseignant lui fournit ici -- cf. les 3 cas confirmés d'invention
+// (Gando/Maeva/Tonton Zouzoua) qui motivent cette contrainte.
+function construireInstructionsLectureDirigee(resumePassage) {
+  const resume = (resumePassage || '').toString().trim();
+  return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- LECTURE DIRIGÉE (mécanisme différent de la Lecture méthodique et de la Lecture suivie : NE PAS appliquer le squelette Hypothèse/Axes de lecture/Entrées-Indices-Analyse-Interprétation. Il s'agit d'un contrôle de lecture guidé sur une portion de texte lue en autonomie par l'élève, pas d'une analyse littéraire.)
+
+Le DÉVELOPPEMENT de cette fiche comporte EXACTEMENT 3 parties, dans cet ordre, chacune introduite par le titre exact indiqué :
+
+I. Portion de texte à lire -- NE LA RÉDIGE PAS toi-même : place à cet endroit, seul sur sa ligne, sans aucun texte avant ni après ni autour, EXACTEMENT ce jeton : {{PORTION_LECTURE_DIRIGEE}}
+
+II. Questionnaire de compréhension -- liste numérotée de questions portant UNIQUEMENT sur les faits, les personnages, la chronologie et les enjeux de la portion lue -- AUCUNE question d'analyse littéraire (pas d'axe de lecture, pas de procédé stylistique, pas d'interprétation).
+
+III. Corrigé du questionnaire (pour l'enseignant) -- réponses numérotées, une par question de la partie II, dans le même ordre.
+
+RÈGLE ABSOLUE, SOURCE UNIQUE DES FAITS POUR LES PARTIES II ET III : tu ne connais PAS le contenu réel de cette œuvre au-delà du résumé fourni ci-dessous par l'enseignant. N'invente et ne complète AUCUN fait, nom de personnage, lieu, événement ou rebondissement qui n'y figure pas explicitement -- même s'il te semble plausible ou si tu penses reconnaître l'œuvre. En cas de doute, formule une question qui reste strictement dans les limites de ce résumé plutôt que d'aller au-delà.
+
+RÉSUMÉ DE LA PORTION FOURNI PAR L'ENSEIGNANT (seule source de faits autorisée pour les parties II et III) :
+${resume}`;
+}
+// ============= FIN ÉTUDE DE L'ŒUVRE INTÉGRALE -- SECOND CYCLE =============
 
 // Recherche web (02/09) : quand l'enseignant n'a fourni NI biographie NI
 // thème pour Séance 1, cherche l'auteur/l'œuvre réels via l'outil web_search
@@ -5413,9 +5531,20 @@ function limiterGenerationParIp(req, res, next) {
       // réservé aux scripts de débogage/investigation appelant l'API directement.
       origineGeneration = 'enseignant',
       typeSeanceOI = '', passagePages = '', contexteNarratif = '', bilanSynthese = '',
-      contenuLibreSeance11 = ''
+      contenuLibreSeance11 = '',
+      // Lecture dirigée (second cycle uniquement, 13/09) -- résumé factuel de
+      // la portion lue, fourni par l'enseignant, seule source de faits
+      // autorisée pour le questionnaire/corrigé (cf. construireInstructionsLectureDirigee).
+      resumePassageLectureDirigee = ''
     } = req.body;
     const estOeuvreIntegrale = sousModule === 'oeuvre_integrale';
+    // Second cycle (13/09) : catalogue-piloté, jamais la structure fixe
+    // S1-S11 du collège -- résolu UNE FOIS ici, réutilisé pour gater à la
+    // fois la validation bloquante ci-dessous et la construction du
+    // systemPrompt plus bas (cf. resoudreProfilSecondCycle). null pour
+    // toute classe de collège/primaire : le chemin collège reste alors
+    // exactement inchangé (gate `!profilInfoOI`).
+    const profilInfoOI = estOeuvreIntegrale ? resoudreProfilSecondCycle(classe) : null;
     const origineGenerationNormalisee = origineGeneration === 'session_debug' ? 'session_debug' : 'enseignant';
     // planSeancesOI/unitesSens/questionsEvaluation/reponsesEvaluation :
     // tableaux -- reçus tels quels en JSON, ou en chaîne JSON quand la
@@ -5442,8 +5571,11 @@ function limiterGenerationParIp(req, res, next) {
     // complet du modèle pour la Séance 11 (Évaluation finale, contenu
     // intégralement saisi par l'enseignant, cf. construireFicheLibreOeuvreSeance11)
     // -- fait ICI, avant modelePersonnel/systemPrompt, pour ne rien construire
-    // d'inutile sur ce chemin.
-    if (estOeuvreIntegrale) {
+    // d'inutile sur ce chemin. Gate `!profilInfoOI` (13/09) : réservé au
+    // collège -- le second cycle a sa propre validation catalogue-pilotée
+    // juste en dessous, aucune des deux structures n'a de sens pour l'autre
+    // profil (S1-S11 fixe ici, séquences/séances variables par profil là-bas).
+    if (estOeuvreIntegrale && !profilInfoOI) {
       const messageBlocageSequence = validerSequenceOeuvreIntegrale({
         seance, titreOeuvre, auteurOeuvre, axeEtude, planSeancesOI, typeSeanceOI, situationApprentissageOeuvre
       });
@@ -5470,6 +5602,34 @@ function limiterGenerationParIp(req, res, next) {
         res.flushHeaders();
         res.write(`data: ${JSON.stringify({ done: true, ficheId: fiche11._id, contenuFinal: contenuHTML11 })}\n\n`);
         return res.end();
+      }
+    }
+
+    // Étude de l'œuvre intégrale, SECOND CYCLE (13/09) : validation
+    // structurelle catalogue-pilotée (cf. resoudreSequenceOeuvreLycee/
+    // validerSeanceOeuvreLycee). Seule Lecture dirigée est implémentée pour
+    // l'instant (instruction explicite de l'enseignant du 13/09 : "concentre-
+    // toi sur Lecture dirigée d'abord... on reviendra sur Exposé et Culture
+    // littéraire une fois Lecture dirigée validé") -- tout autre type de
+    // séance du catalogue est explicitement refusé ci-dessous, jamais
+    // silencieusement mal généré.
+    let seanceCatalogueOI = null;
+    if (estOeuvreIntegrale && profilInfoOI) {
+      const leconCatalogueOI = await resoudreSequenceOeuvreLycee(profilInfoOI.profil, numeroSequence);
+      const messageBlocageOI = validerSeanceOeuvreLycee(leconCatalogueOI, seance, typeSeanceOI);
+      if (messageBlocageOI) {
+        return envoyerBlocageSSE(res, messageBlocageOI);
+      }
+      seanceCatalogueOI = leconCatalogueOI.seances.find((s) => s.numeroSeance === parseInt(seance, 10));
+
+      if (typeSeanceOI !== 'lecture_dirigee') {
+        return envoyerBlocageSSE(res, `Le type de séance "${typeSeanceOI || '(non renseigné)'}" n'est pas encore disponible pour le second cycle -- seule Lecture dirigée est implémentée pour l'instant.`);
+      }
+      if (!(titreOeuvre || '').toString().trim() || !(auteurOeuvre || '').toString().trim()) {
+        return envoyerBlocageSSE(res, "Le titre et l'auteur de l'œuvre sont obligatoires pour générer une fiche de cette séquence.");
+      }
+      if (!(passagePages || '').toString().trim() || !(resumePassageLectureDirigee || '').toString().trim()) {
+        return envoyerBlocageSSE(res, "Pour une séance de Lecture dirigée, l'enseignant doit fournir la référence des pages/chapitres à lire et un résumé factuel de cette portion (faits, personnages, chronologie, enjeux).");
       }
     }
 
@@ -5532,8 +5692,12 @@ function limiterGenerationParIp(req, res, next) {
     let leconAfficheeOI = '';
     let seanceAfficheeOI = '';
     let developpementLectureSuivieHTML = null;
+    // Second cycle, Lecture dirigée uniquement pour l'instant (13/09) --
+    // même mécanisme d'injection après coup que developpementLectureSuivieHTML
+    // ci-dessus, cf. construireSectionPortionLectureDirigeeHTML.
+    let portionLectureDirigeeHTML = null;
 
-    if (estOeuvreIntegrale) {
+    if (estOeuvreIntegrale && !profilInfoOI) {
       leconAfficheeOI = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre);
       activiteAffichee = ACTIVITE_OEUVRE_INTEGRALE;
       systemPrompt += `\n\nCHAMP ACTIVITÉ DE L'ENTÊTE : écris EXACTEMENT "${ACTIVITE_OEUVRE_INTEGRALE}" dans le champ Activité de l'entête -- jamais "Étude de l'œuvre intégrale" ni une autre formulation.`;
@@ -5601,6 +5765,29 @@ function limiterGenerationParIp(req, res, next) {
         } else {
           return envoyerBlocageSSE(res, 'Sous-type de séance invalide pour cette tranche (2 à 9) -- choisissez Lecture suivie ou Lecture méthodique.');
         }
+      }
+    } else if (estOeuvreIntegrale && profilInfoOI) {
+      // Second cycle, catalogue-piloté (13/09) : contrairement au collège
+      // ci-dessus, Leçon = séquence(numeroSequence)/Séance(numeroSeance)
+      // viennent du catalogue (cf. resoudreSequenceOeuvreLycee, déjà validé
+      // plus haut -- seanceCatalogueOI garanti non-null ici). AUCUNE valeur
+      // de Compétence forcée : les intitulés de compétence DPFC du second
+      // cycle en Français n'ont pas encore été sourcés (absents du PDF
+      // progressions -- cf. point resté en suspens), contrairement au
+      // collège où COMPETENCE_OEUVRE_INTEGRALE est une valeur connue et
+      // vérifiée. Laissé à la résolution générale par défaut plutôt que
+      // d'imposer une valeur non vérifiée.
+      leconAfficheeOI = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre);
+      activiteAffichee = ACTIVITE_OEUVRE_INTEGRALE;
+      systemPrompt += `\n\nCHAMP ACTIVITÉ DE L'ENTÊTE : écris EXACTEMENT "${ACTIVITE_OEUVRE_INTEGRALE}" dans le champ Activité de l'entête -- jamais "Étude de l'œuvre intégrale" ni une autre formulation.`;
+      systemPrompt += `\n\nCHAMP LEÇON DE L'ENTÊTE : écris EXACTEMENT "${leconAfficheeOI}" dans le champ Leçon de l'entête, sans reformulation.`;
+
+      seanceAfficheeOI = `${seance} : ${(seanceCatalogueOI && seanceCatalogueOI.intitule) || ''}`.trim();
+      systemPrompt += `\n\nCHAMP SÉANCE DE L'ENTÊTE : écris EXACTEMENT "${seanceAfficheeOI}" dans le champ Séance de l'entête, sans reformulation.`;
+
+      if (typeSeanceOI === 'lecture_dirigee') {
+        systemPrompt += construireInstructionsLectureDirigee(resumePassageLectureDirigee);
+        portionLectureDirigeeHTML = construireSectionPortionLectureDirigeeHTML({ titreOeuvre, auteurOeuvre, passagePages });
       }
     } else if (niveau !== 'primaire') {
       // Contrairement à Leçon/Séance, le champ Activité n'était jamais
@@ -6080,7 +6267,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       contenuHTML = injecterActiviteEntete(contenuHTML, activiteAffichee);
       contenuHTML = nettoyerCellulePresentationRituelle(contenuHTML);
       contenuHTML = nettoyerPlaceholdersNonExecutes(contenuHTML);
-      if (estOeuvreIntegrale) {
+      if (estOeuvreIntegrale && !profilInfoOI) {
         contenuHTML = injecterChampEntete(contenuHTML, 'Compétence', COMPETENCE_OEUVRE_INTEGRALE);
         contenuHTML = injecterChampEntete(contenuHTML, 'Leçon', leconAfficheeOI);
         contenuHTML = injecterChampEntete(contenuHTML, 'Séance', seanceAfficheeOI);
@@ -6108,6 +6295,14 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           res.write(`data: ${JSON.stringify({ avertissement: "La structure attendue (I- Présentation de l'auteur / II- Présentation de l'œuvre / III- Axe d'étude) n'a pas été générée correctement pour cette fiche -- le modèle a produit une autre structure (probablement le squelette générique Habiletés/Contenus). Ne pas utiliser cette fiche telle quelle : régénérez-la." })}\n\n`);
         } else if (seanceNumOIFinal === 10 && !structureConclusionOeuvrePresente(contenuHTML)) {
           res.write(`data: ${JSON.stringify({ avertissement: "La structure attendue (I- Les thèmes abordés / II- Jugement critique / III- Schéma actantiel) n'a pas été générée correctement pour cette fiche -- le modèle a produit une autre structure (probablement le squelette générique Habiletés/Contenus). Ne pas utiliser cette fiche telle quelle : régénérez-la." })}\n\n`);
+        }
+      } else if (estOeuvreIntegrale && profilInfoOI) {
+        // Second cycle -- pas d'injection Compétence (cf. commentaire plus
+        // haut, données non sourcées pour l'instant).
+        contenuHTML = injecterChampEntete(contenuHTML, 'Leçon', leconAfficheeOI);
+        contenuHTML = injecterChampEntete(contenuHTML, 'Séance', seanceAfficheeOI);
+        if (portionLectureDirigeeHTML) {
+          contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{PORTION_LECTURE_DIRIGEE}}', portionLectureDirigeeHTML);
         }
       }
       // Contrôle des 3 marqueurs attendus du mode plan-enseignant, AVANT toute
