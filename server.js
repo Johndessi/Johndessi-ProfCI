@@ -5924,6 +5924,26 @@ function limiterGenerationParIp(req, res, next) {
       systemPrompt += planFourniExploitationInjection.planCoursPourPromptFinal;
     }
 
+    // Étude de l'œuvre intégrale (13/09) : le frontend n'envoie JAMAIS de
+    // champ "lecon" pour cette activité (cf. genererFicheOeuvreIntegrale()
+    // dans public/index.html -- "champs" ne le contient à aucun moment,
+    // pour aucune séance) -- seul systemPrompt (via leconAfficheeOI/
+    // seanceAfficheeOI, construits plus haut) porte l'information réelle.
+    // Sans ce correctif, "${lecon} ${theme}" s'interpolait ici en la chaîne
+    // littérale "undefined " envoyée telle quelle au modèle dans le message
+    // utilisateur. Constaté empiriquement (13/09, en régénérant une Séance 1
+    // pour vérifier la structure S1-S11) : la plupart du temps le modèle
+    // ignore cet artefact et suit quand même les instructions détaillées de
+    // systemPrompt, mais pas toujours -- reproduit une fois sur deux essais
+    // consécutifs un échec où le modèle demande la leçon manquante au lieu
+    // de générer, malgré un systemPrompt complet. Corrigé en construisant
+    // ici un intitulé cohérent avec ce que systemPrompt annonce déjà,
+    // plutôt que de laisser le champ vide/undefined se glisser dans le
+    // message utilisateur.
+    const leconThemeAffiche = estOeuvreIntegrale
+      ? `${leconAfficheeOI} — Séance ${seanceAfficheeOI}`
+      : `${lecon || ''} ${theme || ''}`.trim();
+
     let userMessage = '';
     if (modelePersonnel) {
       userMessage = `REPRODUIS exactement la STRUCTURE de ce modèle de fiche pour générer une nouvelle fiche.
@@ -5934,7 +5954,7 @@ ${modelePersonnel.structure}
 NOUVELLE FICHE À GÉNÉRER :
 - Discipline / Matière : ${discipline}
 - Classe : ${classe}
-- Leçon / Thème : ${lecon} ${theme}
+- Leçon / Thème : ${leconThemeAffiche}
 - Séance n° : ${seance}
 - Durée : ${duree}
 ${planCours ? `\nPLAN DE COURS FOURNI PAR L'ENSEIGNANT :\n${planCours}` : ''}
@@ -5944,7 +5964,7 @@ Génère la fiche COMPLÈTE en HTML en respectant EXACTEMENT la structure du mod
       userMessage = `Génère une fiche de cours COMPLÈTE pour :
 - Discipline / Matière : ${discipline}
 - Classe : ${classe}
-- Leçon / Thème : ${lecon} ${theme}
+- Leçon / Thème : ${leconThemeAffiche}
 - Séance n° : ${seance}
 - Durée : ${duree}
 - Niveau : ${niveau}
