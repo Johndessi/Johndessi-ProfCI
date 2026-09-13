@@ -194,7 +194,7 @@ textarea { resize: vertical; min-height: 90px; }
         </div>
         <div class="form-group">
           <label>Classe *</label>
-          <select id="classe" onchange="chargerSuggestionsLecons();verifierCatalogueOfficiel()">
+          <select id="classe" onchange="mettreAJourVisibiliteActivite();chargerSuggestionsLecons();verifierCatalogueOfficiel()">
             <optgroup label="Secondaire">
               <option>6ème</option><option>5ème</option>
               <option>4ème</option><option>3ème</option>
@@ -221,6 +221,7 @@ textarea { resize: vertical; min-height: 90px; }
             <option>Expression orale</option>
             <option>Étude d'œuvre intégrale</option>
           </select>
+          <p id="activiteSecondCycleInfo" style="display:none;font-size:12px;color:var(--gris2);margin-top:4px">Second cycle (2026-2027) : Grammaire/Orthographe/Expression orale n'existent plus comme activités séparées.</p>
         </div>
       </div>
 
@@ -627,16 +628,81 @@ function normaliserTexteSimple(s) {
   return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
+// Miroir client de resoudreProfilSecondCycle() côté serveur (server.js) --
+// GARDER SYNCHRONISÉ. Le menu Classe distingue déjà les séries (2nde,
+// 1ère A/C/D, Tle A/C/D), mais le programme DPFC réel ne connaît que 5
+// profils -- 1ère C et 1ère D partagent un programme identique (idem Tle
+// C/D), et 2nde n'a qu'un seul programme pour les deux séries. Sert
+// uniquement à choisir la liste d'activités affichée ici (le serveur reste
+// la seule source de vérité pour le routage réel de la génération).
+function resoudreProfilSecondCycle(classe) {
+  const c = normaliserTexteSimple(classe).replace(/\s+/g, ' ');
+  if (!c) return null;
+  if (/^2\s*nde\b|^seconde\b/.test(c)) return { profil: '2nde', niveau: '2nde', serie: null };
+  if (/^1\s*[e]?re\b|^premiere\b/.test(c)) {
+    if (/\ba\b/.test(c)) return { profil: '1ereA', niveau: '1ere', serie: 'A' };
+    if (/\bc\b|\bd\b/.test(c)) return { profil: '1ereCD', niveau: '1ere', serie: 'CD' };
+    return null;
+  }
+  if (/^tle\b|^terminale\b/.test(c)) {
+    if (/\ba\b/.test(c)) return { profil: 'TleA', niveau: 'Tle', serie: 'A' };
+    if (/\bc\b|\bd\b/.test(c)) return { profil: 'TleCD', niveau: 'Tle', serie: 'CD' };
+    return null;
+  }
+  return null;
+}
+
+// Capturé UNE SEULE FOIS, avant toute mutation possible du <select> -- sert à
+// restaurer les options collège quand l'enseignant repasse d'une classe de
+// second cycle à une classe de collège, sans dupliquer la liste en dur ici
+// (source unique : le HTML du <select> lui-même).
+let optionsActiviteCollegeHTML = null;
+
+// Second cycle Français (chantier 2026-2027, 13/09) : Grammaire/Orthographe/
+// Expression orale disparaissent comme activités séparées, remplacées par 3
+// colonnes -- Étude de l'œuvre intégrale, Perfectionnement de la langue,
+// Expression écrite -- plus "Savoir-faire" qui cohabite avec Perfectionnement
+// selon les trimestres et devient "Préparation à l'oral du BAC" en Terminale
+// (renommage par niveau, pas une activité de plus). "Étude d'œuvre intégrale"
+// et "Expression écrite" réutilisent EXACTEMENT le même libellé qu'au collège
+// (cf. mettreAJourVisibiliteOeuvreIntegrale/mettreAJourVisibiliteResume, qui
+// comparent une chaîne exacte) -- seul le contenu derrière diffère.
+function optionsActiviteSecondCycleHTML(niveau) {
+  const savoirFaire = niveau === 'Tle' ? "Préparation à l'oral du BAC" : 'Savoir-faire';
+  return [
+    '<option value="">-- Choisir une activité --</option>',
+    "<option>Étude d'œuvre intégrale</option>",
+    '<option>Perfectionnement de la langue</option>',
+    `<option>${savoirFaire}</option>`,
+    '<option>Expression écrite</option>'
+  ].join('');
+}
+
 // Le champ Discipline est un texte libre (l'enseignant tape "Français" à la
 // main, ce n'est pas un menu déroulant) : le sélecteur Activité n'a de sens
 // que pour le secondaire, et seulement quand la discipline saisie est le
-// Français (les autres matières n'ont pas cette subdivision aujourd'hui).
+// Français (les autres matières n'ont pas cette subdivision aujourd'hui). Au
+// second cycle (classe résolue en profil, cf. resoudreProfilSecondCycle),
+// la LISTE d'activités change entièrement -- vérifié avant toute autre
+// logique de visibilité, jamais mélangé avec les options collège.
 function mettreAJourVisibiliteActivite() {
   const discipline = document.getElementById('discipline').value.trim();
   const estFrancais = normaliserTexteSimple(discipline) === 'francais';
   const visible = niveauActuel === 'secondaire' && estFrancais;
   document.getElementById('activiteGroup').style.display = visible ? 'block' : 'none';
-  if (!visible) document.getElementById('activite').value = '';
+
+  const selectActivite = document.getElementById('activite');
+  if (optionsActiviteCollegeHTML === null) optionsActiviteCollegeHTML = selectActivite.innerHTML;
+  const profilSecondCycle = visible ? resoudreProfilSecondCycle(document.getElementById('classe').value) : null;
+  const valeurPrecedente = selectActivite.value;
+  selectActivite.innerHTML = profilSecondCycle ? optionsActiviteSecondCycleHTML(profilSecondCycle.niveau) : optionsActiviteCollegeHTML;
+  // Conserve la sélection si elle existe encore dans la nouvelle liste (ex.
+  // "Expression écrite"/"Étude d'œuvre intégrale", partagées collège/second
+  // cycle) -- sinon revient au placeholder plutôt qu'une valeur invalide.
+  selectActivite.value = Array.from(selectActivite.options).some((o) => o.value === valeurPrecedente) ? valeurPrecedente : '';
+  document.getElementById('activiteSecondCycleInfo').style.display = (visible && profilSecondCycle) ? 'block' : 'none';
+
+  if (!visible) selectActivite.value = '';
   mettreAJourVisibiliteResume();
   mettreAJourVisibiliteOeuvreIntegrale();
 }
