@@ -3710,22 +3710,42 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
       if (Array.isArray(val)) return val.map((v) => (v || '').toString().trim()).filter(Boolean).join('\n');
       return (val || '').toString().trim();
     };
+    const diagnosticChamp = (obj, nom) => {
+      if (!obj) return `${nom}: absent`;
+      const vides = ['strategie', 'enseignant', 'eleves', 'traces'].filter((c) => !versTexte(obj[c]));
+      return vides.length ? `${nom}: vide(${vides.join(',')})` : `${nom}: ok`;
+    };
+    const sectionIIIIncluseDiag = !!parsed.techniqueExpressionPresente;
+    // Diagnostic temporaire (15/09) : régression constatée en prod juste
+    // après l'ajout du champ "presentation" (65-80% d'échec sur 2 batches de
+    // vérification) -- avant d'ajuster encore la consigne à l'aveugle, on
+    // vérifie ICI si SEUL "presentation" est touché ou si l'ajout de ce
+    // champ a dégradé le taux de remplissage des AUTRES champs aussi
+    // (vocabulaire/grammaire/evaluation, historiquement fiables à ~7/8).
+    const diagnosticComplet = [
+      diagnosticChamp(parsed.presentation, 'presentation'),
+      diagnosticChamp(parsed.vocabulaire, 'vocabulaire'),
+      diagnosticChamp(parsed.grammaire, 'grammaire'),
+      diagnosticChamp(parsed.evaluation, 'evaluation'),
+      sectionIIIIncluseDiag ? diagnosticChamp(parsed.techniqueExpression, 'techniqueExpression') : 'techniqueExpression: non demandé (presente=false)'
+    ].join(' | ');
+
     const validerChamp = (obj, nom) => {
-      if (!obj) throw new Error(`champ "${nom}" manquant dans la réponse du modèle (stop_reason: ${reponse.stop_reason})`);
+      if (!obj) throw new Error(`champ "${nom}" manquant dans la réponse du modèle (stop_reason: ${reponse.stop_reason}) [DIAGNOSTIC: ${diagnosticComplet}]`);
       obj.strategie = versTexte(obj.strategie);
       obj.enseignant = versTexte(obj.enseignant);
       obj.eleves = versTexte(obj.eleves);
       obj.traces = versTexte(obj.traces);
       if (!obj.strategie || !obj.enseignant || !obj.eleves || !obj.traces) {
         const sousChampsVides = ['strategie', 'enseignant', 'eleves', 'traces'].filter((c) => !obj[c]);
-        throw new Error(`champ "${nom}" incomplet dans la réponse du modèle (sous-champ(s) vide(s) : ${sousChampsVides.join(', ')} ; stop_reason: ${reponse.stop_reason})`);
+        throw new Error(`champ "${nom}" incomplet dans la réponse du modèle (sous-champ(s) vide(s) : ${sousChampsVides.join(', ')} ; stop_reason: ${reponse.stop_reason}) [DIAGNOSTIC: ${diagnosticComplet}]`);
       }
     };
     validerChamp(parsed.presentation, 'presentation');
     validerChamp(parsed.vocabulaire, 'vocabulaire');
     validerChamp(parsed.grammaire, 'grammaire');
     validerChamp(parsed.evaluation, 'evaluation');
-    const sectionIIIIncluse = !!parsed.techniqueExpressionPresente;
+    const sectionIIIIncluse = sectionIIIIncluseDiag;
     if (sectionIIIIncluse) validerChamp(parsed.techniqueExpression, 'techniqueExpression');
 
     const texteSupportFinal = texteFourni || (parsed.texteSupport || '').toString().trim();
