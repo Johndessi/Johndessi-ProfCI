@@ -6310,7 +6310,19 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenuHTML = injecterChampEntete(contenuHTML, 'Leçon', leconAfficheeOI);
         contenuHTML = injecterChampEntete(contenuHTML, 'Séance', seanceAfficheeOI);
         if (portionLectureDirigeeHTML) {
-          contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{PORTION_LECTURE_DIRIGEE}}', portionLectureDirigeeHTML);
+          // Filet déterministe (15/09, même principe que structureIntroductionOeuvrePresente
+          // ci-dessus) : constaté en test réel en production -- le modèle
+          // n'a pas toujours reproduit le jeton {{PORTION_LECTURE_DIRIGEE}}
+          // malgré la consigne explicite, ce qui faisait disparaître
+          // silencieusement la Partie I (injecterMarqueurUneFois ne fait
+          // rien si le jeton est absent). Jamais un échec silencieux : un
+          // avertissement explicite à l'enseignant plutôt qu'une fiche
+          // incomplète sans avertir personne.
+          if (!contenuHTML.includes('{{PORTION_LECTURE_DIRIGEE}}')) {
+            res.write(`data: ${JSON.stringify({ avertissement: "La partie \"I. Portion de texte à lire\" n'a pas été générée correctement pour cette fiche (le modèle n'a pas reproduit le repère attendu). Ne pas utiliser cette fiche telle quelle : régénérez-la." })}\n\n`);
+          } else {
+            contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{PORTION_LECTURE_DIRIGEE}}', portionLectureDirigeeHTML);
+          }
         }
       }
       // Contrôle des 3 marqueurs attendus du mode plan-enseignant, AVANT toute
