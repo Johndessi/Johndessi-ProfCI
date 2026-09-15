@@ -3623,7 +3623,15 @@ async function genererDeroulementExploitationAuto({ texteSupport, lecon, classe,
   // explicite. En la déplaçant ici, le modèle principal ne voit plus JAMAIS
   // ce tableau pour cette fiche (cf. inclureDeveloppementGenerique=false) :
   // il n'a donc plus cette forme à reproduire.
-  const consignePresentation = `PRÉSENTATION (ligne rituelle de début de séance, ordre FIXE, un ÉCHANGE professeur/élèves par étape) : (a) Salutation (b) Appel (c) Date du jour (d) Identification de l'activité du jour selon la répartition${avecRappelSeancePrecedente ? ' (e) Rappel de la séance précédente' : ''} (f) Annonce de la leçon/séance du jour (g) Lecture de la situation d'apprentissage et mise au tableau du texte support (h) Identification de la notion à partir de la situation (i) Annonce du titre officiel de la leçon (j) Transition vers le vocabulaire/la grammaire du jour. "enseignant"/"eleves" = questions et réponses de ce rituel, alignées 1 pour 1. "traces" = UNIQUEMENT le titre de la Leçon "${(lecon || '').toString().trim()}" et de la Séance ${(seance || '').toString().trim()} -- jamais la situation d'apprentissage ni aucun autre contenu.`;
+  // Style volontairement calqué sur EVALUATION plus bas (affectation directe
+  // strategie=/enseignant=/eleves=/traces=, jamais une simple description) :
+  // constaté en test réel (15/09) que la 1ère version, plus descriptive,
+  // laissait un taux élevé de champs "presentation" incomplets (65% sur un
+  // batch de 20) -- vraisemblablement "strategie", jamais explicitement
+  // cadré alors que les 4 autres sections lui donnaient toujours une valeur
+  // concrète à recopier ou adapter, jamais à inventer depuis une consigne
+  // ouverte.
+  const consignePresentation = `PRÉSENTATION : strategie="Procédé interrogatif ; questions-réponses" ; enseignant=UNE question par étape rituelle, dans cet ordre fixe, chaque étape sur sa propre ligne : (a) Salutation (b) Appel (c) Date du jour (d) Identification de l'activité du jour selon la répartition${avecRappelSeancePrecedente ? ' (e) Rappel de la séance précédente' : ''} (f) Annonce de la leçon/séance du jour (g) Lecture de la situation d'apprentissage et mise au tableau du texte support (h) Identification de la notion à partir de la situation (i) Annonce du titre officiel de la leçon (j) Transition vers le vocabulaire/la grammaire du jour ; eleves=UNE réponse attendue par question ci-dessus, alignée 1 pour 1, même ordre, même nombre de lignes ; traces="Leçon ${(lecon || '').toString().trim()} / Séance ${(seance || '').toString().trim()}" -- jamais la situation d'apprentissage ni aucun autre contenu dans traces. Les 4 champs (strategie, enseignant, eleves, traces) de cette section sont OBLIGATOIRES et ne doivent JAMAIS rester vides.`;
 
   const system = `Tu prépares UNIQUEMENT le contenu pédagogique (présentation rituelle, vocabulaire, grammaire, éventuellement technique d'expression, évaluation) d'une séance d'Exploitation de texte -- une activité d'étude PONCTUELLE du vocabulaire et de la grammaire d'un texte. Ce n'est PAS une lecture méthodique : n'utilise JAMAIS les mots ou notions "hypothèse", "axe", "vérification de l'hypothèse" -- ils n'ont AUCUNE place dans cette tâche, y compris dans la présentation.
 
@@ -3709,7 +3717,8 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
       obj.eleves = versTexte(obj.eleves);
       obj.traces = versTexte(obj.traces);
       if (!obj.strategie || !obj.enseignant || !obj.eleves || !obj.traces) {
-        throw new Error(`champ "${nom}" incomplet dans la réponse du modèle (stop_reason: ${reponse.stop_reason})`);
+        const sousChampsVides = ['strategie', 'enseignant', 'eleves', 'traces'].filter((c) => !obj[c]);
+        throw new Error(`champ "${nom}" incomplet dans la réponse du modèle (sous-champ(s) vide(s) : ${sousChampsVides.join(', ')} ; stop_reason: ${reponse.stop_reason})`);
       }
     };
     validerChamp(parsed.presentation, 'presentation');
