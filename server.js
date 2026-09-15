@@ -3591,6 +3591,7 @@ DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa 
 const CHAMPS_SECTION_EXPLOITATION_AUTO = ['STRATEGIE', 'ENSEIGNANT', 'ELEVES', 'TRACES'];
 
 const LIBELLES_MOMENT_EXPLOITATION_AUTO = {
+  PRESENTATION: 'PRÉSENTATION',
   I: 'I. VOCABULAIRE',
   II: 'II. GRAMMAIRE',
   III: "III. TECHNIQUE D'EXPRESSION",
@@ -3603,7 +3604,7 @@ const LIBELLES_MOMENT_EXPLOITATION_AUTO = {
 // ci-dessus). Jamais de repli silencieux : un échec (API, JSON invalide,
 // champ manquant) remonte explicite via `succes: false` -- à l'appelant de
 // bloquer la génération plutôt que de produire une fiche partielle.
-async function genererDeroulementExploitationAuto({ texteSupport, lecon, classe }) {
+async function genererDeroulementExploitationAuto({ texteSupport, lecon, classe, seance, avecRappelSeancePrecedente }) {
   const niveau = niveauLectureMethodique(classe);
   const figuresNiveau = figureStyleParNiveauCollege(niveau === 'lycee' ? '4e_3e' : niveau).description;
   const texteFourni = (texteSupport || '').toString().trim();
@@ -3612,11 +3613,25 @@ async function genererDeroulementExploitationAuto({ texteSupport, lecon, classe 
     ? `Voici le texte support fourni par l'enseignant, à analyser TEL QUEL, sans le modifier ni le remplacer : "${texteFourni}"`
     : `Aucun texte support n'a été fourni. Invente toi-même un texte court (3 à 6 phrases), réaliste, adapté au niveau ${classe} et au thème de la leçon "${(lecon || '').toString().trim()}" (ancré dans le quotidien ivoirien), PUIS analyse-le. Retourne ce texte inventé dans le champ "texteSupport" du JSON ci-dessous (jamais null dans ce cas).`;
 
-  const system = `Tu prépares UNIQUEMENT le contenu pédagogique (vocabulaire, grammaire, éventuellement technique d'expression, évaluation) d'une séance d'Exploitation de texte -- une activité d'étude PONCTUELLE du vocabulaire et de la grammaire d'un texte. Ce n'est PAS une lecture méthodique : n'utilise JAMAIS les mots ou notions "hypothèse", "axe", "vérification de l'hypothèse" -- ils n'ont AUCUNE place dans cette tâche.
+  // PRÉSENTATION fusionnée dans cet appel isolé (15/09, v3) : auparavant
+  // rédigée par le modèle PRINCIPAL (seule ligne du tableau DÉROULEMENT
+  // restée à sa charge), elle l'exposait malgré tout au tableau générique
+  // complet montré dans construirePromptSecondaire (PRÉSENTATION +
+  // DÉVELOPPEMENT numéroté "I- ... II- ..." + ÉVALUATION) juste avant --
+  // constaté (15/09, 20 essais) que cette seule exposition suffisait à faire
+  // dériver le modèle vers cette forme, malgré l'interdiction textuelle
+  // explicite. En la déplaçant ici, le modèle principal ne voit plus JAMAIS
+  // ce tableau pour cette fiche (cf. inclureDeveloppementGenerique=false) :
+  // il n'a donc plus cette forme à reproduire.
+  const consignePresentation = `PRÉSENTATION (ligne rituelle de début de séance, ordre FIXE, un ÉCHANGE professeur/élèves par étape) : (a) Salutation (b) Appel (c) Date du jour (d) Identification de l'activité du jour selon la répartition${avecRappelSeancePrecedente ? ' (e) Rappel de la séance précédente' : ''} (f) Annonce de la leçon/séance du jour (g) Lecture de la situation d'apprentissage et mise au tableau du texte support (h) Identification de la notion à partir de la situation (i) Annonce du titre officiel de la leçon (j) Transition vers le vocabulaire/la grammaire du jour. "enseignant"/"eleves" = questions et réponses de ce rituel, alignées 1 pour 1. "traces" = UNIQUEMENT le titre de la Leçon "${(lecon || '').toString().trim()}" et de la Séance ${(seance || '').toString().trim()} -- jamais la situation d'apprentissage ni aucun autre contenu.`;
+
+  const system = `Tu prépares UNIQUEMENT le contenu pédagogique (présentation rituelle, vocabulaire, grammaire, éventuellement technique d'expression, évaluation) d'une séance d'Exploitation de texte -- une activité d'étude PONCTUELLE du vocabulaire et de la grammaire d'un texte. Ce n'est PAS une lecture méthodique : n'utilise JAMAIS les mots ou notions "hypothèse", "axe", "vérification de l'hypothèse" -- ils n'ont AUCUNE place dans cette tâche, y compris dans la présentation.
 
 ${consigneTexte}
 
-Utilise l'outil fourni pour transmettre ce contenu. Pour chaque section (vocabulaire, grammaire, techniqueExpression, evaluation) : "strategie" = résumé très court de la démarche ; "enseignant" = questions/consignes posées par l'enseignant ; "eleves" = réponses attendues, alignées 1 pour 1 avec les questions ; "traces" = ce qui reste écrit au tableau (contenu réel, jamais un jeton). IMPORTANT : chaque champ (strategie, enseignant, eleves, traces) est TOUJOURS une seule chaîne de caractères -- si tu as plusieurs questions/réponses pour une même section, sépare-les par des retours à la ligne À L'INTÉRIEUR de cette même chaîne, jamais sous forme de liste séparée.
+Utilise l'outil fourni pour transmettre ce contenu. Pour chaque section (presentation, vocabulaire, grammaire, techniqueExpression, evaluation) : "strategie" = résumé très court de la démarche ; "enseignant" = questions/consignes posées par l'enseignant ; "eleves" = réponses attendues, alignées 1 pour 1 avec les questions ; "traces" = ce qui reste écrit au tableau (contenu réel, jamais un jeton). IMPORTANT : chaque champ (strategie, enseignant, eleves, traces) est TOUJOURS une seule chaîne de caractères -- si tu as plusieurs questions/réponses pour une même section, sépare-les par des retours à la ligne À L'INTÉRIEUR de cette même chaîne, jamais sous forme de liste séparée.
+
+${consignePresentation}
 
 VOCABULAIRE : pas seulement des mots isolés -- selon ce que CE texte permet réellement (jamais forcé, jamais inventé), choisis parmi sens en contexte, sens propre/figuré d'un mot (SANS nommer de figure de style -- réservé à techniqueExpression), dérivation/famille de mots, synonymes/antonymes, niveau de langue ; explique chaque point EN CONTEXTE et fais employer le mot dans une phrase nouvelle ; plusieurs points si le texte le permet, jamais réduit à un seul par principe. JAMAIS les mots comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style ici.
 
@@ -3647,13 +3662,14 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
       texteSupport: texteFourni
         ? { type: ['string', 'null'], description: 'Toujours null ici : le texte support est déjà fourni par l\'enseignant.' }
         : { type: 'string', description: 'Le texte court inventé (3 à 6 phrases), jamais vide.' },
+      presentation: champSchema,
       vocabulaire: champSchema,
       grammaire: champSchema,
       techniqueExpressionPresente: { type: 'boolean' },
       techniqueExpression: { ...champSchema, type: ['object', 'null'] },
       evaluation: champSchema
     },
-    required: ['vocabulaire', 'grammaire', 'techniqueExpressionPresente', 'evaluation']
+    required: ['presentation', 'vocabulaire', 'grammaire', 'techniqueExpressionPresente', 'evaluation']
   };
 
   // Une seule tentative -- appelée jusqu'à 2 fois (cf. boucle plus bas) car
@@ -3696,6 +3712,7 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
         throw new Error(`champ "${nom}" incomplet dans la réponse du modèle (stop_reason: ${reponse.stop_reason})`);
       }
     };
+    validerChamp(parsed.presentation, 'presentation');
     validerChamp(parsed.vocabulaire, 'vocabulaire');
     validerChamp(parsed.grammaire, 'grammaire');
     validerChamp(parsed.evaluation, 'evaluation');
@@ -3708,22 +3725,44 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
     // data-expl-auto="1" : même attribut que v1, pour rester détectable par
     // supprimerLignesExploitationAutoDupliquees si le modèle principal
     // écrit malgré tout une ligne libre en plus (filet redondant conservé).
-    const ligne = (moment, champ) => construireLigneDeroulementHTML({
-      moment,
+    // Désormais posé aussi sur PRÉSENTATION (15/09, v3) : cette ligne n'est
+    // plus rédigée par le modèle principal, cf. commentaire plus haut.
+    const ligne = (moment, champ, extra = '') => construireLigneDeroulementHTML({
+      moment: extra ? `${moment}${extra}` : moment,
       strategie: echapperHtml(champ.strategie),
       activiteEnseignant: echapperHtml(champ.enseignant),
       activiteEleves: echapperHtml(champ.eleves),
       tracesEcrites: echapperHtml(champ.traces)
     }).replace('<tr>', '<tr data-expl-auto="1">');
 
-    const lignes = [ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.I, parsed.vocabulaire), ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.II, parsed.grammaire)];
+    const lignes = [ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.PRESENTATION, parsed.presentation, '<br>(5 mn)')];
+    lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.I, parsed.vocabulaire));
+    lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.II, parsed.grammaire));
     if (sectionIIIIncluse) lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.III, parsed.techniqueExpression));
     lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.EVAL, parsed.evaluation));
 
-    return { succes: true, texteSupportFinal, lignesHTML: lignes.join('\n'), sectionIIIIncluse, erreur: null };
+    // Table COMPLÈTE (en-tête inclus) depuis la v3 (15/09) : avant, seules
+    // les lignes I/II/III/EVAL étaient retournées, insérées par le modèle
+    // principal à l'intérieur d'un <table> qu'il construisait lui-même
+    // (avec sa propre ligne PRÉSENTATION juste avant). Le modèle principal
+    // ne construit plus ce tableau du tout pour cette fiche (cf.
+    // construireInstructionsExploitationDeTexte) : cette fonction fournit
+    // donc désormais le <table> entier, prêt à insérer tel quel au marqueur.
+    const tableCompletHTML = `<table style="width:100%;border-collapse:collapse;">
+  <tr>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Moments didactiques / Durée</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:20%;">Stratégies pédagogiques / Plan du cours</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités de l'enseignant</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités des élèves</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Traces écrites</th>
+  </tr>
+${lignes.join('\n')}
+</table>`;
+
+    return { succes: true, texteSupportFinal, tableCompletHTML, sectionIIIIncluse, erreur: null };
   }
 
-  let resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: null };
+  let resultat = { succes: false, texteSupportFinal: texteFourni, tableCompletHTML: '', sectionIIIIncluse: false, erreur: null };
   const NB_TENTATIVES_MAX = 2;
   for (let tentative = 1; tentative <= NB_TENTATIVES_MAX; tentative++) {
     try {
@@ -3732,7 +3771,7 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
     } catch (e) {
       const prefixe = tentative < NB_TENTATIVES_MAX ? '⚠️ (nouvelle tentative)' : '❌';
       console.error(`${prefixe} genererDeroulementExploitationAuto (tentative ${tentative}/${NB_TENTATIVES_MAX}):`, e.message);
-      resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: e.message };
+      resultat = { succes: false, texteSupportFinal: texteFourni, tableCompletHTML: '', sectionIIIIncluse: false, erreur: e.message };
     }
   }
   return resultat;
@@ -3749,11 +3788,11 @@ STRUCTURE OBLIGATOIRE SPÉCIFIQUE — EXPLOITATION DE TEXTE (cette fiche porte s
 
 INTERDICTION EXPLICITE, PARTOUT dans le document (y compris la Situation d'apprentissage et n'importe quelle autre partie de la fiche, pas seulement le tableau développement) : n'utilise JAMAIS, pour cette fiche, le vocabulaire ni la structure de la Lecture méthodique -- pas de "Hypothèse générale", pas de "Axe 1"/"Axe 2"/"Axe 3", pas de tableau d'entrées Indices/Analyse/Interprétation. PIÈGE FRÉQUENT si le texte support est un texte argumentatif : sa thèse et ses arguments NE sont PAS des axes de lecture -- n'écris JAMAIS "Axe 1 : la formulation de la thèse" ni "Axe 2 : les arguments" ni rien de similaire ; le seul découpage autorisé pour CETTE fiche est vocabulaire/grammaire(/technique d'expression), jamais une analyse de l'argumentation elle-même.
 
-ORDRE OBLIGATOIRE DES ÉLÉMENTS : Entête, PUIS Tableau Habiletés/Contenus, PUIS Situation d'apprentissage, PUIS Tableau Supports didactiques/Bibliographie, PUIS Texte support (marqueur {{TEXTE_SUPPORT}}, une seule fois, jamais {{TEXTE_SUPPORT_COPIE}}), PUIS Tableau 5 colonnes.
+ORDRE OBLIGATOIRE DES ÉLÉMENTS, ET FIN DE TA RÉPONSE : Entête, PUIS Tableau Habiletés/Contenus, PUIS Situation d'apprentissage, PUIS Tableau Supports didactiques/Bibliographie, PUIS Texte support (marqueur {{TEXTE_SUPPORT}}, une seule fois, jamais {{TEXTE_SUPPORT_COPIE}}), PUIS EXACTEMENT le marqueur {{DEROULEMENT_EXPLOITATION_AUTO}} seul sur sa propre ligne, PUIS referme immédiatement </div>. C'est la FIN de ta réponse.
 
 TABLEAU HABILETÉS ET CONTENUS : verbes taxonomiques centrés sur le vocabulaire et la grammaire${sectionIIIIncluse ? ", plus la technique d'expression (ex. Identifier, Relever, Expliquer, Utiliser)" : " (ex. Identifier, Relever, Expliquer -- la technique d'expression n'est pas pertinente pour ce texte, ne l'inclus pas)"} -- jamais "Produire un texte", qui n'a pas sa place ici. La colonne Contenus reste elle aussi centrée sur le vocabulaire et la grammaire : jamais "Hypothèse générale", jamais "Axe 1"/"Axe 2"/"I-"/"II-" numérotant une analyse du texte (thèse, arguments, structure...), même sous une autre formulation -- ce n'est le rôle d'aucune partie de cette fiche.
 
-DÉVELOPPEMENT — le contenu du tableau DÉROULEMENT (lignes I. VOCABULAIRE, II. GRAMMAIRE${sectionIIIIncluse ? ", III. TECHNIQUE D'EXPRESSION" : ''}, ÉVALUATION) est ENTIÈREMENT DÉJÀ RÉDIGÉ et sera injecté automatiquement par le serveur -- tu n'écris JAMAIS toi-même une seule ligne de ce tableau, ni son contenu, ni ses intitulés. Ta SEULE tâche pour ce tableau : écrire la ligne PRÉSENTATION rituelle du début de séance (identique à toutes les autres fiches, celle-ci reste à ta charge comme d'habitude), puis, juste après son </tr>, place EXACTEMENT le marqueur {{DEROULEMENT_EXPLOITATION_AUTO}} comme SEUL contenu à cet endroit (pas de <tr>/<td> autour, rien d'autre). N'écris RIEN sur le vocabulaire, la grammaire, une hypothèse de lecture ou des axes -- ce n'est pas ton rôle pour cette fiche.`;
+TABLEAU DÉROULEMENT (PRÉSENTATION comprise) — ENTIÈREMENT PRIS EN CHARGE PAR LE SERVEUR, JAMAIS PAR TOI : contrairement à toutes les autres fiches, tu n'écris NI la ligne PRÉSENTATION rituelle NI aucune autre ligne de ce tableau pour CETTE fiche -- ni son en-tête, ni son contenu, ni ses intitulés, ni même la balise <table> qui le contiendrait. Le tableau complet (en-tête + PRÉSENTATION + vocabulaire/grammaire${sectionIIIIncluse ? '/technique d\'expression' : ''}/évaluation) est déjà entièrement rédigé et sera injecté automatiquement au marqueur {{DEROULEMENT_EXPLOITATION_AUTO}}. N'écris RIEN sur la présentation rituelle, le vocabulaire, la grammaire, une hypothèse de lecture ou des axes -- ce n'est pas ton rôle pour cette fiche. Ta réponse se termine au marqueur (suivi de la fermeture </div>) : aucun <table>, <tr>, <td> ni <th> après le texte support.`;
 }
 
 // Filet redondant : constaté en test réel (16/08, 2e itération) -- même en
@@ -3804,44 +3843,43 @@ function supprimerLignesExploitationAutoDupliquees(contenuHTML) {
   return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
 }
 
-// Filet déterministe final (09/09) : constaté en test réel que le modèle
-// principal peut ignorer le marqueur {{DEROULEMENT_EXPLOITATION_AUTO}} et
-// écrire lui-même sa propre analyse du texte -- y compris en contournant
-// l'interdiction explicite des mots "Axe"/"Hypothèse générale" en la
-// reformulant sous une autre forme (ex. numérotation "I- La structure du
-// texte / II- Les arguments..." observée sur un texte argumentatif, 3e,
-// 09/09). Interdire des formulations une à une est un jeu perdu d'avance --
-// dans ce cas, AUCUNE ligne data-expl-auto="1" n'existe dans le document
-// (supprimerLignesExploitationAutoDupliquees n'a donc rien à faire) : on
-// repère alors la ligne PRÉSENTATION (toujours rédigée par le modèle, jamais
-// générée côté serveur) dans le tableau à 5 colonnes, on supprime toutes les
-// AUTRES lignes à 5 colonnes de ce même tableau -- quel que soit leur
-// contenu ou leur formulation -- et on insère à la place le contenu déjà
-// construit côté serveur. Jamais un simple avertissement quand on peut
-// corriger déterministiquement.
-function forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, lignesHTML) {
-  if (!contenuHTML || !contenuHTML.includes('<tr') || !lignesHTML) return contenuHTML;
+// Filet déterministe final (09/09, réécrit le 15/09 pour la v3) : constaté
+// en test réel que le modèle principal peut ignorer le marqueur
+// {{DEROULEMENT_EXPLOITATION_AUTO}} et écrire lui-même sa propre analyse du
+// texte -- y compris en contournant l'interdiction explicite des mots
+// "Axe"/"Hypothèse générale" en la reformulant sous une autre forme (ex.
+// numérotation "I- La structure du texte / II- Les arguments..." observée
+// sur un texte argumentatif, 3e, 09/09 puis encore le 15/09 malgré le
+// renforcement de PR#57/58). Interdire des formulations une à une est un jeu
+// perdu d'avance -- dans ce cas, AUCUNE ligne data-expl-auto="1" n'existe
+// dans le document (supprimerLignesExploitationAutoDupliquees n'a donc rien
+// à faire).
+// Avant la v3, la ligne PRÉSENTATION restait rédigée par le modèle (seule
+// partie du tableau qui lui restait) et servait d'ancre fiable pour ce
+// filet. Depuis la v3, PRÉSENTATION est ELLE AUSSI générée par
+// genererDeroulementExploitationAuto -- si le modèle ignore le marqueur, il
+// n'y a donc plus d'ancre légitime à préserver : toute table à 5 colonnes
+// trouvée dans le document est nécessairement une tentative libre du modèle
+// (jamais une ligne server-side qu'il faudrait garder), et est supprimée en
+// bloc -- le tableau complet déjà construit côté serveur est alors ajouté à
+// sa place. Jamais un simple avertissement quand on peut corriger
+// déterministiquement.
+function forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, tableCompletHTML) {
+  if (!contenuHTML || !tableCompletHTML) return contenuHTML;
   const $ = cheerio.load(contenuHTML);
   if ($('tr[data-expl-auto="1"]').length > 0) return contenuHTML;
 
-  let presentationEl = null;
-  $('tr').each((_, tr) => {
-    if (presentationEl) return;
-    const $tds = $(tr).find('> td');
-    if ($tds.length !== 5) return;
-    if (/PR[ÉE]SENTATION/i.test($tds.first().text())) presentationEl = tr;
-  });
-  if (!presentationEl) return contenuHTML;
-
-  const $table = $(presentationEl).closest('table');
-  $table.find('tr').each((_, tr) => {
-    if (tr === presentationEl) return;
-    if ($(tr).find('> td').length === 5) $(tr).remove();
-  });
-  $(presentationEl).after(lignesHTML);
-
   const $racine = $('.fiche-cours').first();
-  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+  const $cible = $racine.length ? $racine : ($('body').length ? $('body') : $.root());
+
+  $cible.find('table').each((_, table) => {
+    const $table = $(table);
+    const a5Colonnes = $table.find('tr').toArray().some((tr) => $(tr).find('> td').length === 5);
+    if (a5Colonnes) $table.remove();
+  });
+
+  $cible.append(tableCompletHTML);
+  return $.html($cible);
 }
 
 // Filet déterministe complémentaire (09/09) : même après le filet ci-dessus
@@ -4277,7 +4315,7 @@ function resumerSeancesPrecedentes(fichesPrecedentes) {
   }).join('\n\n');
 }
 
-function construirePromptSecondaire(avecVerbesTaxonomiques, avecRappelSeancePrecedente) {
+function construirePromptSecondaire(avecVerbesTaxonomiques, avecRappelSeancePrecedente, inclureDeveloppementGenerique = true) {
   const commentaireHabiletes = avecVerbesTaxonomiques
     ? '<!-- lignes avec verbes taxonomiques : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire -->'
     : '<!-- lignes avec les habiletés/objectifs pertinents pour cette leçon -->';
@@ -4339,6 +4377,63 @@ function construirePromptSecondaire(avecVerbesTaxonomiques, avecRappelSeancePrec
     ? `<!-- PRÉSENTATION : ordre FIXE des étapes rituelles ci-dessous, chaque étape = un ÉCHANGE professeur/élèves aligné 1 pour 1 entre les colonnes Activités de l'enseignant et Activités des élèves (JAMAIS un monologue du professeur seul) : (a) Salutation (b) Appel (c) Date du jour (d) Identification de l'activité du jour selon la répartition${avecRappelSeancePrecedente ? ' (e) Rappel de la séance précédente' : ''} (f) Annonce d'une nouvelle leçon/séance (g) Lecture de la situation d'apprentissage et mise au tableau du corpus/support (h) Identification de la notion à partir de la situation (i) Annonce du titre officiel de la leçon (j) Transition vers la première notion de la séance du jour. -->`
     : '';
 
+  // Exploitation de texte, Mode 1 automatique (15/09, v3) : le tableau
+  // DÉROULEMENT entier -- PRÉSENTATION comprise, plus VOCABULAIRE/GRAMMAIRE/
+  // TECHNIQUE D'EXPRESSION/ÉVALUATION -- est désormais généré par l'appel
+  // isolé genererDeroulementExploitationAuto (même mécanisme tool_use
+  // déterministe que le reste de son contenu) et injecté tel quel après le
+  // texte support. Avant cette version, seul le contenu du tableau était
+  // retiré au modèle principal ; il restait exposé à l'exemple complet de ce
+  // tableau ci-dessous (PRÉSENTATION rituelle + un DÉVELOPPEMENT modèle
+  // numéroté "I- ... II- ... III- ...") dans CE MÊME prompt -- constaté sur
+  // un batch de 20 essais (15/09) que malgré l'interdiction textuelle
+  // explicite plus bas, le modèle reproduisait cette forme structurelle
+  // (biais de continuité de génération, pas un simple oubli de consigne) :
+  // 55% des brouillons dérivaient encore vers un squelette Hypothèse/Axes ou
+  // sa reformulation "I-/II-" numérotée -- exactement la forme donnée ici en
+  // exemple. En ne montrant plus JAMAIS ce tableau au modèle principal pour
+  // ce cas, il n'a plus cette forme à reproduire.
+  const sectionDeveloppementGenerique = inclureDeveloppementGenerique ? `
+<!-- DÉROULEMENT - 5 COLONNES OBLIGATOIRES -->
+<table style="width:100%;border-collapse:collapse;">
+  <tr>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Moments didactiques / Durée</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:20%;">Stratégies pédagogiques / Plan du cours</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités de l'enseignant</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités des élèves</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Traces écrites</th>
+  </tr>
+  ${commentairePresentation}
+  <tr>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">PRÉSENTATION<br>(5 mn)</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[stratégie : questions-réponses, procédé interrogatif...]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationActiviteEnseignant}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationActiviteEleves}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationTraces}</td>
+  </tr>
+  <!-- DÉVELOPPEMENT : UNE SEULE LIGNE pour toute la phase (jamais une ligne par point). La numérotation I-1, I-2, II-1... n'apparaît QUE dans "Plan du cours" et "Traces écrites". Dans "Activités de l'enseignant" et "Activités des élèves", rédige chaque question/réponse avec un simple tiret "- ", SANS préfixe numéroté, mais en respectant STRICTEMENT le même ordre entre les deux colonnes : la 1ère question correspond à la 1ère réponse, la 2ème à la 2ème, etc., pour garder l'alignement question/réponse. -->
+  <tr>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">DÉVELOPPEMENT<br>(35-40 mn)</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[plan détaillé : I- ... II- ... III- ...]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">- [question]<br>- [question]<br>- [question]<br>- [question]<br>...</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">- [réponse]<br>- [réponse]<br>- [réponse]<br>- [réponse]<br>...</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">I-1) [trace écrite]<br>I-2) [trace écrite]<br>II-1) [trace écrite]<br>II-2) [trace écrite]<br>...</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">ÉVALUATION<br>(10-15 mn)</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[travail individuel]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[exercices d'application]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[élèves s'exécutent]</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[correction]</td>
+  </tr>
+</table>
+` : '';
+
+  const reglesTableauDeveloppement = inclureDeveloppementGenerique ? `- Si le champ Séance n° est supérieur à 1 pour la même leçon, la PRÉSENTATION doit obligatoirement inclure un rappel explicite (question de l'enseignant + réponse attendue + trace écrite) du contenu vu à la ou les séance(s) précédente(s) de cette leçon, avant d'entamer le contenu nouveau.
+- Toujours 3 phases = 3 lignes du tableau : Présentation / Développement / Évaluation. La ligne Développement est UNIQUE (jamais une ligne par point) : les paragraphes de questions/réponses sont alignés à la même position dans les colonnes Activités de l'enseignant / Activités des élèves (tirets simples "- ", SANS numérotation), la numérotation I-1, I-2, II-1... restant réservée aux colonnes Plan du cours et Traces écrites
+- La colonne Traces écrites de la ligne PRÉSENTATION (rituelle, début de séance) contient UNIQUEMENT le titre de la Leçon et de la Séance (même contenu que les champs Leçon/Séance de l'entête) -- jamais la Situation d'apprentissage ni aucun autre contenu déjà présent ailleurs dans la fiche, qui ne doit jamais y être recopié.
+` : '';
+
   return `Tu es un expert en pédagogie ivoirienne (APC/DPFC).
 Tu génères des fiches de cours COMPLÈTES au format officiel des lycées et collèges de Côte d'Ivoire.
 
@@ -4380,40 +4475,7 @@ STRUCTURE OBLIGATOIRE EN HTML :
   </tr>
 </table>
 
-<!-- DÉROULEMENT - 5 COLONNES OBLIGATOIRES -->
-<table style="width:100%;border-collapse:collapse;">
-  <tr>
-    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Moments didactiques / Durée</th>
-    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:20%;">Stratégies pédagogiques / Plan du cours</th>
-    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités de l'enseignant</th>
-    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités des élèves</th>
-    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Traces écrites</th>
-  </tr>
-  ${commentairePresentation}
-  <tr>
-    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">PRÉSENTATION<br>(5 mn)</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[stratégie : questions-réponses, procédé interrogatif...]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationActiviteEnseignant}</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationActiviteEleves}</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationTraces}</td>
-  </tr>
-  <!-- DÉVELOPPEMENT : UNE SEULE LIGNE pour toute la phase (jamais une ligne par point). La numérotation I-1, I-2, II-1... n'apparaît QUE dans "Plan du cours" et "Traces écrites". Dans "Activités de l'enseignant" et "Activités des élèves", rédige chaque question/réponse avec un simple tiret "- ", SANS préfixe numéroté, mais en respectant STRICTEMENT le même ordre entre les deux colonnes : la 1ère question correspond à la 1ère réponse, la 2ème à la 2ème, etc., pour garder l'alignement question/réponse. -->
-  <tr>
-    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">DÉVELOPPEMENT<br>(35-40 mn)</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[plan détaillé : I- ... II- ... III- ...]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">- [question]<br>- [question]<br>- [question]<br>- [question]<br>...</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">- [réponse]<br>- [réponse]<br>- [réponse]<br>- [réponse]<br>...</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">I-1) [trace écrite]<br>I-2) [trace écrite]<br>II-1) [trace écrite]<br>II-2) [trace écrite]<br>...</td>
-  </tr>
-  <tr>
-    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;">ÉVALUATION<br>(10-15 mn)</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[travail individuel]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[exercices d'application]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[élèves s'exécutent]</td>
-    <td style="border:1px solid #000;padding:6px;vertical-align:top;">[correction]</td>
-  </tr>
-</table>
-
+${sectionDeveloppementGenerique}
 </div>
 
 ADAPTATIONS PAR DISCIPLINE :
@@ -4432,10 +4494,7 @@ RÈGLES ABSOLUES :
 - Réponds UNIQUEMENT en HTML pur, JAMAIS de backticks, JAMAIS de markdown
 - Situation d'apprentissage toujours ancrée dans le quotidien ivoirien (lycées, marchés, quartiers CI)
 - Traces écrites = contenu réel complet du cours (définitions, règles, exemples concrets)
-${reglesVerbesTaxonomiques}- Si le champ Séance n° est supérieur à 1 pour la même leçon, la PRÉSENTATION doit obligatoirement inclure un rappel explicite (question de l'enseignant + réponse attendue + trace écrite) du contenu vu à la ou les séance(s) précédente(s) de cette leçon, avant d'entamer le contenu nouveau.
-- Toujours 3 phases = 3 lignes du tableau : Présentation / Développement / Évaluation. La ligne Développement est UNIQUE (jamais une ligne par point) : les paragraphes de questions/réponses sont alignés à la même position dans les colonnes Activités de l'enseignant / Activités des élèves (tirets simples "- ", SANS numérotation), la numérotation I-1, I-2, II-1... restant réservée aux colonnes Plan du cours et Traces écrites
-- La colonne Traces écrites de la ligne PRÉSENTATION (rituelle, début de séance) contient UNIQUEMENT le titre de la Leçon et de la Séance (même contenu que les champs Leçon/Séance de l'entête) -- jamais la Situation d'apprentissage ni aucun autre contenu déjà présent ailleurs dans la fiche, qui ne doit jamais y être recopié.
-- Tout le contenu de la fiche (corpus, dialogues, exemples, exercices, corrections) est rédigé EXCLUSIVEMENT en français -- n'insère jamais un mot ou une expression d'une autre langue (anglais compris) au milieu d'une phrase française.
+${reglesVerbesTaxonomiques}${reglesTableauDeveloppement}- Tout le contenu de la fiche (corpus, dialogues, exemples, exercices, corrections) est rédigé EXCLUSIVEMENT en français -- n'insère jamais un mot ou une expression d'une autre langue (anglais compris) au milieu d'une phrase française.
 - Cohérence interne obligatoire : toute règle énoncée dans une Trace écrite doit être appliquée de façon identique partout ailleurs dans la même fiche (corpus, dialogue enseignant/élèves, corrections d'exercices) -- ne jamais laisser un exemple du corpus ou une réponse du dialogue contredire la règle donnée par cette même fiche. Avant de finaliser, vérifie que chaque exemple concret cité (phrase du corpus, réponse d'élève, correction) respecte bien la règle qu'il est censé illustrer, y compris son orthographe/accord. Une observation/remarque qui commente une phrase précise ne doit citer entre guillemets QUE des mots présents mot pour mot dans cette phrase -- jamais une forme vue ailleurs dans la fiche (ex. dans un tableau de conjugaison) si elle n'apparaît pas réellement dans la phrase commentée.
 - Vocabulaire (listes de mots-exemples illustrant une notion d'orthographe ou de grammaire) : chaque mot cité doit être un mot français réel, correctement orthographié, et effectivement illustrer le point traité -- jamais un mot inventé, un anglicisme, ni une forme approximative justifiée par une mention comme "(variante)", "(ancien)", "(dialectal)" ou "(populaire)" : si un mot semble incertain, choisis-en un autre, certain, plutôt que de l'utiliser quand même.
 - Faits vérifiables (personnes, lieux, événements, statistiques) : toute affirmation qui se présente comme un fait réel et vérifiable -- un nom de personne (entrepreneur, personnage historique, scientifique...), un lieu précis, un événement daté, un chiffre ou une statistique -- doit être soit réelle et exacte, soit explicitement signalée comme fictive/illustrative (ex. « M. Koné, entrepreneur fictif », « dans un village imaginaire », « à titre d'exemple, supposons que... »). N'invente JAMAIS un nom à consonance réelle, un chiffre plausible ou un événement précis présenté sans réserve comme un fait établi : une situation d'apprentissage, un exposé modèle ou un exemple illustratif peuvent parfaitement rester génériques (« un jeune entrepreneur », « certaines régions », « de nombreuses écoles ») ou clairement fictifs, mais jamais donner une fausse impression de réalité vérifiable. Ceci s'applique aussi quand le nom lui-même est réel : utiliser le nom d'une personne qui a réellement existé n'autorise jamais à lui attribuer un rôle, une date, une action ou une déclaration qu'elle n'a pas réellement eu(e) -- chaque fait concret associé à ce nom doit, lui aussi, être exact (ex. ne jamais prêter un rôle dans un événement historique à quelqu'un qui n'était pas encore né ou trop jeune à l'époque). En cas de doute sur l'exactitude d'un détail concernant une personne réelle, omets ce détail plutôt que de l'affirmer. S'applique à toute discipline : Histoire-Géo (personnages, dates, événements historiques), SVT/Physique-Chimie (données chiffrées, résultats d'expérience, noms de scientifiques), comme au Français (personnage cité dans une situation d'apprentissage ou un exposé).
@@ -5786,7 +5845,14 @@ function limiterGenerationParIp(req, res, next) {
     }
 
     const avecRappelSeancePrecedente = Number.isFinite(parseInt(seance, 10)) && parseInt(seance, 10) > 1;
-    let systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : construirePromptSecondaire(avecVerbesTaxonomiques, avecRappelSeancePrecedente);
+    // Calculé ICI, avant la construction du prompt (déterminé plus bas une
+    // seconde fois au moment du dispatch réel, cf. estExploitation -- pur et
+    // basé sur les mêmes champs de requête, donc toujours identique) : permet
+    // de ne JAMAIS montrer le tableau DÉROULEMENT générique au modèle
+    // principal quand le Mode 1 automatique d'Exploitation de texte va être
+    // déclenché (cf. commentaire dans construirePromptSecondaire).
+    const modeAutoExploitationPrevu = estExploitationDeTexte({ discipline, lecon, theme, activite }) && !planCoursEstSubstantiel(planCours);
+    let systemPrompt = niveau === 'primaire' ? PROMPT_PRIMAIRE : construirePromptSecondaire(avecVerbesTaxonomiques, avecRappelSeancePrecedente, !modeAutoExploitationPrevu);
 
     let avertissementRappel = null;
     // Blocs HTML déjà construits par construireDeroulementPlanEnseignantHTML,
@@ -6087,7 +6153,7 @@ function limiterGenerationParIp(req, res, next) {
             avertissementRappel = avertissementRappel ? `${avertissementRappel} ${resultatPlanFourniExploitation.avertissement}` : resultatPlanFourniExploitation.avertissement;
           }
         } else {
-          const resultatExploitationAuto = await genererDeroulementExploitationAuto({ texteSupport, lecon, classe });
+          const resultatExploitationAuto = await genererDeroulementExploitationAuto({ texteSupport, lecon, classe, seance, avecRappelSeancePrecedente });
           if (!resultatExploitationAuto.succes) {
             return envoyerBlocageSSE(res, `La génération automatique du contenu vocabulaire/grammaire a échoué (${resultatExploitationAuto.erreur || 'erreur inconnue'}) -- réessayez, ou fournissez vous-même un texte support et régénérez.`, heartbeat);
           }
@@ -6530,18 +6596,23 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       }
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
       contenuHTML = injecterDeroulementExploitationPlanEnseignant(contenuHTML, planFourniExploitationInjection);
-      // Mode 1 déterministe d'Exploitation de texte, v2 (08/09) : le contenu
-      // (lignes <tr> I/II/III/EVAL) a déjà été construit AVANT le streaming
-      // principal (cf. genererDeroulementExploitationAuto, exploitationAutoResultat)
-      // -- il ne reste plus qu'à l'injecter au marqueur que le modèle
-      // principal devait placer. supprimerLignesExploitationAutoDupliquees
-      // (via separerLignesDeroulementExploitation plus bas) reste un filet
-      // redondant pour le cas où le modèle écrirait malgré tout une ligne
-      // libre en plus.
+      // Mode 1 déterministe d'Exploitation de texte, v3 (15/09) : le tableau
+      // DÉROULEMENT COMPLET (en-tête + PRÉSENTATION + I/II/III/EVAL) a déjà
+      // été construit AVANT le streaming principal (cf.
+      // genererDeroulementExploitationAuto, exploitationAutoResultat) -- le
+      // modèle principal ne construit plus AUCUNE partie de ce tableau (ni
+      // PRÉSENTATION, ni en-tête, cf. construireInstructionsExploitationDeTexte)
+      // et ne voit même plus l'exemple générique de ce tableau dans son
+      // prompt (cf. inclureDeveloppementGenerique dans construirePromptSecondaire).
+      // Il ne reste plus qu'à injecter ce tableau au marqueur que le modèle
+      // devait placer. supprimerLignesExploitationAutoDupliquees et
+      // forcerDeveloppementExploitationAutoSiAbsent restent des filets
+      // redondants pour le cas, désormais plus rare, où le modèle écrirait
+      // malgré tout du contenu libre à la place.
       if (modeAutoExploitationDeterministe && exploitationAutoResultat) {
-        contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{DEROULEMENT_EXPLOITATION_AUTO}}', exploitationAutoResultat.lignesHTML);
+        contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{DEROULEMENT_EXPLOITATION_AUTO}}', exploitationAutoResultat.tableCompletHTML);
         contenuHTML = supprimerLignesExploitationAutoDupliquees(contenuHTML);
-        contenuHTML = forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, exploitationAutoResultat.lignesHTML);
+        contenuHTML = forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, exploitationAutoResultat.tableCompletHTML);
         contenuHTML = supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML);
       }
       if (estLectureMethodique({ discipline, lecon, theme })) {
