@@ -5104,6 +5104,14 @@ Lecture autonome de « ${titre} » de ${auteur}, ${pages}.</p>`;
 // modèle ne "connaît" pas réellement le contenu du livre au-delà de ce que
 // l'enseignant lui fournit ici -- cf. les 3 cas confirmés d'invention
 // (Gando/Maeva/Tonton Zouzoua) qui motivent cette contrainte.
+// Durcissement du 15/09 : un test réel en production ("Une vie", Maupassant)
+// a montré le modèle attribuer à Jeanne une attirance romantique envers
+// Julien de Lamare que le résumé fourni n'énonçait pas -- une inférence
+// psychologique plausible, mais une invention au sens de la règle. La
+// contrainte interdit désormais explicitement toute question/réponse sur les
+// pensées, sentiments ou réactions intérieures d'un personnage qui ne soit
+// pas écrite noir sur blanc dans le résumé -- une déduction "logique" reste
+// une invention si elle n'y figure pas.
 function construireInstructionsLectureDirigee(resumePassage) {
   const resume = (resumePassage || '').toString().trim();
   return `
@@ -5114,11 +5122,11 @@ Le DÉVELOPPEMENT de cette fiche comporte EXACTEMENT 3 parties, dans cet ordre, 
 
 I. Portion de texte à lire -- NE LA RÉDIGE PAS toi-même : place à cet endroit, seul sur sa ligne, sans aucun texte avant ni après ni autour, EXACTEMENT ce jeton : {{PORTION_LECTURE_DIRIGEE}}
 
-II. Questionnaire de compréhension -- liste numérotée de questions portant UNIQUEMENT sur les faits, les personnages, la chronologie et les enjeux de la portion lue -- AUCUNE question d'analyse littéraire (pas d'axe de lecture, pas de procédé stylistique, pas d'interprétation).
+II. Questionnaire de compréhension -- liste numérotée de questions portant UNIQUEMENT sur les faits, les personnages, la chronologie et les enjeux de la portion lue, tels que VÉRIFIABLES dans le résumé ci-dessous -- AUCUNE question d'analyse littéraire (pas d'axe de lecture, pas de procédé stylistique, pas d'interprétation) ET AUCUNE question sur les pensées, sentiments, émotions ou motivations intérieures d'un personnage, SAUF si le résumé les énonce lui-même explicitement (ex. le résumé dit littéralement "elle rêve de bonheur" -> question autorisée sur ce point précis ; le résumé ne dit rien de son ressenti face à tel autre personnage ou événement -> aucune question ni réponse ne doit porter là-dessus, quelle que soit la plausibilité de l'inférence).
 
-III. Corrigé du questionnaire (pour l'enseignant) -- réponses numérotées, une par question de la partie II, dans le même ordre.
+III. Corrigé du questionnaire (pour l'enseignant) -- réponses numérotées, une par question de la partie II, dans le même ordre -- même contrainte que la partie II : chaque réponse doit être directement vérifiable dans le résumé, jamais une inférence ou une supposition ajoutée par toi.
 
-RÈGLE ABSOLUE, SOURCE UNIQUE DES FAITS POUR LES PARTIES II ET III : tu ne connais PAS le contenu réel de cette œuvre au-delà du résumé fourni ci-dessous par l'enseignant. N'invente et ne complète AUCUN fait, nom de personnage, lieu, événement ou rebondissement qui n'y figure pas explicitement -- même s'il te semble plausible ou si tu penses reconnaître l'œuvre. En cas de doute, formule une question qui reste strictement dans les limites de ce résumé plutôt que d'aller au-delà.
+RÈGLE ABSOLUE, SOURCE UNIQUE DES FAITS POUR LES PARTIES II ET III : tu ne connais PAS le contenu réel de cette œuvre au-delà du résumé fourni ci-dessous par l'enseignant. N'invente et ne complète AUCUN fait, nom de personnage, lieu, événement ou rebondissement qui n'y figure pas explicitement -- même s'il te semble plausible ou si tu penses reconnaître l'œuvre. Ceci inclut en particulier les pensées, sentiments ou réactions intérieures d'un personnage face à un autre personnage ou à un événement (ex. attirance, jalousie, peur, malaise) : n'en attribue JAMAIS un qui ne soit pas écrit noir sur blanc dans le résumé, même comme hypothèse de lecture plausible ou déduction "logique" -- une déduction, même raisonnable, reste une invention si elle n'est pas dans le texte fourni. En cas de doute sur un fait ou un ressenti, formule une question qui reste strictement dans les limites de ce résumé plutôt que d'aller au-delà, ou omets ce point.
 
 RÉSUMÉ DE LA PORTION FOURNI PAR L'ENSEIGNANT (seule source de faits autorisée pour les parties II et III) :
 ${resume}`;
