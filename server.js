@@ -3598,12 +3598,128 @@ const LIBELLES_MOMENT_EXPLOITATION_AUTO = {
   EVAL: 'ÉVALUATION'
 };
 
+// Schéma d'un bloc strategie/enseignant/eleves/traces -- réutilisé pour
+// présentation/vocabulaire/grammaire/techniqueExpression/evaluation, sur les
+// 2 appels isolés ci-dessous. Type strict "string" (jamais "array") : avec
+// tool_use, le modèle respecte ce type par construction (sortie structurée,
+// pas de JSON à taper à la main) -- cf. versTexteExploitationAuto plus bas
+// pour un filet défensif si jamais il déviait.
+const CHAMP_SCHEMA_EXPLOITATION_AUTO = {
+  type: 'object',
+  properties: {
+    strategie: { type: 'string', description: 'Résumé très court de la démarche.' },
+    enseignant: { type: 'string', description: "Questions/consignes posées par l'enseignant, une seule chaîne (retours à la ligne si plusieurs)." },
+    eleves: { type: 'string', description: "Réponses attendues, alignées 1 pour 1 avec les questions, une seule chaîne (retours à la ligne si plusieurs)." },
+    traces: { type: 'string', description: 'Ce qui reste écrit au tableau (contenu réel, jamais un jeton).' }
+  },
+  required: ['strategie', 'enseignant', 'eleves', 'traces']
+};
+
+// Filet défensif partagé : si le modèle dévie malgré le schéma (ex. un champ
+// rendu sous forme de liste plutôt que de chaîne), on normalise au lieu de
+// rejeter -- jamais de perte de contenu pour un simple écart de forme.
+function versTexteExploitationAuto(val) {
+  if (Array.isArray(val)) return val.map((v) => (v || '').toString().trim()).filter(Boolean).join('\n');
+  return (val || '').toString().trim();
+}
+
+function validerChampExploitationAuto(obj, nom, stopReason) {
+  if (!obj) throw new Error(`champ "${nom}" manquant dans la réponse du modèle (stop_reason: ${stopReason})`);
+  obj.strategie = versTexteExploitationAuto(obj.strategie);
+  obj.enseignant = versTexteExploitationAuto(obj.enseignant);
+  obj.eleves = versTexteExploitationAuto(obj.eleves);
+  obj.traces = versTexteExploitationAuto(obj.traces);
+  if (!obj.strategie || !obj.enseignant || !obj.eleves || !obj.traces) {
+    const sousChampsVides = ['strategie', 'enseignant', 'eleves', 'traces'].filter((c) => !obj[c]);
+    throw new Error(`champ "${nom}" incomplet dans la réponse du modèle (sous-champ(s) vide(s) : ${sousChampsVides.join(', ')} ; stop_reason: ${stopReason})`);
+  }
+}
+
+// PRÉSENTATION, appel isolé DÉDIÉ (15/09, v3.1) : une 1ère version fusionnait
+// ce champ dans le MÊME appel que vocabulaire/grammaire/évaluation (v3, cf.
+// genererDeroulementExploitationAuto plus bas), pour ne plus jamais exposer
+// le modèle principal au tableau DÉVELOPPEMENT générique. Cette v3 a
+// elle-même échoué en production : vérifiée sur 2 batches de 20 essais avec
+// diagnostic complet, elle produisait un tool_use structurellement valide
+// (stop_reason: tool_use, schéma respecté) mais VIDE sur 4 des 5 sections
+// (vocabulaire/grammaire/evaluation carrément ABSENTS, pas seulement
+// incomplets) 65 à 80% du temps -- pas une dérive de contenu, une
+// dégradation du mécanisme de forçage tool_use lui-même : empiler une 5e
+// section obligatoire dans un appel déjà chargé (texte support éventuel + 4
+// sections détaillées) dépasse la fiabilité de ce modèle sur cet appel.
+// Solution : un appel séparé et minimal (une seule section), qui retrouve la
+// même fiabilité que les autres appels isolés de cette fonction (~7/8
+// historique, jamais dégradée quand une seule section est demandée).
+async function genererPresentationExploitationAuto({ lecon, classe, seance, avecRappelSeancePrecedente }) {
+  const leconTexte = (lecon || '').toString().trim();
+  const seanceTexte = (seance || '').toString().trim();
+
+  const system = `Tu prépares UNIQUEMENT la ligne PRÉSENTATION (rituel de début de séance) d'une fiche d'Exploitation de texte -- une activité d'étude PONCTUELLE du vocabulaire et de la grammaire d'un texte, PAS une lecture méthodique : n'utilise JAMAIS les mots "hypothèse" ou "axe".
+
+Utilise l'outil fourni. strategie="Procédé interrogatif ; questions-réponses" (valeur fixe, recopie-la telle quelle). enseignant=UNE question par étape rituelle ci-dessous, chaque étape sur sa propre ligne, dans cet ordre fixe : (a) Salutation (b) Appel (c) Date du jour (d) Identification de l'activité du jour selon la répartition${avecRappelSeancePrecedente ? ' (e) Rappel de la séance précédente' : ''} (f) Annonce de la leçon/séance du jour (g) Lecture de la situation d'apprentissage et mise au tableau du texte support (h) Identification de la notion à partir de la situation (i) Annonce du titre officiel de la leçon (j) Transition vers le vocabulaire/la grammaire du jour. eleves=UNE réponse attendue par question ci-dessus, alignée 1 pour 1, même ordre, même nombre de lignes que enseignant. traces="Leçon ${leconTexte} / Séance ${seanceTexte}" (valeur fixe, recopie-la telle quelle -- jamais la situation d'apprentissage ni aucun autre contenu). Les 4 champs (strategie, enseignant, eleves, traces) sont OBLIGATOIRES, ne les laisse JAMAIS vides.`;
+
+  const inputSchema = {
+    type: 'object',
+    properties: { presentation: CHAMP_SCHEMA_EXPLOITATION_AUTO },
+    required: ['presentation']
+  };
+
+  async function tenterUneFois() {
+    const reponse = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system,
+      messages: [{ role: 'user', content: 'Génère le contenu demandé.' }],
+      tools: [{
+        name: 'fournir_presentation_exploitation',
+        description: "Fournit le contenu structuré de la ligne PRÉSENTATION rituelle d'une séance d'Exploitation de texte.",
+        input_schema: inputSchema
+      }],
+      tool_choice: { type: 'tool', name: 'fournir_presentation_exploitation' }
+    });
+    const toolUse = reponse.content.find((b) => b.type === 'tool_use');
+    if (!toolUse) throw new Error(`le modèle n'a pas utilisé l'outil demandé (stop_reason: ${reponse.stop_reason})`);
+    const parsed = toolUse.input || {};
+    validerChampExploitationAuto(parsed.presentation, 'presentation', reponse.stop_reason);
+
+    // data-expl-auto="1" : identifie cette ligne comme server-side (cf.
+    // supprimerLignesExploitationAutoDupliquees/forcerDeveloppementExploitationAutoSiAbsent).
+    const ligneHTML = construireLigneDeroulementHTML({
+      moment: `${LIBELLES_MOMENT_EXPLOITATION_AUTO.PRESENTATION}<br>(5 mn)`,
+      strategie: echapperHtml(parsed.presentation.strategie),
+      activiteEnseignant: echapperHtml(parsed.presentation.enseignant),
+      activiteEleves: echapperHtml(parsed.presentation.eleves),
+      tracesEcrites: echapperHtml(parsed.presentation.traces)
+    }).replace('<tr>', '<tr data-expl-auto="1">');
+
+    return { succes: true, ligneHTML, erreur: null };
+  }
+
+  let resultat = { succes: false, ligneHTML: '', erreur: null };
+  const NB_TENTATIVES_MAX = 2;
+  for (let tentative = 1; tentative <= NB_TENTATIVES_MAX; tentative++) {
+    try {
+      resultat = await tenterUneFois();
+      break;
+    } catch (e) {
+      const prefixe = tentative < NB_TENTATIVES_MAX ? '⚠️ (nouvelle tentative)' : '❌';
+      console.error(`${prefixe} genererPresentationExploitationAuto (tentative ${tentative}/${NB_TENTATIVES_MAX}):`, e.message);
+      resultat = { succes: false, ligneHTML: '', erreur: e.message };
+    }
+  }
+  return resultat;
+}
+
 // Appel isolé (JSON strict) qui génère -- et, si nécessaire, invente -- le
 // contenu vocabulaire/grammaire/technique d'expression/évaluation d'une
 // séance d'Exploitation de texte, hors du prompt principal (cf. commentaire
 // ci-dessus). Jamais de repli silencieux : un échec (API, JSON invalide,
 // champ manquant) remonte explicite via `succes: false` -- à l'appelant de
 // bloquer la génération plutôt que de produire une fiche partielle.
+// PRÉSENTATION (cf. genererPresentationExploitationAuto ci-dessus, appel
+// SÉPARÉ depuis la v3.1) est lancée en parallèle de ce contenu -- 2 appels
+// indépendants, jamais 1 seul chargé de tout, pour préserver la fiabilité
+// de chacun -- puis combinée dans le tableau complet retourné ici.
 async function genererDeroulementExploitationAuto({ texteSupport, lecon, classe, seance, avecRappelSeancePrecedente }) {
   const niveau = niveauLectureMethodique(classe);
   const figuresNiveau = figureStyleParNiveauCollege(niveau === 'lycee' ? '4e_3e' : niveau).description;
@@ -3613,33 +3729,11 @@ async function genererDeroulementExploitationAuto({ texteSupport, lecon, classe,
     ? `Voici le texte support fourni par l'enseignant, à analyser TEL QUEL, sans le modifier ni le remplacer : "${texteFourni}"`
     : `Aucun texte support n'a été fourni. Invente toi-même un texte court (3 à 6 phrases), réaliste, adapté au niveau ${classe} et au thème de la leçon "${(lecon || '').toString().trim()}" (ancré dans le quotidien ivoirien), PUIS analyse-le. Retourne ce texte inventé dans le champ "texteSupport" du JSON ci-dessous (jamais null dans ce cas).`;
 
-  // PRÉSENTATION fusionnée dans cet appel isolé (15/09, v3) : auparavant
-  // rédigée par le modèle PRINCIPAL (seule ligne du tableau DÉROULEMENT
-  // restée à sa charge), elle l'exposait malgré tout au tableau générique
-  // complet montré dans construirePromptSecondaire (PRÉSENTATION +
-  // DÉVELOPPEMENT numéroté "I- ... II- ..." + ÉVALUATION) juste avant --
-  // constaté (15/09, 20 essais) que cette seule exposition suffisait à faire
-  // dériver le modèle vers cette forme, malgré l'interdiction textuelle
-  // explicite. En la déplaçant ici, le modèle principal ne voit plus JAMAIS
-  // ce tableau pour cette fiche (cf. inclureDeveloppementGenerique=false) :
-  // il n'a donc plus cette forme à reproduire.
-  // Style volontairement calqué sur EVALUATION plus bas (affectation directe
-  // strategie=/enseignant=/eleves=/traces=, jamais une simple description) :
-  // constaté en test réel (15/09) que la 1ère version, plus descriptive,
-  // laissait un taux élevé de champs "presentation" incomplets (65% sur un
-  // batch de 20) -- vraisemblablement "strategie", jamais explicitement
-  // cadré alors que les 4 autres sections lui donnaient toujours une valeur
-  // concrète à recopier ou adapter, jamais à inventer depuis une consigne
-  // ouverte.
-  const consignePresentation = `PRÉSENTATION : strategie="Procédé interrogatif ; questions-réponses" ; enseignant=UNE question par étape rituelle, dans cet ordre fixe, chaque étape sur sa propre ligne : (a) Salutation (b) Appel (c) Date du jour (d) Identification de l'activité du jour selon la répartition${avecRappelSeancePrecedente ? ' (e) Rappel de la séance précédente' : ''} (f) Annonce de la leçon/séance du jour (g) Lecture de la situation d'apprentissage et mise au tableau du texte support (h) Identification de la notion à partir de la situation (i) Annonce du titre officiel de la leçon (j) Transition vers le vocabulaire/la grammaire du jour ; eleves=UNE réponse attendue par question ci-dessus, alignée 1 pour 1, même ordre, même nombre de lignes ; traces="Leçon ${(lecon || '').toString().trim()} / Séance ${(seance || '').toString().trim()}" -- jamais la situation d'apprentissage ni aucun autre contenu dans traces. Les 4 champs (strategie, enseignant, eleves, traces) de cette section sont OBLIGATOIRES et ne doivent JAMAIS rester vides.`;
-
-  const system = `Tu prépares UNIQUEMENT le contenu pédagogique (présentation rituelle, vocabulaire, grammaire, éventuellement technique d'expression, évaluation) d'une séance d'Exploitation de texte -- une activité d'étude PONCTUELLE du vocabulaire et de la grammaire d'un texte. Ce n'est PAS une lecture méthodique : n'utilise JAMAIS les mots ou notions "hypothèse", "axe", "vérification de l'hypothèse" -- ils n'ont AUCUNE place dans cette tâche, y compris dans la présentation.
+  const system = `Tu prépares UNIQUEMENT le contenu pédagogique (vocabulaire, grammaire, éventuellement technique d'expression, évaluation) d'une séance d'Exploitation de texte -- une activité d'étude PONCTUELLE du vocabulaire et de la grammaire d'un texte. Ce n'est PAS une lecture méthodique : n'utilise JAMAIS les mots ou notions "hypothèse", "axe", "vérification de l'hypothèse" -- ils n'ont AUCUNE place dans cette tâche.
 
 ${consigneTexte}
 
-Utilise l'outil fourni pour transmettre ce contenu. Pour chaque section (presentation, vocabulaire, grammaire, techniqueExpression, evaluation) : "strategie" = résumé très court de la démarche ; "enseignant" = questions/consignes posées par l'enseignant ; "eleves" = réponses attendues, alignées 1 pour 1 avec les questions ; "traces" = ce qui reste écrit au tableau (contenu réel, jamais un jeton). IMPORTANT : chaque champ (strategie, enseignant, eleves, traces) est TOUJOURS une seule chaîne de caractères -- si tu as plusieurs questions/réponses pour une même section, sépare-les par des retours à la ligne À L'INTÉRIEUR de cette même chaîne, jamais sous forme de liste séparée.
-
-${consignePresentation}
+Utilise l'outil fourni pour transmettre ce contenu. Pour chaque section (vocabulaire, grammaire, techniqueExpression, evaluation) : "strategie" = résumé très court de la démarche ; "enseignant" = questions/consignes posées par l'enseignant ; "eleves" = réponses attendues, alignées 1 pour 1 avec les questions ; "traces" = ce qui reste écrit au tableau (contenu réel, jamais un jeton). IMPORTANT : chaque champ (strategie, enseignant, eleves, traces) est TOUJOURS une seule chaîne de caractères -- si tu as plusieurs questions/réponses pour une même section, sépare-les par des retours à la ligne À L'INTÉRIEUR de cette même chaîne, jamais sous forme de liste séparée.
 
 VOCABULAIRE : pas seulement des mots isolés -- selon ce que CE texte permet réellement (jamais forcé, jamais inventé), choisis parmi sens en contexte, sens propre/figuré d'un mot (SANS nommer de figure de style -- réservé à techniqueExpression), dérivation/famille de mots, synonymes/antonymes, niveau de langue ; explique chaque point EN CONTEXTE et fais employer le mot dans une phrase nouvelle ; plusieurs points si le texte le permet, jamais réduit à un seul par principe. JAMAIS les mots comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style ici.
 
@@ -3649,35 +3743,19 @@ TECHNIQUE D'EXPRESSION (optionnelle) : détermine D'ABORD si le texte contient r
 
 EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le sujet" ; eleves="travaillent seuls, à l'écrit" ; traces=quelques questions testant UNIQUEMENT ce qui vient d'être enseigné dans CETTE séance précise (vocabulaire et grammaire ci-dessus, et technique d'expression si présente) -- jamais un nouveau texte, jamais une consigne de rédaction.`;
 
-  // Schéma d'un bloc strategie/enseignant/eleves/traces -- réutilisé pour
-  // vocabulaire/grammaire/techniqueExpression/evaluation. Type strict
-  // "string" (jamais "array") : avec tool_use, le modèle respecte ce type
-  // par construction (sortie structurée, pas de JSON à taper à la main) --
-  // cf. versTexte ci-dessous pour un filet défensif si jamais il déviait.
-  const champSchema = {
-    type: 'object',
-    properties: {
-      strategie: { type: 'string', description: 'Résumé très court de la démarche.' },
-      enseignant: { type: 'string', description: "Questions/consignes posées par l'enseignant, une seule chaîne (retours à la ligne si plusieurs)." },
-      eleves: { type: 'string', description: "Réponses attendues, alignées 1 pour 1 avec les questions, une seule chaîne (retours à la ligne si plusieurs)." },
-      traces: { type: 'string', description: 'Ce qui reste écrit au tableau (contenu réel, jamais un jeton).' }
-    },
-    required: ['strategie', 'enseignant', 'eleves', 'traces']
-  };
   const inputSchema = {
     type: 'object',
     properties: {
       texteSupport: texteFourni
         ? { type: ['string', 'null'], description: 'Toujours null ici : le texte support est déjà fourni par l\'enseignant.' }
         : { type: 'string', description: 'Le texte court inventé (3 à 6 phrases), jamais vide.' },
-      presentation: champSchema,
-      vocabulaire: champSchema,
-      grammaire: champSchema,
+      vocabulaire: CHAMP_SCHEMA_EXPLOITATION_AUTO,
+      grammaire: CHAMP_SCHEMA_EXPLOITATION_AUTO,
       techniqueExpressionPresente: { type: 'boolean' },
-      techniqueExpression: { ...champSchema, type: ['object', 'null'] },
-      evaluation: champSchema
+      techniqueExpression: { ...CHAMP_SCHEMA_EXPLOITATION_AUTO, type: ['object', 'null'] },
+      evaluation: CHAMP_SCHEMA_EXPLOITATION_AUTO
     },
-    required: ['presentation', 'vocabulaire', 'grammaire', 'techniqueExpressionPresente', 'evaluation']
+    required: ['vocabulaire', 'grammaire', 'techniqueExpressionPresente', 'evaluation']
   };
 
   // Une seule tentative -- appelée jusqu'à 2 fois (cf. boucle plus bas) car
@@ -3703,50 +3781,11 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
     if (!toolUse) throw new Error(`le modèle n'a pas utilisé l'outil demandé (stop_reason: ${reponse.stop_reason})`);
     const parsed = toolUse.input || {};
 
-    // Filet défensif : si le modèle dévie malgré le schéma (ex. un champ
-    // rendu sous forme de liste plutôt que de chaîne), on normalise au lieu
-    // de rejeter -- jamais de perte de contenu pour un simple écart de forme.
-    const versTexte = (val) => {
-      if (Array.isArray(val)) return val.map((v) => (v || '').toString().trim()).filter(Boolean).join('\n');
-      return (val || '').toString().trim();
-    };
-    const diagnosticChamp = (obj, nom) => {
-      if (!obj) return `${nom}: absent`;
-      const vides = ['strategie', 'enseignant', 'eleves', 'traces'].filter((c) => !versTexte(obj[c]));
-      return vides.length ? `${nom}: vide(${vides.join(',')})` : `${nom}: ok`;
-    };
-    const sectionIIIIncluseDiag = !!parsed.techniqueExpressionPresente;
-    // Diagnostic temporaire (15/09) : régression constatée en prod juste
-    // après l'ajout du champ "presentation" (65-80% d'échec sur 2 batches de
-    // vérification) -- avant d'ajuster encore la consigne à l'aveugle, on
-    // vérifie ICI si SEUL "presentation" est touché ou si l'ajout de ce
-    // champ a dégradé le taux de remplissage des AUTRES champs aussi
-    // (vocabulaire/grammaire/evaluation, historiquement fiables à ~7/8).
-    const diagnosticComplet = [
-      diagnosticChamp(parsed.presentation, 'presentation'),
-      diagnosticChamp(parsed.vocabulaire, 'vocabulaire'),
-      diagnosticChamp(parsed.grammaire, 'grammaire'),
-      diagnosticChamp(parsed.evaluation, 'evaluation'),
-      sectionIIIIncluseDiag ? diagnosticChamp(parsed.techniqueExpression, 'techniqueExpression') : 'techniqueExpression: non demandé (presente=false)'
-    ].join(' | ');
-
-    const validerChamp = (obj, nom) => {
-      if (!obj) throw new Error(`champ "${nom}" manquant dans la réponse du modèle (stop_reason: ${reponse.stop_reason}) [DIAGNOSTIC: ${diagnosticComplet}]`);
-      obj.strategie = versTexte(obj.strategie);
-      obj.enseignant = versTexte(obj.enseignant);
-      obj.eleves = versTexte(obj.eleves);
-      obj.traces = versTexte(obj.traces);
-      if (!obj.strategie || !obj.enseignant || !obj.eleves || !obj.traces) {
-        const sousChampsVides = ['strategie', 'enseignant', 'eleves', 'traces'].filter((c) => !obj[c]);
-        throw new Error(`champ "${nom}" incomplet dans la réponse du modèle (sous-champ(s) vide(s) : ${sousChampsVides.join(', ')} ; stop_reason: ${reponse.stop_reason}) [DIAGNOSTIC: ${diagnosticComplet}]`);
-      }
-    };
-    validerChamp(parsed.presentation, 'presentation');
-    validerChamp(parsed.vocabulaire, 'vocabulaire');
-    validerChamp(parsed.grammaire, 'grammaire');
-    validerChamp(parsed.evaluation, 'evaluation');
-    const sectionIIIIncluse = sectionIIIIncluseDiag;
-    if (sectionIIIIncluse) validerChamp(parsed.techniqueExpression, 'techniqueExpression');
+    validerChampExploitationAuto(parsed.vocabulaire, 'vocabulaire', reponse.stop_reason);
+    validerChampExploitationAuto(parsed.grammaire, 'grammaire', reponse.stop_reason);
+    validerChampExploitationAuto(parsed.evaluation, 'evaluation', reponse.stop_reason);
+    const sectionIIIIncluse = !!parsed.techniqueExpressionPresente;
+    if (sectionIIIIncluse) validerChampExploitationAuto(parsed.techniqueExpression, 'techniqueExpression', reponse.stop_reason);
 
     const texteSupportFinal = texteFourni || (parsed.texteSupport || '').toString().trim();
     if (!texteSupportFinal) throw new Error('aucun texte support (ni fourni, ni inventé par le modèle)');
@@ -3754,30 +3793,55 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
     // data-expl-auto="1" : même attribut que v1, pour rester détectable par
     // supprimerLignesExploitationAutoDupliquees si le modèle principal
     // écrit malgré tout une ligne libre en plus (filet redondant conservé).
-    // Désormais posé aussi sur PRÉSENTATION (15/09, v3) : cette ligne n'est
-    // plus rédigée par le modèle principal, cf. commentaire plus haut.
-    const ligne = (moment, champ, extra = '') => construireLigneDeroulementHTML({
-      moment: extra ? `${moment}${extra}` : moment,
+    const ligne = (moment, champ) => construireLigneDeroulementHTML({
+      moment,
       strategie: echapperHtml(champ.strategie),
       activiteEnseignant: echapperHtml(champ.enseignant),
       activiteEleves: echapperHtml(champ.eleves),
       tracesEcrites: echapperHtml(champ.traces)
     }).replace('<tr>', '<tr data-expl-auto="1">');
 
-    const lignes = [ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.PRESENTATION, parsed.presentation, '<br>(5 mn)')];
-    lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.I, parsed.vocabulaire));
-    lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.II, parsed.grammaire));
+    const lignes = [ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.I, parsed.vocabulaire), ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.II, parsed.grammaire)];
     if (sectionIIIIncluse) lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.III, parsed.techniqueExpression));
     lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.EVAL, parsed.evaluation));
 
-    // Table COMPLÈTE (en-tête inclus) depuis la v3 (15/09) : avant, seules
-    // les lignes I/II/III/EVAL étaient retournées, insérées par le modèle
-    // principal à l'intérieur d'un <table> qu'il construisait lui-même
-    // (avec sa propre ligne PRÉSENTATION juste avant). Le modèle principal
-    // ne construit plus ce tableau du tout pour cette fiche (cf.
-    // construireInstructionsExploitationDeTexte) : cette fonction fournit
-    // donc désormais le <table> entier, prêt à insérer tel quel au marqueur.
-    const tableCompletHTML = `<table style="width:100%;border-collapse:collapse;">
+    return { succes: true, texteSupportFinal, lignesHTML: lignes.join('\n'), sectionIIIIncluse, erreur: null };
+  }
+
+  async function tenterAvecRetries() {
+    let resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: null };
+    const NB_TENTATIVES_MAX = 2;
+    for (let tentative = 1; tentative <= NB_TENTATIVES_MAX; tentative++) {
+      try {
+        resultat = await tenterUneFois();
+        break;
+      } catch (e) {
+        const prefixe = tentative < NB_TENTATIVES_MAX ? '⚠️ (nouvelle tentative)' : '❌';
+        console.error(`${prefixe} genererDeroulementExploitationAuto (tentative ${tentative}/${NB_TENTATIVES_MAX}):`, e.message);
+        resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: e.message };
+      }
+    }
+    return resultat;
+  }
+
+  const [resultatPresentation, resultatPrincipal] = await Promise.all([
+    genererPresentationExploitationAuto({ lecon, classe, seance, avecRappelSeancePrecedente }),
+    tenterAvecRetries()
+  ]);
+
+  if (!resultatPresentation.succes || !resultatPrincipal.succes) {
+    const erreurs = [
+      !resultatPresentation.succes ? `présentation : ${resultatPresentation.erreur}` : null,
+      !resultatPrincipal.succes ? `contenu : ${resultatPrincipal.erreur}` : null
+    ].filter(Boolean).join(' | ');
+    return { succes: false, texteSupportFinal: texteFourni, tableCompletHTML: '', sectionIIIIncluse: false, erreur: erreurs };
+  }
+
+  // Table COMPLÈTE (en-tête inclus) depuis la v3 (15/09) : le modèle
+  // principal ne construit plus ce tableau du tout pour cette fiche (cf.
+  // construireInstructionsExploitationDeTexte) -- cette fonction fournit
+  // donc le <table> entier, prêt à insérer tel quel au marqueur.
+  const tableCompletHTML = `<table style="width:100%;border-collapse:collapse;">
   <tr>
     <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Moments didactiques / Durée</th>
     <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:20%;">Stratégies pédagogiques / Plan du cours</th>
@@ -3785,25 +3849,17 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
     <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités des élèves</th>
     <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Traces écrites</th>
   </tr>
-${lignes.join('\n')}
+${resultatPresentation.ligneHTML}
+${resultatPrincipal.lignesHTML}
 </table>`;
 
-    return { succes: true, texteSupportFinal, tableCompletHTML, sectionIIIIncluse, erreur: null };
-  }
-
-  let resultat = { succes: false, texteSupportFinal: texteFourni, tableCompletHTML: '', sectionIIIIncluse: false, erreur: null };
-  const NB_TENTATIVES_MAX = 2;
-  for (let tentative = 1; tentative <= NB_TENTATIVES_MAX; tentative++) {
-    try {
-      resultat = await tenterUneFois();
-      break;
-    } catch (e) {
-      const prefixe = tentative < NB_TENTATIVES_MAX ? '⚠️ (nouvelle tentative)' : '❌';
-      console.error(`${prefixe} genererDeroulementExploitationAuto (tentative ${tentative}/${NB_TENTATIVES_MAX}):`, e.message);
-      resultat = { succes: false, texteSupportFinal: texteFourni, tableCompletHTML: '', sectionIIIIncluse: false, erreur: e.message };
-    }
-  }
-  return resultat;
+  return {
+    succes: true,
+    texteSupportFinal: resultatPrincipal.texteSupportFinal,
+    tableCompletHTML,
+    sectionIIIIncluse: resultatPrincipal.sectionIIIIncluse,
+    erreur: null
+  };
 }
 
 // Instructions (très réduites par rapport à v1) pour le prompt PRINCIPAL de
