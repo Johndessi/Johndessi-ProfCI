@@ -5120,7 +5120,7 @@ STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- LECTURE DIRIGÉE (mécanisme différent de 
 
 Le DÉVELOPPEMENT de cette fiche comporte EXACTEMENT 3 parties, dans cet ordre, chacune introduite par le titre exact indiqué :
 
-I. Portion de texte à lire -- ignore entièrement cette partie, ne rédige rien du tout pour elle, ne mentionne même pas son titre.
+I. Portion de texte à lire -- NE LA RÉDIGE PAS toi-même : place à cet endroit, seul sur sa ligne, sans aucun texte avant ni après ni autour, EXACTEMENT ce jeton : {{PORTION_LECTURE_DIRIGEE}}
 
 II. Questionnaire de compréhension -- liste numérotée de questions portant UNIQUEMENT sur les faits, les personnages, la chronologie et les enjeux de la portion lue, tels que VÉRIFIABLES dans le résumé ci-dessous -- AUCUNE question d'analyse littéraire (pas d'axe de lecture, pas de procédé stylistique, pas d'interprétation) ET AUCUNE question sur les pensées, sentiments, émotions ou motivations intérieures d'un personnage, SAUF si le résumé les énonce lui-même explicitement (ex. le résumé dit littéralement "elle rêve de bonheur" -> question autorisée sur ce point précis ; le résumé ne dit rien de son ressenti face à tel autre personnage ou événement -> aucune question ni réponse ne doit porter là-dessus, quelle que soit la plausibilité de l'inférence).
 
