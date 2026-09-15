@@ -4925,11 +4925,21 @@ app.post('/api/upload-modele', uploadModeleFichier, async (req, res) => {
 // client affiche le message réel (celui-ci lit `json.error`, cf.
 // public/index.html) plutôt que le message générique "Erreur serveur" d'une
 // réponse HTTP non-ok classique.
-function envoyerBlocageSSE(res, message) {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
+// heartbeat (15/09) : le seul appelant (/api/generer-fiche) établit
+// désormais le flux SSE et démarre son heartbeat tout en haut de la route,
+// avant tout traitement -- jamais rappeler res.setHeader/flushHeaders ici
+// (lèverait une exception, les en-têtes étant déjà envoyés). Le garde
+// !res.headersSent reste un filet défensif, pas le chemin attendu.
+// clearInterval(heartbeat) est impératif avant res.end() : sans ça,
+// l'intervalle continuerait d'écrire sur une réponse déjà terminée.
+function envoyerBlocageSSE(res, message, heartbeat) {
+  if (!res.headersSent) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+  }
+  if (heartbeat) clearInterval(heartbeat);
   res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
   res.end();
 }
@@ -5587,6 +5597,35 @@ function limiterGenerationParIp(req, res, next) {
  app.post('/api/generer-fiche', limiterGenerationParIp, uploadTexteSupportFichier, async (req, res) => {
   console.log('📩 Requête reçue:', req.body.discipline, req.body.classe, req.body.lecon);
   try {
+    // Flux SSE établi et heartbeat démarré ICI, avant TOUT traitement --
+    // correctif 502 du 15/09 (preuve : 3 échecs sur 10 essais réels en
+    // production, "Exploitation de texte" sans texte support). Cause : le
+    // flux ne démarrait auparavant qu'au moment du VRAI appel modèle
+    // principal (juste avant anthropic.messages.stream), après tout le
+    // travail de préparation -- y compris l'appel isolé
+    // genererDeroulementExploitationAuto (vocabulaire/grammaire, jusqu'à 2
+    // tentatives), qui peut à lui seul dépasser le délai d'attente du proxy
+    // Render s'il ne reçoit RIEN avant sa propre limite. Le proxy ne peut
+    // couper une connexion qui reçoit déjà des octets -- d'où le heartbeat
+    // toutes les 10s dès la réception de la requête, pas seulement au
+    // premier résultat disponible. Toute sortie de cette route (blocage,
+    // bypass, erreur, succès) doit désormais réutiliser CE flux déjà ouvert
+    // -- jamais rappeler res.setHeader/flushHeaders (lèverait une exception,
+    // les en-têtes étant déjà envoyés) -- et clearInterval(heartbeat) avant
+    // tout res.end() pour ne jamais écrire sur une réponse déjà terminée.
+    // Déclaré en `let ... = null` (jamais `const`) et initialisé à null
+    // AVANT tout code pouvant lever : si res.setHeader/flushHeaders
+    // lui-même échouait, le catch englobant plus bas doit pouvoir lire
+    // `heartbeat` sans se heurter à la zone morte temporelle d'un `const`
+    // jamais atteint.
+    let heartbeat = null;
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+    heartbeat = setInterval(() => {
+      res.write(': keep-alive\n\n');
+    }, 10000);
     const {
       enseignantId, niveau = 'secondaire', discipline,
       classe, lecon, seance = '1', duree = '1 heure',
@@ -5663,12 +5702,12 @@ function limiterGenerationParIp(req, res, next) {
         seance, titreOeuvre, auteurOeuvre, axeEtude, planSeancesOI, typeSeanceOI, situationApprentissageOeuvre
       });
       if (messageBlocageSequence) {
-        return envoyerBlocageSSE(res, messageBlocageSequence);
+        return envoyerBlocageSSE(res, messageBlocageSequence, heartbeat);
       }
 
       if (parseInt(seance, 10) === 11) {
         if (!(contenuLibreSeance11 || '').toString().trim()) {
-          return envoyerBlocageSSE(res, "Le contenu de la Séance 11 (Évaluation finale) doit être saisi intégralement par l'enseignant avant de générer la fiche.");
+          return envoyerBlocageSSE(res, "Le contenu de la Séance 11 (Évaluation finale) doit être saisi intégralement par l'enseignant avant de générer la fiche.", heartbeat);
         }
         const contenuHTML11 = construireFicheLibreOeuvreSeance11({
           discipline, classe, duree, titreOeuvre, auteurOeuvre, numeroSequence, contenuLibre: contenuLibreSeance11
@@ -5679,10 +5718,7 @@ function limiterGenerationParIp(req, res, next) {
           lecon: construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre), seance, duree, niveau,
           approche: approcheNormalisee, contenu: contenuHTML11, origineGeneration: origineGenerationNormalisee
         });
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.flushHeaders();
+        clearInterval(heartbeat);
         res.write(`data: ${JSON.stringify({ done: true, ficheId: fiche11._id, contenuFinal: contenuHTML11 })}\n\n`);
         return res.end();
       }
@@ -5701,26 +5737,26 @@ function limiterGenerationParIp(req, res, next) {
       const leconCatalogueOI = await resoudreSequenceOeuvreLycee(profilInfoOI.profil, numeroSequence);
       const messageBlocageOI = validerSeanceOeuvreLycee(leconCatalogueOI, seance, typeSeanceOI);
       if (messageBlocageOI) {
-        return envoyerBlocageSSE(res, messageBlocageOI);
+        return envoyerBlocageSSE(res, messageBlocageOI, heartbeat);
       }
       seanceCatalogueOI = leconCatalogueOI.seances.find((s) => s.numeroSeance === parseInt(seance, 10));
 
       if (!TYPES_SEANCE_LYCEE_IMPLEMENTES.includes(typeSeanceOI)) {
-        return envoyerBlocageSSE(res, `Le type de séance "${typeSeanceOI || '(non renseigné)'}" n'est pas encore disponible pour le second cycle -- seuls Lecture dirigée, Culture littéraire et Exposé sont implémentés pour l'instant.`);
+        return envoyerBlocageSSE(res, `Le type de séance "${typeSeanceOI || '(non renseigné)'}" n'est pas encore disponible pour le second cycle -- seuls Lecture dirigée, Culture littéraire et Exposé sont implémentés pour l'instant.`, heartbeat);
       }
       if (!(titreOeuvre || '').toString().trim() || !(auteurOeuvre || '').toString().trim()) {
-        return envoyerBlocageSSE(res, "Le titre et l'auteur de l'œuvre sont obligatoires pour générer une fiche de cette séquence.");
+        return envoyerBlocageSSE(res, "Le titre et l'auteur de l'œuvre sont obligatoires pour générer une fiche de cette séquence.", heartbeat);
       }
 
       if (typeSeanceOI === 'lecture_dirigee') {
         if (!(passagePages || '').toString().trim() || !(resumePassageLectureDirigee || '').toString().trim()) {
-          return envoyerBlocageSSE(res, "Pour une séance de Lecture dirigée, l'enseignant doit fournir la référence des pages/chapitres à lire et un résumé factuel de cette portion (faits, personnages, chronologie, enjeux).");
+          return envoyerBlocageSSE(res, "Pour une séance de Lecture dirigée, l'enseignant doit fournir la référence des pages/chapitres à lire et un résumé factuel de cette portion (faits, personnages, chronologie, enjeux).", heartbeat);
         }
       } else if (typeSeanceOI === 'culture_litteraire') {
         // Bypass complet, comme la Séance 11 (Évaluation finale) du collège
         // -- aucun appel modèle : cf. construireFicheLibreOeuvreLyceeBypass.
         if (!(contenuLibreCultureLitteraire || '').toString().trim()) {
-          return envoyerBlocageSSE(res, "Pour une séance de Culture littéraire, l'enseignant doit saisir intégralement le contenu de l'exposé magistral (contexte historique/littéraire/biographique) -- aucune génération automatique n'existe pour cette séance.");
+          return envoyerBlocageSSE(res, "Pour une séance de Culture littéraire, l'enseignant doit saisir intégralement le contenu de l'exposé magistral (contexte historique/littéraire/biographique) -- aucune génération automatique n'existe pour cette séance.", heartbeat);
         }
         const leconAfficheeBypass = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre);
         const seanceAfficheeBypass = `${seance} : ${(seanceCatalogueOI && seanceCatalogueOI.intitule) || ''}`.trim();
@@ -5734,15 +5770,12 @@ function limiterGenerationParIp(req, res, next) {
           lecon: leconAfficheeBypass, seance, duree, niveau,
           approche: approcheNormalisee, contenu: contenuHTMLBypass, origineGeneration: origineGenerationNormalisee
         });
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.flushHeaders();
+        clearInterval(heartbeat);
         res.write(`data: ${JSON.stringify({ done: true, ficheId: ficheBypass._id, contenuFinal: contenuHTMLBypass })}\n\n`);
         return res.end();
       } else if (typeSeanceOI === 'expose') {
         if (!(exposeSujetsGroupes || '').toString().trim()) {
-          return envoyerBlocageSSE(res, "Pour une séance d'Exposé, l'enseignant doit fournir les sujets et la répartition des groupes.");
+          return envoyerBlocageSSE(res, "Pour une séance d'Exposé, l'enseignant doit fournir les sujets et la répartition des groupes.", heartbeat);
         }
       }
     }
@@ -5844,7 +5877,7 @@ function limiterGenerationParIp(req, res, next) {
       } else if (seanceNumOI >= 2 && seanceNumOI <= 9) {
         if (typeSeanceOI === 'lecture_methodique') {
           if (!planCoursEstSubstantiel(planCours)) {
-            return envoyerBlocageSSE(res, "Pour une séance de Lecture méthodique intégrée, l'enseignant doit fournir son plan (hypothèse/axes/analyses) -- aucune génération automatique n'existe pour cette sous-activité en dehors du plan fourni.");
+            return envoyerBlocageSSE(res, "Pour une séance de Lecture méthodique intégrée, l'enseignant doit fournir son plan (hypothèse/axes/analyses) -- aucune génération automatique n'existe pour cette sous-activité en dehors du plan fourni.", heartbeat);
           }
           // Genre du passage étudié (portrait, texte descriptif...) : UNIQUEMENT
           // via "theme" -- "lecon" est ici la valeur fixe de séquence ("Œuvre
@@ -5853,7 +5886,7 @@ function limiterGenerationParIp(req, res, next) {
           const referentielOI = trouverReferentielTypeTexte(theme || '', classe);
           const resultatPlanFourniOI = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentielOI);
           if (resultatPlanFourniOI.bloque) {
-            return envoyerBlocageSSE(res, resultatPlanFourniOI.messageBlocage);
+            return envoyerBlocageSSE(res, resultatPlanFourniOI.messageBlocage, heartbeat);
           }
           systemPrompt += resultatPlanFourniOI.instructions;
           // La progression taxonomique (cf. construireConsigneTaxonomiqueOeuvre)
@@ -5868,10 +5901,10 @@ function limiterGenerationParIp(req, res, next) {
           }
         } else if (typeSeanceOI === 'lecture_suivie') {
           if (!(passagePages || '').toString().trim() || !unitesSens.length || !(bilanSynthese || '').toString().trim()) {
-            return envoyerBlocageSSE(res, "Pour une séance de Lecture suivie, l'enseignant doit fournir les pages du passage, au moins une unité de sens et le bilan de synthèse.");
+            return envoyerBlocageSSE(res, "Pour une séance de Lecture suivie, l'enseignant doit fournir les pages du passage, au moins une unité de sens et le bilan de synthèse.", heartbeat);
           }
           if (!questionsEvaluationOI.length || !reponsesEvaluationOI.length) {
-            return envoyerBlocageSSE(res, "Pour une séance de Lecture suivie, l'enseignant doit fournir la situation d'évaluation (questions et réponses) rattachée à la dernière unité significative.");
+            return envoyerBlocageSSE(res, "Pour une séance de Lecture suivie, l'enseignant doit fournir la situation d'évaluation (questions et réponses) rattachée à la dernière unité significative.", heartbeat);
           }
           systemPrompt += construireInstructionsLectureSuivie(seanceNumOI);
           developpementLectureSuivieHTML = construireDeveloppementLectureSuivieHTML({
@@ -5879,7 +5912,7 @@ function limiterGenerationParIp(req, res, next) {
             questionsEvaluation: questionsEvaluationOI, reponsesEvaluation: reponsesEvaluationOI
           });
         } else {
-          return envoyerBlocageSSE(res, 'Sous-type de séance invalide pour cette tranche (2 à 9) -- choisissez Lecture suivie ou Lecture méthodique.');
+          return envoyerBlocageSSE(res, 'Sous-type de séance invalide pour cette tranche (2 à 9) -- choisissez Lecture suivie ou Lecture méthodique.', heartbeat);
         }
       }
     } else if (estOeuvreIntegrale && profilInfoOI) {
@@ -5995,7 +6028,7 @@ function limiterGenerationParIp(req, res, next) {
         if (planCoursEstSubstantiel(planCours)) {
           const resultatPlanFourni = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentielTypeTexteLM);
           if (resultatPlanFourni.bloque) {
-            return envoyerBlocageSSE(res, resultatPlanFourni.messageBlocage);
+            return envoyerBlocageSSE(res, resultatPlanFourni.messageBlocage, heartbeat);
           }
           systemPrompt += resultatPlanFourni.instructions;
           planFourniInjection = resultatPlanFourni;
@@ -6005,7 +6038,7 @@ function limiterGenerationParIp(req, res, next) {
         } else {
           const resultatAuto = construireInstructionsLectureMethodique(referentielTypeTexteLM, classe);
           if (resultatAuto.bloque) {
-            return envoyerBlocageSSE(res, resultatAuto.messageBlocage);
+            return envoyerBlocageSSE(res, resultatAuto.messageBlocage, heartbeat);
           }
           systemPrompt += resultatAuto.instructions;
           planFourniInjection = resultatAuto;
@@ -6018,7 +6051,7 @@ function limiterGenerationParIp(req, res, next) {
         // démarche improvisée pour un autre niveau.
         const resultatResume = construireInstructionsResume(classe, !!texteSupport, modeEvaluationResume);
         if (resultatResume.bloque) {
-          return envoyerBlocageSSE(res, resultatResume.messageBlocage);
+          return envoyerBlocageSSE(res, resultatResume.messageBlocage, heartbeat);
         }
         systemPrompt += resultatResume.instructions;
         modeResume = true;
@@ -6030,7 +6063,7 @@ function limiterGenerationParIp(req, res, next) {
         // n'est pas sourcé -- remplace l'ancien avertissement doux par un
         // blocage explicite AVANT tout appel au modèle.
         if (!referentielTypeTexte) {
-          return envoyerBlocageSSE(res, construireMessageBlocageTypeTexteNonCouvert());
+          return envoyerBlocageSSE(res, construireMessageBlocageTypeTexteNonCouvert(), heartbeat);
         }
         systemPrompt += construireInstructionsExpressionEcriture(referentielTypeTexte);
       } else if (estExploitation) {
@@ -6056,7 +6089,7 @@ function limiterGenerationParIp(req, res, next) {
         } else {
           const resultatExploitationAuto = await genererDeroulementExploitationAuto({ texteSupport, lecon, classe });
           if (!resultatExploitationAuto.succes) {
-            return envoyerBlocageSSE(res, `La génération automatique du contenu vocabulaire/grammaire a échoué (${resultatExploitationAuto.erreur || 'erreur inconnue'}) -- réessayez, ou fournissez vous-même un texte support et régénérez.`);
+            return envoyerBlocageSSE(res, `La génération automatique du contenu vocabulaire/grammaire a échoué (${resultatExploitationAuto.erreur || 'erreur inconnue'}) -- réessayez, ou fournissez vous-même un texte support et régénérez.`, heartbeat);
           }
           if (!texteSupport) texteSupport = resultatExploitationAuto.texteSupportFinal;
           systemPrompt += construireInstructionsExploitationDeTexte(resultatExploitationAuto);
@@ -6355,18 +6388,11 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       userMessage += `\n\nAucun texte support n'a été fourni par l'enseignant : tu dois toi-même rédiger un texte support ORIGINAL, adapté au niveau ${niveau}, dont la NATURE correspond EXACTEMENT au type de texte « ${referentielTypeTexteLM.typeTexte} » demandé par la leçon (structure et caractéristiques conformes au référentiel déjà utilisé plus haut pour construire les entrées du tableau de vérification -- jamais un autre type de texte). Longueur raisonnable pour occuper une bonne partie d'une page (environ 100 à 220 mots selon le niveau). RÈGLE SPÉCIALE POUR CE CAS PRÉCIS (aucun texte fourni) : le marqueur {{TEXTE_SUPPORT}} déjà demandé plus haut doit ici être utilisé comme une PAIRE -- écris directement ton texte ENTRE {{TEXTE_SUPPORT}} et un second marqueur {{FIN_TEXTE_SUPPORT}} que tu ajoutes juste après (rien d'autre entre les deux, pas de titre répété ni de commentaire). N'utilise PAS de marqueur différent : c'est le même {{TEXTE_SUPPORT}} que celui déjà exigé, simplement complété par {{FIN_TEXTE_SUPPORT}} dans ce cas précis. Ce texte sera extrait automatiquement puis réinséré au même endroit par le serveur.`;
     }
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
-
+    // En-têtes SSE + heartbeat déjà établis tout en haut de la route (cf.
+    // commentaire au tout début du handler) -- jamais rappelés ici.
     if (avertissementRappel) {
       res.write(`data: ${JSON.stringify({ avertissement: avertissementRappel })}\n\n`);
     }
-
-    const heartbeat = setInterval(() => {
-      res.write(': keep-alive\n\n');
-    }, 10000);
 
     let contenuHTML = '';
 
@@ -6850,7 +6876,18 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     });
 
   } catch (e) {
+    // heartbeat est désormais créé tout en haut du try -- toute exception
+    // survenant après (la quasi-totalité de la route) doit l'arrêter ici,
+    // sinon l'intervalle continuerait d'écrire sur une réponse déjà
+    // terminée (res.end() ci-dessous) une fois par 10s indéfiniment.
+    if (heartbeat) clearInterval(heartbeat);
     console.error('❌ ERREUR:', e.message);
+    if (!res.headersSent) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+    }
     res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
     res.end();
   }
