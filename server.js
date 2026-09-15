@@ -5131,6 +5131,70 @@ RÈGLE ABSOLUE, SOURCE UNIQUE DES FAITS POUR LES PARTIES II ET III : tu ne conna
 RÉSUMÉ DE LA PORTION FOURNI PAR L'ENSEIGNANT (seule source de faits autorisée pour les parties II et III) :
 ${resume}`;
 }
+
+// Culture littéraire (15/09, spec exacte de l'enseignant) : exposé magistral
+// du professeur sur le contexte (historique/littéraire/biographique), dont
+// le contenu est intégralement saisi par l'enseignant et restitué tel quel
+// -- AUCUNE génération de faits par le modèle. Bypass complet, même principe
+// que construireFicheLibreOeuvreSeance11 au collège (Séance 11, Évaluation
+// finale), généralisé ici pour porter un intitulé de leçon/séance variable
+// (catalogue lycée, cf. seanceCatalogueOI) plutôt que la valeur fixe
+// "Évaluation finale" -- et sans champ Compétence forcé (cf. commentaire du
+// dispatch dans /api/generer-fiche : données DPFC lycée non sourcées).
+function construireFicheLibreOeuvreLyceeBypass({ discipline, classe, duree, titreOeuvre, auteurOeuvre, leconAffichee, seanceAffichee, contenuLibre }) {
+  const corpsLibre = texteSupportVersHtml(contenuLibre);
+  return `<div class="fiche-cours">
+
+<div class="entete-libre" style="display:grid;grid-template-columns:110px 1fr;column-gap:12px;row-gap:2px;margin-bottom:14px;">
+  <div style="font-weight:bold;padding:2px 0;">Discipline :</div><div style="padding:2px 0;">${echapperHtml((discipline || 'Français').toString().trim())}</div>
+  <div style="font-weight:bold;padding:2px 0;">Date :</div><div style="padding:2px 0;"></div>
+  <div style="font-weight:bold;padding:2px 0;">Classe :</div><div style="padding:2px 0;">${echapperHtml((classe || '').toString().trim())}</div>
+  <div style="font-weight:bold;padding:2px 0;">Activité :</div><div style="padding:2px 0;">${echapperHtml(ACTIVITE_OEUVRE_INTEGRALE)}</div>
+  <div style="font-weight:bold;padding:2px 0;">Durée :</div><div style="padding:2px 0;">${echapperHtml((duree || '').toString().trim())}</div>
+  <div style="font-weight:bold;padding:2px 0;">Leçon :</div><div style="padding:2px 0;">${echapperHtml((leconAffichee || '').toString().trim())}</div>
+  <div style="font-weight:bold;padding:2px 0;">Séance :</div><div style="padding:2px 0;">${echapperHtml((seanceAffichee || '').toString().trim())}</div>
+</div>
+
+<p><strong>Œuvre :</strong> « ${echapperHtml((titreOeuvre || '').toString().trim())} », ${echapperHtml((auteurOeuvre || '').toString().trim())}</p>
+
+${corpsLibre}
+
+</div>`;
+}
+
+// Exposé (15/09, spec exacte de l'enseignant) : PAS une analyse du texte par
+// le modèle -- une fiche-guide pour encadrer des exposés préparés ET
+// présentés par les élèves. L'enseignant définit les sujets/groupes (partie
+// I, déterministe, reproduite telle quelle -- jamais développée ni
+// commentée) ; le modèle ne génère QUE la méthodologie de préparation
+// (partie II) et la grille d'évaluation (partie III), jamais le contenu
+// factuel des sujets eux-mêmes -- même principe anti-fabrication que
+// Lecture dirigée (le modèle n'a accès à aucun fait sur les sujets, il ne
+// doit donc jamais en écrire).
+function construireSectionSujetsGroupesExposeHTML(sujetsGroupes) {
+  const texte = echapperHtml((sujetsGroupes || '').toString().trim()).replace(/\n/g, '<br>');
+  return `<p><strong>I. Sujets et répartition des groupes</strong><br>${texte}</p>`;
+}
+
+function construireInstructionsExpose(sujetsGroupes) {
+  const sujets = (sujetsGroupes || '').toString().trim();
+  return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- EXPOSÉ (mécanisme différent des autres séances d'Étude de l'œuvre intégrale : il ne s'agit PAS d'une analyse du texte par toi, mais d'une fiche-guide pour l'enseignant qui encadre des exposés PRÉPARÉS ET PRÉSENTÉS PAR LES ÉLÈVES. Tu ne rédiges JAMAIS le contenu d'un exposé toi-même -- ni un résumé, ni une analyse, ni aucun fait sur le sujet confié à un groupe.)
+
+Le DÉVELOPPEMENT de cette fiche comporte EXACTEMENT 3 parties, dans cet ordre, chacune introduite par le titre exact indiqué :
+
+I. Sujets et répartition des groupes -- NE LA RÉDIGE PAS toi-même : place à cet endroit, seul sur sa ligne, sans aucun texte avant ni après ni autour, EXACTEMENT ce jeton : {{SUJETS_GROUPES_EXPOSE}}
+
+II. Consignes de préparation -- instructions méthodologiques génériques pour aider les élèves à préparer leur exposé (structure attendue de la présentation, durée par groupe, supports autorisés/recommandés, répartition de la parole au sein du groupe, délai de remise...) -- RIEN sur le contenu factuel des sujets eux-mêmes, uniquement la méthode de préparation.
+
+III. Grille d'évaluation -- critères d'évaluation génériques (ex. pertinence et clarté du contenu, qualité de l'expression orale, qualité des supports visuels, respect du temps imparti, participation équilibrée du groupe...), avec un barème simple.
+
+RÈGLE ABSOLUE : les parties II et III portent UNIQUEMENT sur la méthode de préparation et les critères d'évaluation -- tu ne dois JAMAIS écrire, résumer, analyser ou compléter le contenu réel d'un sujet d'exposé (ex. n'explique jamais toi-même ce qu'est le sujet, ne donne aucun fait dessus, même générique) : ce contenu est entièrement à la charge des élèves qui le prépareront eux-mêmes, tu n'y as pas accès et tu ne le connais pas.
+
+SUJETS ET GROUPES FOURNIS PAR L'ENSEIGNANT (à reproduire tel quel en partie I via le jeton ci-dessus, jamais à développer ou commenter dans les parties II/III) :
+${sujets}`;
+}
 // ============= FIN ÉTUDE DE L'ŒUVRE INTÉGRALE -- SECOND CYCLE =============
 
 // Recherche web (02/09) : quand l'enseignant n'a fourni NI biographie NI
@@ -5543,7 +5607,18 @@ function limiterGenerationParIp(req, res, next) {
       // Lecture dirigée (second cycle uniquement, 13/09) -- résumé factuel de
       // la portion lue, fourni par l'enseignant, seule source de faits
       // autorisée pour le questionnaire/corrigé (cf. construireInstructionsLectureDirigee).
-      resumePassageLectureDirigee = ''
+      resumePassageLectureDirigee = '',
+      // Culture littéraire (second cycle uniquement, 15/09) -- exposé
+      // magistral du professeur sur le contexte, contenu intégralement saisi
+      // par l'enseignant, bypass complet du modèle (cf.
+      // construireFicheLibreOeuvreLyceeBypass, même principe que
+      // contenuLibreSeance11 au collège).
+      contenuLibreCultureLitteraire = '',
+      // Exposé (second cycle uniquement, 15/09) -- sujets/répartition des
+      // groupes définis par l'enseignant, reproduits tels quels ; le modèle
+      // ne génère QUE la méthodologie de préparation et la grille
+      // d'évaluation, jamais le contenu des sujets (cf. construireInstructionsExpose).
+      exposeSujetsGroupes = ''
     } = req.body;
     const estOeuvreIntegrale = sousModule === 'oeuvre_integrale';
     // Second cycle (13/09) : catalogue-piloté, jamais la structure fixe
@@ -5613,14 +5688,14 @@ function limiterGenerationParIp(req, res, next) {
       }
     }
 
-    // Étude de l'œuvre intégrale, SECOND CYCLE (13/09) : validation
-    // structurelle catalogue-pilotée (cf. resoudreSequenceOeuvreLycee/
-    // validerSeanceOeuvreLycee). Seule Lecture dirigée est implémentée pour
-    // l'instant (instruction explicite de l'enseignant du 13/09 : "concentre-
-    // toi sur Lecture dirigée d'abord... on reviendra sur Exposé et Culture
-    // littéraire une fois Lecture dirigée validé") -- tout autre type de
-    // séance du catalogue est explicitement refusé ci-dessous, jamais
-    // silencieusement mal généré.
+    // Étude de l'œuvre intégrale, SECOND CYCLE (13/09, étendu le 15/09) :
+    // validation structurelle catalogue-pilotée (cf. resoudreSequenceOeuvreLycee/
+    // validerSeanceOeuvreLycee). Lecture dirigée, Culture littéraire et
+    // Exposé sont implémentés -- tout autre type de séance du catalogue
+    // (Introduction, Lecture méthodique, Conclusion, Évaluation, Correction)
+    // reste explicitement refusé ci-dessous, jamais silencieusement mal
+    // généré.
+    const TYPES_SEANCE_LYCEE_IMPLEMENTES = ['lecture_dirigee', 'culture_litteraire', 'expose'];
     let seanceCatalogueOI = null;
     if (estOeuvreIntegrale && profilInfoOI) {
       const leconCatalogueOI = await resoudreSequenceOeuvreLycee(profilInfoOI.profil, numeroSequence);
@@ -5630,14 +5705,45 @@ function limiterGenerationParIp(req, res, next) {
       }
       seanceCatalogueOI = leconCatalogueOI.seances.find((s) => s.numeroSeance === parseInt(seance, 10));
 
-      if (typeSeanceOI !== 'lecture_dirigee') {
-        return envoyerBlocageSSE(res, `Le type de séance "${typeSeanceOI || '(non renseigné)'}" n'est pas encore disponible pour le second cycle -- seule Lecture dirigée est implémentée pour l'instant.`);
+      if (!TYPES_SEANCE_LYCEE_IMPLEMENTES.includes(typeSeanceOI)) {
+        return envoyerBlocageSSE(res, `Le type de séance "${typeSeanceOI || '(non renseigné)'}" n'est pas encore disponible pour le second cycle -- seuls Lecture dirigée, Culture littéraire et Exposé sont implémentés pour l'instant.`);
       }
       if (!(titreOeuvre || '').toString().trim() || !(auteurOeuvre || '').toString().trim()) {
         return envoyerBlocageSSE(res, "Le titre et l'auteur de l'œuvre sont obligatoires pour générer une fiche de cette séquence.");
       }
-      if (!(passagePages || '').toString().trim() || !(resumePassageLectureDirigee || '').toString().trim()) {
-        return envoyerBlocageSSE(res, "Pour une séance de Lecture dirigée, l'enseignant doit fournir la référence des pages/chapitres à lire et un résumé factuel de cette portion (faits, personnages, chronologie, enjeux).");
+
+      if (typeSeanceOI === 'lecture_dirigee') {
+        if (!(passagePages || '').toString().trim() || !(resumePassageLectureDirigee || '').toString().trim()) {
+          return envoyerBlocageSSE(res, "Pour une séance de Lecture dirigée, l'enseignant doit fournir la référence des pages/chapitres à lire et un résumé factuel de cette portion (faits, personnages, chronologie, enjeux).");
+        }
+      } else if (typeSeanceOI === 'culture_litteraire') {
+        // Bypass complet, comme la Séance 11 (Évaluation finale) du collège
+        // -- aucun appel modèle : cf. construireFicheLibreOeuvreLyceeBypass.
+        if (!(contenuLibreCultureLitteraire || '').toString().trim()) {
+          return envoyerBlocageSSE(res, "Pour une séance de Culture littéraire, l'enseignant doit saisir intégralement le contenu de l'exposé magistral (contexte historique/littéraire/biographique) -- aucune génération automatique n'existe pour cette séance.");
+        }
+        const leconAfficheeBypass = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre);
+        const seanceAfficheeBypass = `${seance} : ${(seanceCatalogueOI && seanceCatalogueOI.intitule) || ''}`.trim();
+        const contenuHTMLBypass = construireFicheLibreOeuvreLyceeBypass({
+          discipline, classe, duree, titreOeuvre, auteurOeuvre,
+          leconAffichee: leconAfficheeBypass, seanceAffichee: seanceAfficheeBypass, contenuLibre: contenuLibreCultureLitteraire
+        });
+        const ficheBypass = await Fiche.create({
+          enseignantId: enseignantId || 'anonyme',
+          discipline: discipline || 'Français', classe,
+          lecon: leconAfficheeBypass, seance, duree, niveau,
+          approche: approcheNormalisee, contenu: contenuHTMLBypass, origineGeneration: origineGenerationNormalisee
+        });
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+        res.write(`data: ${JSON.stringify({ done: true, ficheId: ficheBypass._id, contenuFinal: contenuHTMLBypass })}\n\n`);
+        return res.end();
+      } else if (typeSeanceOI === 'expose') {
+        if (!(exposeSujetsGroupes || '').toString().trim()) {
+          return envoyerBlocageSSE(res, "Pour une séance d'Exposé, l'enseignant doit fournir les sujets et la répartition des groupes.");
+        }
       }
     }
 
@@ -5700,10 +5806,12 @@ function limiterGenerationParIp(req, res, next) {
     let leconAfficheeOI = '';
     let seanceAfficheeOI = '';
     let developpementLectureSuivieHTML = null;
-    // Second cycle, Lecture dirigée uniquement pour l'instant (13/09) --
-    // même mécanisme d'injection après coup que developpementLectureSuivieHTML
-    // ci-dessus, cf. construireSectionPortionLectureDirigeeHTML.
+    // Second cycle (13/09, étendu le 15/09) -- même mécanisme d'injection
+    // après coup que developpementLectureSuivieHTML ci-dessus, une variable
+    // par type de séance à contenu déterministe partiel (cf.
+    // construireSectionPortionLectureDirigeeHTML / construireSectionSujetsGroupesExposeHTML).
     let portionLectureDirigeeHTML = null;
+    let sujetsGroupesExposeHTML = null;
 
     if (estOeuvreIntegrale && !profilInfoOI) {
       leconAfficheeOI = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre);
@@ -5796,7 +5904,12 @@ function limiterGenerationParIp(req, res, next) {
       if (typeSeanceOI === 'lecture_dirigee') {
         systemPrompt += construireInstructionsLectureDirigee(resumePassageLectureDirigee);
         portionLectureDirigeeHTML = construireSectionPortionLectureDirigeeHTML({ titreOeuvre, auteurOeuvre, passagePages });
+      } else if (typeSeanceOI === 'expose') {
+        systemPrompt += construireInstructionsExpose(exposeSujetsGroupes);
+        sujetsGroupesExposeHTML = construireSectionSujetsGroupesExposeHTML(exposeSujetsGroupes);
       }
+      // 'culture_litteraire' n'atteint jamais ce point : bypass complet avec
+      // retour anticipé plus haut, avant toute construction de systemPrompt.
     } else if (niveau !== 'primaire') {
       // Contrairement à Leçon/Séance, le champ Activité n'était jamais
       // résolu explicitement -- le modèle devait le deviner du contexte, ce
@@ -6322,6 +6435,14 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
             res.write(`data: ${JSON.stringify({ avertissement: "La partie \"I. Portion de texte à lire\" n'a pas été générée correctement pour cette fiche (le modèle n'a pas reproduit le repère attendu). Ne pas utiliser cette fiche telle quelle : régénérez-la." })}\n\n`);
           } else {
             contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{PORTION_LECTURE_DIRIGEE}}', portionLectureDirigeeHTML);
+          }
+        }
+        if (sujetsGroupesExposeHTML) {
+          // Même filet déterministe que ci-dessus pour {{PORTION_LECTURE_DIRIGEE}}.
+          if (!contenuHTML.includes('{{SUJETS_GROUPES_EXPOSE}}')) {
+            res.write(`data: ${JSON.stringify({ avertissement: "La partie \"I. Sujets et répartition des groupes\" n'a pas été générée correctement pour cette fiche (le modèle n'a pas reproduit le repère attendu). Ne pas utiliser cette fiche telle quelle : régénérez-la." })}\n\n`);
+          } else {
+            contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{SUJETS_GROUPES_EXPOSE}}', sujetsGroupesExposeHTML);
           }
         }
       }

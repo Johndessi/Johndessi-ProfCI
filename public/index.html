@@ -428,6 +428,26 @@ textarea { resize: vertical; min-height: 90px; }
             <textarea id="oiResumePassageLycee" style="min-height:100px"></textarea>
           </div>
         </div>
+
+        <div id="oiPanneauCultureLitteraire" style="display:none">
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Contenu intégral de l'exposé magistral (contexte historique/littéraire/biographique) *</label>
+            <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
+              Saisie intégrale par l'enseignant, restituée telle quelle -- aucune génération automatique n'existe pour cette séance.
+            </p>
+            <textarea id="oiContenuCultureLitteraire" style="min-height:160px"></textarea>
+          </div>
+        </div>
+
+        <div id="oiPanneauExpose" style="display:none">
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Sujets et répartition des groupes *</label>
+            <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
+              Reproduit tel quel dans la fiche -- le modèle ne rédige que les consignes de préparation et la grille d'évaluation ci-dessous, jamais le contenu des sujets eux-mêmes.
+            </p>
+            <textarea id="oiSujetsGroupesExpose" style="min-height:100px" placeholder="Ex: Groupe 1 : la vie de Guy de Maupassant. Groupe 2 : le contexte historique de la Normandie au XIXe siècle. Groupe 3 : le mouvement réaliste en littérature."></textarea>
+          </div>
+        </div>
       </div>
 
       <div id="oiPanneauSeance1" style="display:none">
@@ -1089,6 +1109,8 @@ async function chargerCatalogueOeuvreLycee(profil) {
   selSeq.innerHTML = '<option value="">-- Chargement... --</option>';
   selSea.innerHTML = '<option value="">-- Choisir une séquence d\'abord --</option>';
   document.getElementById('oiPanneauLectureDirigee').style.display = 'none';
+  document.getElementById('oiPanneauCultureLitteraire').style.display = 'none';
+  document.getElementById('oiPanneauExpose').style.display = 'none';
   document.getElementById('oiTypeSeanceLyceeInfo').textContent = '';
   try {
     const reponse = await fetch(`/api/lecons-officielles/liste?discipline=${encodeURIComponent('Français')}&classe=${encodeURIComponent(profil.profil)}&activite=${encodeURIComponent("Étude de l'œuvre intégrale")}`);
@@ -1119,11 +1141,17 @@ async function chargerCatalogueOeuvreLycee(profil) {
   changerSequenceOeuvreLycee();
 }
 
+// Types de séance implémentés côté frontend -- GARDER SYNCHRONISÉ avec
+// TYPES_SEANCE_LYCEE_IMPLEMENTES côté serveur (server.js).
+const TYPES_SEANCE_LYCEE_IMPLEMENTES = ['lecture_dirigee', 'culture_litteraire', 'expose'];
+
 function changerSequenceOeuvreLycee() {
   const numLecon = document.getElementById('oiSequenceLycee').value;
   const selSea = document.getElementById('oiSeanceLycee');
   selSea.innerHTML = '';
   document.getElementById('oiPanneauLectureDirigee').style.display = 'none';
+  document.getElementById('oiPanneauCultureLitteraire').style.display = 'none';
+  document.getElementById('oiPanneauExpose').style.display = 'none';
   document.getElementById('oiTypeSeanceLyceeInfo').textContent = '';
   const lecon = catalogueOeuvreLycee.find((l) => String(l.numeroLecon) === String(numLecon));
   const optVide = document.createElement('option');
@@ -1134,7 +1162,7 @@ function changerSequenceOeuvreLycee() {
   lecon.seances.forEach((s, idx) => {
     const opt = document.createElement('option');
     opt.value = String(idx);
-    opt.textContent = `Séance ${s.numeroSeance} : ${s.intitule}${s.typeSeanceOeuvre === 'lecture_dirigee' ? '' : ' (bientôt disponible)'}`;
+    opt.textContent = `Séance ${s.numeroSeance} : ${s.intitule}${TYPES_SEANCE_LYCEE_IMPLEMENTES.includes(s.typeSeanceOeuvre) ? '' : ' (bientôt disponible)'}`;
     selSea.appendChild(opt);
   });
 }
@@ -1148,10 +1176,13 @@ function trouverSeanceOeuvreLyceeSelectionnee() {
 
 function changerSeanceOeuvreLycee() {
   const seance = trouverSeanceOeuvreLyceeSelectionnee();
-  const estLD = !!seance && seance.typeSeanceOeuvre === 'lecture_dirigee';
-  document.getElementById('oiPanneauLectureDirigee').style.display = estLD ? 'block' : 'none';
-  document.getElementById('oiTypeSeanceLyceeInfo').textContent = (seance && !estLD)
-    ? `Ce type de séance ("${seance.typeSeanceOeuvre || 'non défini'}") n'est pas encore disponible -- seule Lecture dirigée est implémentée pour l'instant.`
+  const type = seance ? seance.typeSeanceOeuvre : null;
+  const estImplemente = TYPES_SEANCE_LYCEE_IMPLEMENTES.includes(type);
+  document.getElementById('oiPanneauLectureDirigee').style.display = (type === 'lecture_dirigee') ? 'block' : 'none';
+  document.getElementById('oiPanneauCultureLitteraire').style.display = (type === 'culture_litteraire') ? 'block' : 'none';
+  document.getElementById('oiPanneauExpose').style.display = (type === 'expose') ? 'block' : 'none';
+  document.getElementById('oiTypeSeanceLyceeInfo').textContent = (seance && !estImplemente)
+    ? `Ce type de séance ("${type || 'non défini'}") n'est pas encore disponible -- seuls Lecture dirigée, Culture littéraire et Exposé sont implémentés pour l'instant.`
     : '';
 }
 
@@ -1173,13 +1204,10 @@ async function genererFicheOeuvreIntegraleLycee() {
 
   if (!titreOeuvre || !auteurOeuvre) { toast("❗ Titre de l'œuvre et auteur sont obligatoires"); return; }
   if (!numeroSequence || !seance) { toast('❗ Choisissez une séquence et une séance'); return; }
-  if (seance.typeSeanceOeuvre !== 'lecture_dirigee') {
-    toast(`❗ Ce type de séance ("${seance.typeSeanceOeuvre || 'non défini'}") n'est pas encore disponible -- seule Lecture dirigée est implémentée pour l'instant.`);
+  if (!TYPES_SEANCE_LYCEE_IMPLEMENTES.includes(seance.typeSeanceOeuvre)) {
+    toast(`❗ Ce type de séance ("${seance.typeSeanceOeuvre || 'non défini'}") n'est pas encore disponible -- seuls Lecture dirigée, Culture littéraire et Exposé sont implémentés pour l'instant.`);
     return;
   }
-  const passagePages = document.getElementById('oiPassagePagesLycee').value.trim();
-  const resumePassageLectureDirigee = document.getElementById('oiResumePassageLycee').value.trim();
-  if (!passagePages || !resumePassageLectureDirigee) { toast('❗ La portion à lire et le résumé factuel sont obligatoires'); return; }
 
   const champs = {
     enseignantId: document.getElementById('enseignantId').value.trim() || 'anonyme',
@@ -1192,11 +1220,25 @@ async function genererFicheOeuvreIntegraleLycee() {
     auteurOeuvre,
     seance: String(seance.numeroSeance),
     typeSeanceOI: seance.typeSeanceOeuvre,
-    passagePages,
-    resumePassageLectureDirigee,
     duree: '1 heure',
     approche: 'APC'
   };
+
+  if (seance.typeSeanceOeuvre === 'lecture_dirigee') {
+    const passagePages = document.getElementById('oiPassagePagesLycee').value.trim();
+    const resumePassageLectureDirigee = document.getElementById('oiResumePassageLycee').value.trim();
+    if (!passagePages || !resumePassageLectureDirigee) { toast('❗ La portion à lire et le résumé factuel sont obligatoires'); return; }
+    champs.passagePages = passagePages;
+    champs.resumePassageLectureDirigee = resumePassageLectureDirigee;
+  } else if (seance.typeSeanceOeuvre === 'culture_litteraire') {
+    const contenuLibreCultureLitteraire = document.getElementById('oiContenuCultureLitteraire').value.trim();
+    if (!contenuLibreCultureLitteraire) { toast("❗ Le contenu de l'exposé magistral est obligatoire"); return; }
+    champs.contenuLibreCultureLitteraire = contenuLibreCultureLitteraire;
+  } else if (seance.typeSeanceOeuvre === 'expose') {
+    const exposeSujetsGroupes = document.getElementById('oiSujetsGroupesExpose').value.trim();
+    if (!exposeSujetsGroupes) { toast('❗ Les sujets et la répartition des groupes sont obligatoires'); return; }
+    champs.exposeSujetsGroupes = exposeSujetsGroupes;
+  }
 
   document.getElementById('btnGenererOI').disabled = true;
   document.getElementById('loader').classList.add('show');
