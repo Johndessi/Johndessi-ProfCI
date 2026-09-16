@@ -6073,6 +6073,8 @@ function limiterGenerationParIp(req, res, next) {
     // déjà du plan de l'enseignant).
     let modeAutoExploitationDeterministe = false;
     let exploitationAutoResultat = null;
+    // Diagnostic temporaire (16/09) -- cf. commentaire au point d'usage.
+    let diagnosticNettoyageFuite = null;
     // Mode 1 (automatique, Lecture méthodique) sans texte support fourni par
     // l'enseignant : le modèle doit rédiger lui-même le texte support (cf.
     // section "texteSupport" plus bas) -- utilisé aussi pour retrouver le
@@ -6823,10 +6825,19 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // plus, jamais ajouter). Plafonné à 5 passages (marge au-delà des 2
         // observés nécessaires en test réel), arrêt dès que le résultat
         // n'évolue plus.
+        // Diagnostic temporaire (16/09) : capture l'entrée EXACTE de ce
+        // filet et le nombre de passages réellement effectués -- injecté
+        // dans la réponse (uniquement en origineGeneration=session_debug,
+        // cf. plus bas) pour comparer directement un essai production à sa
+        // rejoue locale sur EXACTEMENT le même brouillon, plutôt que de
+        // deviner depuis contenuFinal (déjà nettoyé, donc jamais le vrai
+        // point de départ du filet).
+        diagnosticNettoyageFuite = { avant: contenuHTML, passages: 0 };
         for (let passe = 0; passe < 5; passe++) {
           const resultatPasse = nettoyerFuiteApresTexteSupportExploitation(contenuHTML, exploitationAutoResultat.texteSupportFinal);
           if (resultatPasse === contenuHTML) break;
           contenuHTML = resultatPasse;
+          diagnosticNettoyageFuite.passages++;
         }
       }
       if (estLectureMethodique({ discipline, lecon, theme })) {
@@ -7149,7 +7160,18 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenu: contenuHTML,
         origineGeneration: origineGenerationNormalisee
       });
-      res.write(`data: ${JSON.stringify({ done: true, ficheId: fiche._id, contenuFinal: contenuHTML })}\n\n`);
+      // Diagnostic temporaire (16/09), UNIQUEMENT en session_debug -- jamais
+      // exposé à un enseignant réel : permet de comparer directement un
+      // essai production à sa rejoue locale sur EXACTEMENT le même
+      // brouillon (avant nettoyage), plutôt que de deviner depuis
+      // contenuFinal (déjà nettoyé, donc jamais le vrai point de départ du
+      // filet nettoyerFuiteApresTexteSupportExploitation).
+      const payloadDone = { done: true, ficheId: fiche._id, contenuFinal: contenuHTML };
+      if (origineGenerationNormalisee === 'session_debug') {
+        payloadDone.diagnosticCommit = process.env.RENDER_GIT_COMMIT || null;
+        payloadDone.diagnosticNettoyageFuite = diagnosticNettoyageFuite;
+      }
+      res.write(`data: ${JSON.stringify(payloadDone)}\n\n`);
       res.end();
     });
 
