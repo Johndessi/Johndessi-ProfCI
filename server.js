@@ -6813,32 +6813,24 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenuHTML = supprimerLignesExploitationAutoDupliquees(contenuHTML);
         contenuHTML = forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, exploitationAutoResultat.tableCompletHTML);
         contenuHTML = supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML);
-        // Itéré jusqu'à stabilisation (16/09) : constaté en vérification
-        // production qu'un seul passage laisse parfois un résidu partiel
-        // derrière lui -- le modèle imbrique parfois ses propres balises de
-        // façon invalide (ex. <p><div>...</div></p>, <p><p>...</p></p>),
-        // que le navigateur/parseur HTML normalise en aplatissant la
-        // structure d'une façon qui peut interrompre un unique passage de
-        // suppression avant la fin de la zone de résidu. Un 2e passage sur
-        // le résultat du 1er a systématiquement fini le travail en test réel
-        // -- jamais l'inverse (un passage supplémentaire ne peut que retirer
-        // plus, jamais ajouter). Plafonné à 5 passages (marge au-delà des 2
-        // observés nécessaires en test réel), arrêt dès que le résultat
-        // n'évolue plus.
-        // Diagnostic temporaire (16/09) : capture l'entrée EXACTE de ce
-        // filet et le nombre de passages réellement effectués -- injecté
-        // dans la réponse (uniquement en origineGeneration=session_debug,
-        // cf. plus bas) pour comparer directement un essai production à sa
-        // rejoue locale sur EXACTEMENT le même brouillon, plutôt que de
-        // deviner depuis contenuFinal (déjà nettoyé, donc jamais le vrai
-        // point de départ du filet).
-        diagnosticNettoyageFuite = { avant: contenuHTML, passages: 0 };
-        for (let passe = 0; passe < 5; passe++) {
-          const resultatPasse = nettoyerFuiteApresTexteSupportExploitation(contenuHTML, exploitationAutoResultat.texteSupportFinal);
-          if (resultatPasse === contenuHTML) break;
-          contenuHTML = resultatPasse;
-          diagnosticNettoyageFuite.passages++;
-        }
+        // nettoyerFuiteApresTexteSupportExploitation (filet structurel) est
+        // DÉLIBÉRÉMENT PAS appelé ici -- cf. son appel après
+        // injecterTexteSupport plus bas dans cette même route. CAUSE RACINE
+        // TROUVÉE (16/09, via diagnostic de production) : ce filet ancre sa
+        // recherche sur le TEXTE RÉEL du texte support (cf.
+        // texteSupportFinal) pour repérer où commence la zone à nettoyer --
+        // mais À CE STADE de la route, {{TEXTE_SUPPORT}} et
+        // {{TEXTE_SUPPORT_COPIE}} sont encore des marqueurs LITTÉRAUX, pas
+        // encore remplacés par le texte réel (ce remplacement n'a lieu que
+        // plus bas, via injecterTexteSupport, juste avant Fiche.create).
+        // Appelé ICI, ce filet ne trouvait donc JAMAIS son ancre de départ
+        // (aucun élément ne contient encore le texte réel) et retournait le
+        // HTML inchangé à chaque fois (passages=0 systématique, confirmé en
+        // production via diagnosticNettoyageFuite) -- un no-op complet et
+        // silencieux depuis sa création, quel que soit le résidu réellement
+        // présent. Les essais qui semblaient "propres" l'étaient par pure
+        // chance (le modèle n'avait, cette fois-là, rien écrit en trop),
+        // jamais grâce à ce filet.
       }
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
@@ -7153,6 +7145,27 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         unePage: estFicheExpressionEcrite,
         placementFinDocument: modeResume
       });
+      // Filet structurel Exploitation de texte, ANCRÉ ICI et seulement ici
+      // (16/09, déplacé depuis plus haut dans la route -- cf. commentaire à
+      // l'emplacement d'origine pour la cause racine) : ce filet a besoin du
+      // texte support RÉEL, déjà substitué au marqueur par
+      // injecterTexteSupport ci-dessus, pour repérer son ancre de départ --
+      // appelé avant cette substitution, il ne trouve jamais rien (no-op
+      // silencieux, confirmé en production). Itéré jusqu'à stabilisation :
+      // un seul passage peut laisser un résidu partiel quand le modèle
+      // imbrique ses propres balises de façon invalide (ex.
+      // <p><div>...</div></p>), que le parseur HTML aplatit d'une façon qui
+      // peut interrompre un passage avant la fin de la zone de résidu ;
+      // plafonné à 5 passages, arrêt dès que le résultat n'évolue plus.
+      if (modeAutoExploitationDeterministe && exploitationAutoResultat) {
+        diagnosticNettoyageFuite = { avant: contenuHTML, passages: 0 };
+        for (let passe = 0; passe < 5; passe++) {
+          const resultatPasse = nettoyerFuiteApresTexteSupportExploitation(contenuHTML, exploitationAutoResultat.texteSupportFinal);
+          if (resultatPasse === contenuHTML) break;
+          contenuHTML = resultatPasse;
+          diagnosticNettoyageFuite.passages++;
+        }
+      }
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
         discipline, classe, lecon, seance, duree, niveau,
