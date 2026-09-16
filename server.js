@@ -652,16 +652,14 @@ const LeconOfficielleDPFCSchema = new mongoose.Schema({
   createdAt   : { type: Date, default: Date.now }
 });
 
-// Cache permanent des infos (biographie auteur + thème) trouvées par
-// recherche web pour une œuvre intégrale (02/09) -- clé (titre, auteur)
-// normalisés. Aucune expiration pour un succès (les faits biographiques
-// d'un auteur/thème d'une œuvre ne changent pas) : cf. rechercherInfosOeuvre.
-// Un échec de recherche (aucune info fiable trouvée) EST mis en cache, mais
-// avec `expireApres` positionné à +14 jours -- l'index TTL ci-dessous le
-// supprime alors automatiquement, permettant un nouvel essai plus tard (le
-// web s'enrichit). `expireApres` reste absent (undefined) sur un succès, ce
-// qui l'exclut de l'expiration TTL (MongoDB n'expire jamais un document où
-// le champ indexé est absent).
+// Cache des infos (biographie auteur + thème) trouvées par recherche web
+// pour une œuvre intégrale (02/09) -- clé (titre, auteur) normalisés.
+// Succès ET échec expirent tous les deux désormais (16/09) : un succès
+// n'est jamais rejoué avant 60 jours (les faits biographiques d'un auteur
+// changent rarement, mais un fait halluciné et non détecté par le filet de
+// citations ne doit jamais rester caché indéfiniment -- cf. incident
+// commit c4eb8d8). Un échec est rejoué plus tôt, à +14 jours (le web
+// s'enrichit plus vite qu'un fait erroné ne doit être corrigé).
 const InfoOeuvreIntegraleSchema = new mongoose.Schema({
   titreNormalise  : String,
   auteurNormalise : String,
@@ -5566,8 +5564,10 @@ Réponds UNIQUEMENT avec un objet JSON, sans aucun texte avant ni après, au for
         sources: resultat.sources,
         dateRecherche: new Date(),
         // Échec : nouvel essai permis dans 14 jours (le web peut s'enrichir).
-        // Succès : jamais réévalué (expireApres absent).
-        expireApres: resultat.succes ? undefined : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+        // Succès : réévalué dans 60 jours (cf. commentaire du schéma
+        // ci-dessus -- un fait halluciné non détecté ne doit pas rester
+        // caché indéfiniment).
+        expireApres: new Date(Date.now() + (resultat.succes ? 60 : 14) * 24 * 60 * 60 * 1000)
       },
       { upsert: true }
     );
