@@ -4099,10 +4099,20 @@ function nettoyerFuiteApresTexteSupportExploitation(contenuHTML, texteSupportFin
   });
   if (!debut) return contenuHTML;
 
+  // Parcourt jusqu'à la toute fin du conteneur, PAS seulement jusqu'au
+  // tableau déterministe (16/09, vérification élargie) : un résidu peut
+  // aussi apparaître APRÈS lui -- constaté en test réel un cas où le
+  // modèle plaçait le marqueur correctement (donc le tableau déterministe
+  // apparaît bien, au bon endroit), puis continuait malgré tout à écrire
+  // une section "Trace écrite" et un second tableau complet après. Le seul
+  // nœud jamais retiré ici est `cible` lui-même (le tableau déterministe,
+  // simplement ignoré au passage, jamais supprimé) -- tout le reste, avant
+  // ou après lui, suit la même règle que précédemment.
   let modifie = false;
   let noeud = debut.next;
-  while (noeud && noeud !== cible) {
+  while (noeud) {
     const suivant = noeud.next;
+    if (noeud === cible) { noeud = suivant; continue; }
     const estBlanc = noeud.type === 'text' && !(noeud.data || '').trim();
     // Répétition légitime = contient le texte support EN ENTIER (ex. copie
     // pour photocopie), pas seulement une CITATION d'un court extrait --
@@ -6810,9 +6820,10 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // suppression avant la fin de la zone de résidu. Un 2e passage sur
         // le résultat du 1er a systématiquement fini le travail en test réel
         // -- jamais l'inverse (un passage supplémentaire ne peut que retirer
-        // plus, jamais ajouter). Plafonné à 3 passages, arrêt dès que le
-        // résultat n'évolue plus.
-        for (let passe = 0; passe < 3; passe++) {
+        // plus, jamais ajouter). Plafonné à 5 passages (marge au-delà des 2
+        // observés nécessaires en test réel), arrêt dès que le résultat
+        // n'évolue plus.
+        for (let passe = 0; passe < 5; passe++) {
           const resultatPasse = nettoyerFuiteApresTexteSupportExploitation(contenuHTML, exploitationAutoResultat.texteSupportFinal);
           if (resultatPasse === contenuHTML) break;
           contenuHTML = resultatPasse;
