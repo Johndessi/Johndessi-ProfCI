@@ -4046,6 +4046,60 @@ function supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML) {
   return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
 }
 
+// Filet STRUCTUREL (16/09) : constaté en vérification production que le
+// filet ci-dessus (par formulation -- "Hypothèse générale", "Axe N",
+// commentaire HTML) ne suffit toujours pas -- un essai a produit une
+// analyse Lecture méthodique COMPLÈTE (présentation du texte, 3 tableaux de
+// vérification Entrée/Relevés/Analyse/Interprétation, trace écrite,
+// vocabulaire) entre le texte support et le tableau déterministe, sous un
+// commentaire "AXES DE LECTURE..." qui ne contenait ni "Hypothèse générale"
+// ni "Axe" suivi d'un chiffre (le pluriel "AXES" seul échappait au motif).
+// Après plusieurs cycles où chaque formulation interceptée en fait
+// apparaître une nouvelle, ce filet abandonne le filtrage par formulation :
+// pour Exploitation de texte Mode 1, la structure attendue entre le texte
+// support et le tableau déterministe est un FAIT CONNU (rien), pas une
+// liste de motifs interdits -- donc tout ce qui s'y trouve est par
+// définition un résidu, quel que soit son contenu ou sa formulation.
+// Ancre de début : la copie photocopie (systématique au-delà d'une
+// certaine longueur, cf. injecterTexteSupport) si présente, sinon le
+// paragraphe de texte support lui-même (juste après son libellé "Texte
+// support :", toujours présent). Ancre de fin : le tableau déterministe
+// (identifié par ses lignes data-expl-auto="1", jamais par son contenu).
+// Tout nœud (balise ou commentaire) strictement entre les deux est retiré ;
+// les nœuds texte blancs entre eux sont aussi nettoyés, pour ne pas laisser
+// une succession de lignes vides dans le HTML source.
+function nettoyerFuiteApresTexteSupportExploitation(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+
+  const $tableDeterministe = $('table').filter((_, t) => $(t).find('tr[data-expl-auto="1"]').length > 0).first();
+  if (!$tableDeterministe.length) return contenuHTML;
+
+  let $ancreDebut = $('.texte-support-copie').first();
+  if (!$ancreDebut.length) {
+    const $label = $('p').filter((_, p) => /^Texte support\s*:?\s*$/i.test($(p).text().trim())).first();
+    $ancreDebut = $label.length ? $label.next() : $();
+  }
+  if (!$ancreDebut.length) return contenuHTML;
+
+  let modifie = false;
+  let noeud = $ancreDebut.get(0).next;
+  const cible = $tableDeterministe.get(0);
+  while (noeud && noeud !== cible) {
+    const suivant = noeud.next;
+    const estBlanc = noeud.type === 'text' && !(noeud.data || '').trim();
+    if (noeud.type === 'tag' || noeud.type === 'comment' || estBlanc) {
+      $(noeud).remove();
+      if (!estBlanc) modifie = true;
+    }
+    noeud = suivant;
+  }
+
+  if (!modifie) return contenuHTML;
+  const $racine = $('.fiche-cours').first();
+  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+}
+
 // Filet déterministe UNIVERSEL (12/09) : la cellule Traces écrites de la
 // ligne PRÉSENTATION rituelle (RÈGLES ABSOLUES de construirePromptSecondaire)
 // ne doit contenir QUE Date/Activité/Leçon/Séance -- jamais un contenu déjà
@@ -6723,6 +6777,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenuHTML = supprimerLignesExploitationAutoDupliquees(contenuHTML);
         contenuHTML = forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, exploitationAutoResultat.tableCompletHTML);
         contenuHTML = supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML);
+        contenuHTML = nettoyerFuiteApresTexteSupportExploitation(contenuHTML);
       }
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
