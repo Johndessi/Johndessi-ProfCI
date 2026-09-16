@@ -6073,8 +6073,6 @@ function limiterGenerationParIp(req, res, next) {
     // déjà du plan de l'enseignant).
     let modeAutoExploitationDeterministe = false;
     let exploitationAutoResultat = null;
-    // Diagnostic temporaire (16/09) -- cf. commentaire au point d'usage.
-    let diagnosticNettoyageFuite = null;
     // Mode 1 (automatique, Lecture méthodique) sans texte support fourni par
     // l'enseignant : le modèle doit rédiger lui-même le texte support (cf.
     // section "texteSupport" plus bas) -- utilisé aussi pour retrouver le
@@ -6825,12 +6823,11 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // plus bas, via injecterTexteSupport, juste avant Fiche.create).
         // Appelé ICI, ce filet ne trouvait donc JAMAIS son ancre de départ
         // (aucun élément ne contient encore le texte réel) et retournait le
-        // HTML inchangé à chaque fois (passages=0 systématique, confirmé en
-        // production via diagnosticNettoyageFuite) -- un no-op complet et
-        // silencieux depuis sa création, quel que soit le résidu réellement
-        // présent. Les essais qui semblaient "propres" l'étaient par pure
-        // chance (le modèle n'avait, cette fois-là, rien écrit en trop),
-        // jamais grâce à ce filet.
+        // HTML inchangé à chaque fois -- un no-op complet et silencieux
+        // depuis sa création, quel que soit le résidu réellement présent.
+        // Les essais qui semblaient "propres" l'étaient par pure chance (le
+        // modèle n'avait, cette fois-là, rien écrit en trop), jamais grâce
+        // à ce filet.
       }
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
@@ -7158,12 +7155,10 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       // peut interrompre un passage avant la fin de la zone de résidu ;
       // plafonné à 5 passages, arrêt dès que le résultat n'évolue plus.
       if (modeAutoExploitationDeterministe && exploitationAutoResultat) {
-        diagnosticNettoyageFuite = { avant: contenuHTML, passages: 0 };
         for (let passe = 0; passe < 5; passe++) {
           const resultatPasse = nettoyerFuiteApresTexteSupportExploitation(contenuHTML, exploitationAutoResultat.texteSupportFinal);
           if (resultatPasse === contenuHTML) break;
           contenuHTML = resultatPasse;
-          diagnosticNettoyageFuite.passages++;
         }
       }
       const fiche = await Fiche.create({
@@ -7173,17 +7168,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenu: contenuHTML,
         origineGeneration: origineGenerationNormalisee
       });
-      // Diagnostic temporaire (16/09), UNIQUEMENT en session_debug -- jamais
-      // exposé à un enseignant réel : permet de comparer directement un
-      // essai production à sa rejoue locale sur EXACTEMENT le même
-      // brouillon (avant nettoyage), plutôt que de deviner depuis
-      // contenuFinal (déjà nettoyé, donc jamais le vrai point de départ du
-      // filet nettoyerFuiteApresTexteSupportExploitation).
       const payloadDone = { done: true, ficheId: fiche._id, contenuFinal: contenuHTML };
-      if (origineGenerationNormalisee === 'session_debug') {
-        payloadDone.diagnosticCommit = process.env.RENDER_GIT_COMMIT || null;
-        payloadDone.diagnosticNettoyageFuite = diagnosticNettoyageFuite;
-      }
       res.write(`data: ${JSON.stringify(payloadDone)}\n\n`);
       res.end();
     });
