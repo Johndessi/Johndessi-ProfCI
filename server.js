@@ -4046,49 +4046,73 @@ function supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML) {
   return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
 }
 
-// Filet STRUCTUREL (16/09) : constaté en vérification production que le
-// filet ci-dessus (par formulation -- "Hypothèse générale", "Axe N",
-// commentaire HTML) ne suffit toujours pas -- un essai a produit une
-// analyse Lecture méthodique COMPLÈTE (présentation du texte, 3 tableaux de
-// vérification Entrée/Relevés/Analyse/Interprétation, trace écrite,
-// vocabulaire) entre le texte support et le tableau déterministe, sous un
-// commentaire "AXES DE LECTURE..." qui ne contenait ni "Hypothèse générale"
-// ni "Axe" suivi d'un chiffre (le pluriel "AXES" seul échappait au motif).
-// Après plusieurs cycles où chaque formulation interceptée en fait
-// apparaître une nouvelle, ce filet abandonne le filtrage par formulation :
-// pour Exploitation de texte Mode 1, la structure attendue entre le texte
-// support et le tableau déterministe est un FAIT CONNU (rien), pas une
-// liste de motifs interdits -- donc tout ce qui s'y trouve est par
-// définition un résidu, quel que soit son contenu ou sa formulation.
-// Ancre de début : la copie photocopie (systématique au-delà d'une
-// certaine longueur, cf. injecterTexteSupport) si présente, sinon le
-// paragraphe de texte support lui-même (juste après son libellé "Texte
-// support :", toujours présent). Ancre de fin : le tableau déterministe
-// (identifié par ses lignes data-expl-auto="1", jamais par son contenu).
-// Tout nœud (balise ou commentaire) strictement entre les deux est retiré ;
-// les nœuds texte blancs entre eux sont aussi nettoyés, pour ne pas laisser
-// une succession de lignes vides dans le HTML source.
-function nettoyerFuiteApresTexteSupportExploitation(contenuHTML) {
-  if (!contenuHTML) return contenuHTML;
+// Filet STRUCTUREL (16/09, réécrit une 1ère fois le même jour) : constaté
+// en vérification production que le filet par formulation ci-dessus ne
+// suffit toujours pas -- un essai a produit une analyse Lecture méthodique
+// COMPLÈTE (présentation du texte, 3 tableaux de vérification Entrée/
+// Relevés/Analyse/Interprétation, trace écrite, vocabulaire) entre le
+// texte support et le tableau déterministe, sous un commentaire "AXES DE
+// LECTURE..." qui échappait au motif (le pluriel "AXES" seul, sans
+// "Hypothèse générale" ni "Axe" suivi d'un chiffre). Après plusieurs
+// cycles où chaque formulation interceptée en fait apparaître une
+// nouvelle, ce filet abandonne le filtrage par formulation : pour
+// Exploitation de texte Mode 1, le seul contenu légitime entre le début du
+// texte support et le tableau déterministe est le texte support LUI-MÊME
+// (éventuellement répété -- ex. copie pour photocopie) ; tout le reste y
+// est par définition un résidu, quel que soit son contenu ou sa
+// formulation.
+// 1ère version de ce filet (ancrée sur .texte-support-copie ou le libellé
+// "Texte support :") a elle-même échoué sur un cas réel : le modèle avait
+// emballé SA PROPRE copie "pour photocopie" dans des <div> décoratives
+// imbriquées (donc pas un enfant direct de .fiche-cours, cassant la
+// remontée par .next), tandis qu'une 2e occurrence de la classe
+// .texte-support-copie (la vraie injection serveur) se trouvait juste
+// avant le tableau déterministe SANS résidu entre les deux -- la fuite
+// réelle se trouvait ENTRE les deux occurrences, pas entre la dernière et
+// le tableau. Ancrer sur une classe/un libellé ne suffit donc pas : cette
+// version ancre directement sur le TEXTE RÉEL du texte support (connu au
+// moment de l'appel, cf. texteSupportFinal) -- le 1er enfant direct de
+// .fiche-cours dont le texte le contient sert d'ancre de départ, et TOUTE
+// répétition ultérieure de ce même texte (quel que soit son emballage)
+// reste conservée en avançant vers le tableau déterministe ; seul ce qui
+// n'est ni une répétition du texte support ni le tableau lui-même est
+// retiré, où qu'il se trouve entre les deux.
+function nettoyerFuiteApresTexteSupportExploitation(contenuHTML, texteSupportFinal) {
+  if (!contenuHTML || !texteSupportFinal) return contenuHTML;
   const $ = cheerio.load(contenuHTML);
 
   const $tableDeterministe = $('table').filter((_, t) => $(t).find('tr[data-expl-auto="1"]').length > 0).first();
   if (!$tableDeterministe.length) return contenuHTML;
+  const cible = $tableDeterministe.get(0);
 
-  let $ancreDebut = $('.texte-support-copie').first();
-  if (!$ancreDebut.length) {
-    const $label = $('p').filter((_, p) => /^Texte support\s*:?\s*$/i.test($(p).text().trim())).first();
-    $ancreDebut = $label.length ? $label.next() : $();
-  }
-  if (!$ancreDebut.length) return contenuHTML;
+  const $racine = $('.fiche-cours').first();
+  const $conteneur = $racine.length ? $racine : ($('body').length ? $('body') : $.root());
+
+  const texteComplet = texteSupportFinal.toString().trim();
+  const extraitAncre = texteComplet.slice(0, 80);
+  if (!extraitAncre) return contenuHTML;
+
+  let debut = null;
+  $conteneur.children().each((_, el) => {
+    if (debut || el === cible) return;
+    if ($(el).text().includes(extraitAncre)) debut = el;
+  });
+  if (!debut) return contenuHTML;
 
   let modifie = false;
-  let noeud = $ancreDebut.get(0).next;
-  const cible = $tableDeterministe.get(0);
+  let noeud = debut.next;
   while (noeud && noeud !== cible) {
     const suivant = noeud.next;
     const estBlanc = noeud.type === 'text' && !(noeud.data || '').trim();
-    if (noeud.type === 'tag' || noeud.type === 'comment' || estBlanc) {
+    // Répétition légitime = contient le texte support EN ENTIER (ex. copie
+    // pour photocopie), pas seulement une CITATION d'un court extrait --
+    // constaté en test réel qu'un tableau d'axes de lecture cite
+    // typiquement 1-2 phrases du texte support comme preuve textuelle
+    // ("Indices relevés"), ce qui suffisait à faire passer TOUT le tableau
+    // pour une répétition légitime avec un simple test d'extrait (80
+    // caractères) -- exactement le résidu que ce filet doit retirer.
+    const estRepetitionTexteSupport = noeud.type === 'tag' && $(noeud).text().includes(texteComplet);
+    if (!estRepetitionTexteSupport && (noeud.type === 'tag' || noeud.type === 'comment' || estBlanc)) {
       $(noeud).remove();
       if (!estBlanc) modifie = true;
     }
@@ -4096,8 +4120,8 @@ function nettoyerFuiteApresTexteSupportExploitation(contenuHTML) {
   }
 
   if (!modifie) return contenuHTML;
-  const $racine = $('.fiche-cours').first();
-  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+  const $racineFinale = $('.fiche-cours').first();
+  return $racineFinale.length ? $.html($racineFinale) : $.html($('body').length ? $('body') : $.root());
 }
 
 // Filet déterministe UNIVERSEL (12/09) : la cellule Traces écrites de la
@@ -6777,7 +6801,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenuHTML = supprimerLignesExploitationAutoDupliquees(contenuHTML);
         contenuHTML = forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, exploitationAutoResultat.tableCompletHTML);
         contenuHTML = supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML);
-        contenuHTML = nettoyerFuiteApresTexteSupportExploitation(contenuHTML);
+        contenuHTML = nettoyerFuiteApresTexteSupportExploitation(contenuHTML, exploitationAutoResultat.texteSupportFinal);
       }
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
