@@ -6801,7 +6801,22 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenuHTML = supprimerLignesExploitationAutoDupliquees(contenuHTML);
         contenuHTML = forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, exploitationAutoResultat.tableCompletHTML);
         contenuHTML = supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML);
-        contenuHTML = nettoyerFuiteApresTexteSupportExploitation(contenuHTML, exploitationAutoResultat.texteSupportFinal);
+        // Itéré jusqu'à stabilisation (16/09) : constaté en vérification
+        // production qu'un seul passage laisse parfois un résidu partiel
+        // derrière lui -- le modèle imbrique parfois ses propres balises de
+        // façon invalide (ex. <p><div>...</div></p>, <p><p>...</p></p>),
+        // que le navigateur/parseur HTML normalise en aplatissant la
+        // structure d'une façon qui peut interrompre un unique passage de
+        // suppression avant la fin de la zone de résidu. Un 2e passage sur
+        // le résultat du 1er a systématiquement fini le travail en test réel
+        // -- jamais l'inverse (un passage supplémentaire ne peut que retirer
+        // plus, jamais ajouter). Plafonné à 3 passages, arrêt dès que le
+        // résultat n'évolue plus.
+        for (let passe = 0; passe < 3; passe++) {
+          const resultatPasse = nettoyerFuiteApresTexteSupportExploitation(contenuHTML, exploitationAutoResultat.texteSupportFinal);
+          if (resultatPasse === contenuHTML) break;
+          contenuHTML = resultatPasse;
+        }
       }
       if (estLectureMethodique({ discipline, lecon, theme })) {
         contenuHTML = separerTableauxImbriques(contenuHTML);
