@@ -3877,7 +3877,9 @@ ORDRE OBLIGATOIRE DES ÉLÉMENTS, ET FIN DE TA RÉPONSE : Entête, PUIS Tableau 
 
 TABLEAU HABILETÉS ET CONTENUS : verbes taxonomiques centrés sur le vocabulaire et la grammaire${sectionIIIIncluse ? ", plus la technique d'expression (ex. Identifier, Relever, Expliquer, Utiliser)" : " (ex. Identifier, Relever, Expliquer -- la technique d'expression n'est pas pertinente pour ce texte, ne l'inclus pas)"} -- jamais "Produire un texte", qui n'a pas sa place ici. La colonne Contenus reste elle aussi centrée sur le vocabulaire et la grammaire : jamais "Hypothèse générale", jamais "Axe 1"/"Axe 2"/"I-"/"II-" numérotant une analyse du texte (thèse, arguments, structure...), même sous une autre formulation -- ce n'est le rôle d'aucune partie de cette fiche.
 
-TABLEAU DÉROULEMENT (PRÉSENTATION comprise) — ENTIÈREMENT PRIS EN CHARGE PAR LE SERVEUR, JAMAIS PAR TOI : contrairement à toutes les autres fiches, tu n'écris NI la ligne PRÉSENTATION rituelle NI aucune autre ligne de ce tableau pour CETTE fiche -- ni son en-tête, ni son contenu, ni ses intitulés, ni même la balise <table> qui le contiendrait. Le tableau complet (en-tête + PRÉSENTATION + vocabulaire/grammaire${sectionIIIIncluse ? '/technique d\'expression' : ''}/évaluation) est déjà entièrement rédigé et sera injecté automatiquement au marqueur {{DEROULEMENT_EXPLOITATION_AUTO}}. N'écris RIEN sur la présentation rituelle, le vocabulaire, la grammaire, une hypothèse de lecture ou des axes -- ce n'est pas ton rôle pour cette fiche. Ta réponse se termine au marqueur (suivi de la fermeture </div>) : aucun <table>, <tr>, <td> ni <th> après le texte support.`;
+TABLEAU DÉROULEMENT (PRÉSENTATION comprise) — ENTIÈREMENT PRIS EN CHARGE PAR LE SERVEUR, JAMAIS PAR TOI : contrairement à toutes les autres fiches, tu n'écris NI la ligne PRÉSENTATION rituelle NI aucune autre ligne de ce tableau pour CETTE fiche -- ni son en-tête, ni son contenu, ni ses intitulés, ni même la balise <table> qui le contiendrait. Le tableau complet (en-tête + PRÉSENTATION + vocabulaire/grammaire${sectionIIIIncluse ? '/technique d\'expression' : ''}/évaluation) est déjà entièrement rédigé et sera injecté automatiquement au marqueur {{DEROULEMENT_EXPLOITATION_AUTO}}. N'écris RIEN sur la présentation rituelle, le vocabulaire, la grammaire, une hypothèse de lecture ou des axes -- ce n'est pas ton rôle pour cette fiche.
+
+APRÈS LE TEXTE SUPPORT, RIEN D'AUTRE QUE LE MARQUEUR : ta réponse se termine au marqueur {{DEROULEMENT_EXPLOITATION_AUTO}} (suivi de la fermeture </div>) -- STRICTEMENT AUCUN autre contenu entre le texte support et ce marqueur, quelle que soit sa forme : ni balise (<table>, <tr>, <td>, <th>, <p>, <div>...), ni commentaire HTML (<!-- ... -->), ni texte libre, ni titre, ni transition rédactionnelle. Un commentaire HTML n'est PAS un espace neutre où tu peux résumer ou annoncer un contenu analytique : même écrit en commentaire, "Hypothèse générale"/"axes de lecture"/toute analyse du texte n'a AUCUNE place nulle part dans ce document, pas plus en commentaire qu'en texte visible. Le marqueur est la TOUTE DERNIÈRE chose que tu écris avant </div>.`;
 }
 
 // Filet redondant : constaté en test réel (16/08, 2e itération) -- même en
@@ -3994,11 +3996,33 @@ function supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML) {
     }
   });
 
-  $('p').each((_, p) => {
+  $('p, div').each((_, p) => {
     if (/^Hypoth[eè]se g[eé]n[eé]rale/i.test($(p).text().trim())) {
       $(p).remove();
       modifie = true;
     }
+  });
+
+  // Filet complémentaire (16/09) : constaté en test réel (batch de
+  // vérification post-v3.1) que le modèle peut glisser un commentaire HTML
+  // annonçant une analyse Lecture méthodique (ex. "<!-- PRÉSENTATION
+  // RITUELLE : Hypothèse générale et axes de lecture -->") suivi d'un
+  // paragraphe qui, LUI, ne commence pas par les mots interdits (ex.
+  // "L'auteur cherche à persuader...") -- échappant ainsi au filet
+  // ci-dessus, qui ne regarde que le texte du paragraphe lui-même. Le
+  // signal fiable ici n'est pas le texte du paragraphe suivant (reformulable
+  // à l'infini) mais la présence du commentaire/en-tête qui l'annonce : les
+  // deux sont supprimés ensemble, quel que soit le texte réel de ce qui
+  // suit (on saute les nœuds texte purement blancs entre les deux, ex. un
+  // retour à la ligne laissé par le modèle).
+  const marqueurHypoAxe = /Hypoth[eè]se\s*g[eé]n[eé]rale|Axe\s*\d/i;
+  $('*').contents().each((_, node) => {
+    if (node.type !== 'comment' || !marqueurHypoAxe.test(node.data || '')) return;
+    let suivant = node.next;
+    while (suivant && suivant.type === 'text' && !(suivant.data || '').trim()) suivant = suivant.next;
+    $(node).remove();
+    if (suivant && suivant.type === 'tag') $(suivant).remove();
+    modifie = true;
   });
 
   // Troncature en ligne (dans une cellule autrement légitime, ex. la
