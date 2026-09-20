@@ -5405,8 +5405,19 @@ ${resume}`;
 // (catalogue lycée, cf. seanceCatalogueOI) plutôt que la valeur fixe
 // "Évaluation finale" -- et sans champ Compétence forcé (cf. commentaire du
 // dispatch dans /api/generer-fiche : données DPFC lycée non sourcées).
-function construireFicheLibreOeuvreLyceeBypass({ discipline, classe, duree, titreOeuvre, auteurOeuvre, leconAffichee, seanceAffichee, contenuLibre }) {
+function construireFicheLibreOeuvreLyceeBypass({ discipline, classe, duree, titreOeuvre, auteurOeuvre, leconAffichee, seanceAffichee, contenuLibre, situationApprentissage }) {
   const corpsLibre = texteSupportVersHtml(contenuLibre);
+  const situation = (situationApprentissage || '').toString().trim();
+  // Situation d'apprentissage (20/09, retour enseignant) : dans le vrai
+  // document DPFC, elle apparaît UNE SEULE FOIS, juste après le titre de la
+  // leçon et AVANT la Séance 1 (Culture littéraire) -- jamais à
+  // l'Introduction (Séance 3) comme précédemment implémenté. Optionnelle et
+  // saisie ici par l'enseignant tel quel (même logique bypass que le reste
+  // de cette séance : aucune génération automatique, l'enseignant a la main
+  // en Séance 1 comme sur tout le reste du contenu de Culture littéraire).
+  const blocSituation = situation
+    ? `<p><strong>Situation d'apprentissage :</strong> ${echapperHtml(situation)}</p>\n\n`
+    : '';
   return `<div class="fiche-cours">
 
 <div class="entete-libre" style="display:grid;grid-template-columns:110px 1fr;column-gap:12px;row-gap:2px;margin-bottom:14px;">
@@ -5419,7 +5430,7 @@ function construireFicheLibreOeuvreLyceeBypass({ discipline, classe, duree, titr
   <div style="font-weight:bold;padding:2px 0;">Séance :</div><div style="padding:2px 0;">${echapperHtml((seanceAffichee || '').toString().trim())}</div>
 </div>
 
-<p><strong>Œuvre :</strong> « ${echapperHtml((titreOeuvre || '').toString().trim())} », ${echapperHtml((auteurOeuvre || '').toString().trim())}</p>
+${blocSituation}<p><strong>Œuvre :</strong> « ${echapperHtml((titreOeuvre || '').toString().trim())} », ${echapperHtml((auteurOeuvre || '').toString().trim())}</p>
 
 ${corpsLibre}
 
@@ -6224,9 +6235,14 @@ function limiterGenerationParIp(req, res, next) {
         }
         const leconAfficheeBypass = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre);
         const seanceAfficheeBypass = `${seance} : ${(seanceCatalogueOI && seanceCatalogueOI.intitule) || ''}`.trim();
+        // Situation d'apprentissage : uniquement pertinente pour la toute
+        // première séance de la séquence (numéro 1), jamais pour la
+        // Culture littéraire n°2 -- cf. vrai document DPFC (Soundjata),
+        // où elle n'apparaît qu'une fois, avant la Séance 1.
         const contenuHTMLBypass = construireFicheLibreOeuvreLyceeBypass({
           discipline, classe, duree, titreOeuvre, auteurOeuvre,
-          leconAffichee: leconAfficheeBypass, seanceAffichee: seanceAfficheeBypass, contenuLibre: contenuLibreCultureLitteraire
+          leconAffichee: leconAfficheeBypass, seanceAffichee: seanceAfficheeBypass, contenuLibre: contenuLibreCultureLitteraire,
+          situationApprentissage: Number(seance) === 1 ? situationApprentissageOeuvre : ''
         });
         const ficheBypass = await Fiche.create({
           enseignantId: enseignantId || 'anonyme',

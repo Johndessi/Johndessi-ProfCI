@@ -431,6 +431,15 @@ textarea { resize: vertical; min-height: 90px; }
         </div>
 
         <div id="oiPanneauCultureLitteraire" style="display:none">
+          <div id="oiGroupeSituationApprentissageSeance1" style="display:none">
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Situation d'apprentissage (optionnel)</label>
+              <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
+                Placée ici, avant la Séance 1, conformément au vrai document DPFC (jamais à l'Introduction). Saisie intégrale par l'enseignant, restituée telle quelle. Laisse vide si tu préfères que le modèle en propose une plus tard, à la séance d'Introduction.
+              </p>
+              <textarea id="oiSituationApprentissageSeance1" style="min-height:80px"></textarea>
+            </div>
+          </div>
           <div class="form-group" style="margin-bottom:14px">
             <label>Contenu intégral de l'exposé magistral (contexte historique/littéraire/biographique) *</label>
             <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
@@ -1245,15 +1254,37 @@ function changerSeanceOeuvreLycee() {
   const lecon = catalogueOeuvreLycee.find((l) => String(l.numeroLecon) === String(numeroSequence));
   const estPoetique = lecon && lecon.genreOeuvre === 'poetique';
 
+  const etat = etatSequenceLycee[numeroSequence] || {};
+
   document.getElementById('oiPanneauLectureDirigee').style.display = (type === 'lecture_dirigee') ? 'block' : 'none';
   document.getElementById('oiPanneauCultureLitteraire').style.display = (type === 'culture_litteraire') ? 'block' : 'none';
   document.getElementById('oiPanneauExpose').style.display = (type === 'expose') ? 'block' : 'none';
+
+  // Situation d'apprentissage : placée à la Séance 1 (Culture littéraire),
+  // conformément au vrai document DPFC -- jamais à la Séance 2 de Culture
+  // littéraire, jamais à l'Introduction (cf. commit du 20/09).
+  document.getElementById('oiGroupeSituationApprentissageSeance1').style.display =
+    (type === 'culture_litteraire' && seance && Number(seance.numeroSeance) === 1) ? 'block' : 'none';
 
   const estIntroOuConclusion = (type === 'introduction' || type === 'conclusion');
   document.getElementById('oiPanneauIntroductionConclusionLycee').style.display = estIntroOuConclusion ? 'block' : 'none';
   document.getElementById('oiGroupeCorpusGTLycee').style.display = (estIntroOuConclusion && estPoetique) ? 'block' : 'none';
   document.getElementById('oiGroupeSituationApprentissageLycee').style.display = (type === 'introduction') ? 'block' : 'none';
   document.getElementById('oiGroupeBioThemePersoLieuxLycee').style.display = (type === 'introduction' && !estPoetique) ? 'block' : 'none';
+
+  if (type === 'introduction') {
+    const champSituation = document.getElementById('oiSituationApprentissageLycee');
+    const aideSituation = champSituation.previousElementSibling;
+    if (etat.situationApprentissage) {
+      champSituation.value = etat.situationApprentissage;
+      champSituation.readOnly = true;
+      if (aideSituation) aideSituation.textContent = "Déjà fournie à la Séance 1 (Culture littéraire) -- reprise ici telle quelle, ne doit plus être modifiée.";
+    } else {
+      champSituation.value = '';
+      champSituation.readOnly = false;
+      if (aideSituation) aideSituation.textContent = "Laisse vide pour que le modèle en propose une (ancrée sur les éléments réels déjà fournis ci-dessous, ou trouvés par recherche documentaire) -- ou saisis la tienne pour qu'elle soit reproduite telle quelle, sans reformulation. Réutilisée sans changement dans les séances suivantes de la séquence.";
+    }
+  }
 
   if (estIntroOuConclusion) {
     document.getElementById('oiLabelAxeEtudeLycee').textContent = (type === 'conclusion')
@@ -1266,7 +1297,6 @@ function changerSeanceOeuvreLycee() {
       ? 'Liste des textes/poèmes retenus (reprise automatiquement de l\'Introduction) *'
       : 'Liste des textes/poèmes retenus (titre, auteur, date) *';
 
-    const etat = etatSequenceLycee[numeroSequence] || {};
     const champAxe = document.getElementById('oiAxeEtudeLycee');
     const champCorpus = document.getElementById('oiCorpusTextesGTLycee');
     if (type === 'conclusion' && etat.axeEtude) {
@@ -1340,6 +1370,9 @@ async function genererFicheOeuvreIntegraleLycee() {
     const contenuLibreCultureLitteraire = document.getElementById('oiContenuCultureLitteraire').value.trim();
     if (!contenuLibreCultureLitteraire) { toast("❗ Le contenu de l'exposé magistral est obligatoire"); return; }
     champs.contenuLibreCultureLitteraire = contenuLibreCultureLitteraire;
+    if (Number(seance.numeroSeance) === 1) {
+      champs.situationApprentissageOeuvre = document.getElementById('oiSituationApprentissageSeance1').value.trim();
+    }
   } else if (seance.typeSeanceOeuvre === 'expose') {
     const exposeSujetsGroupes = document.getElementById('oiSujetsGroupesExpose').value.trim();
     if (!exposeSujetsGroupes) { toast('❗ Les sujets et la répartition des groupes sont obligatoires'); return; }
@@ -1402,8 +1435,21 @@ async function genererFicheOeuvreIntegraleLycee() {
           ficheEnCours = { id: json.ficheId, contenu: contenuHTML };
           afficherFiche(contenuHTML);
           toast('✅ Fiche générée avec succès !');
-          if (seance.typeSeanceOeuvre === 'introduction') {
-            etatSequenceLycee[numeroSequence] = { axeEtude: champs.axeEtude, corpusTextesGT: champs.corpusTextesGT || '' };
+          if (seance.typeSeanceOeuvre === 'culture_litteraire' && Number(seance.numeroSeance) === 1 && champs.situationApprentissageOeuvre) {
+            etatSequenceLycee[numeroSequence] = { ...(etatSequenceLycee[numeroSequence] || {}), situationApprentissage: champs.situationApprentissageOeuvre };
+          } else if (seance.typeSeanceOeuvre === 'introduction') {
+            const etatPrecedent = etatSequenceLycee[numeroSequence] || {};
+            etatSequenceLycee[numeroSequence] = {
+              ...etatPrecedent,
+              axeEtude: champs.axeEtude,
+              corpusTextesGT: champs.corpusTextesGT || '',
+              // Reprise telle quelle si déjà fournie à la Séance 1, sinon
+              // seulement si l'enseignant l'a tapée ici lui-même -- si le
+              // modèle l'a générée librement (les deux étaient vides), on ne
+              // la mémorise pas : aucune séance lycée implémentée pour
+              // l'instant ne la réutilise après l'Introduction.
+              situationApprentissage: etatPrecedent.situationApprentissage || champs.situationApprentissageOeuvre || ''
+            };
           }
         }
         if (json.error) throw new Error(json.error);
