@@ -5474,10 +5474,11 @@ ${sujets}`;
 // d'étude est TOUJOURS fourni par l'enseignant, jamais généré (cf. validation
 // bloquante dans /api/generer-fiche) -- c'est le seul champ non négociable,
 // même en Mode 1 (reste de la séance auto-générée).
-function construireInstructionsIntroductionOeuvreLycee({ genreOeuvre, titreOeuvre, auteurOeuvre, axeEtude, biographieAuteur, themeOeuvre, personnagesOeuvre, lieuxOeuvre, corpusTextesGT }) {
+function construireInstructionsIntroductionOeuvreLycee({ genreOeuvre, titreOeuvre, auteurOeuvre, axeEtude, biographieAuteur, themeOeuvre, personnagesOeuvre, lieuxOeuvre, corpusTextesGT, situationApprentissage }) {
   const titre = (titreOeuvre || '').toString().trim();
   const auteur = (auteurOeuvre || '').toString().trim();
   const axe = (axeEtude || '').toString().trim();
+  const situation = (situationApprentissage || '').toString().trim();
 
   if (genreOeuvre === 'poetique') {
     const corpus = (corpusTextesGT || '').toString().trim();
@@ -5498,7 +5499,7 @@ Pour CHAQUE auteur listé en partie II (un paragraphe court par auteur, 2-4 phra
 IV. Axe d'étude
 "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Conclusion, à la fin de la séquence).
 
-${construireConsigneAxeEtudeSituationOeuvreLycee(axe)}`;
+${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}`;
   }
 
   // narrative / theatrale (et tout genre par défaut non reconnu) : un seul
@@ -5538,15 +5539,26 @@ ${consignePersonnages}${consigneLieux}
 III- Axe d'étude
 "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Conclusion, à la fin de la séquence).
 
-${construireConsigneAxeEtudeSituationOeuvreLycee(axe)}`;
+${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}`;
 }
 
 // Rappel commun aux deux genres : la Situation d'apprentissage ne doit
 // jamais mentionner ni recopier l'axe d'étude -- même règle que le collège
 // (construireInstructionsIntroductionOeuvre), extraite ici pour être
 // partagée par les deux branches ci-dessus sans dupliquer le texte.
-function construireConsigneAxeEtudeSituationOeuvreLycee(axe) {
-  return `Situation d'apprentissage : rédige-la normalement (ancrée dans le quotidien ivoirien). IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les séances suivantes de cette même séquence -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance. N'Y MENTIONNE JAMAIS L'AXE D'ÉTUDE NI SON CONTENU ("${axe}") : les deux champs sont distincts et ne doivent partager AUCUNE formulation -- la situation d'apprentissage amène vers la découverte de l'œuvre/du groupement de textes en général, jamais vers l'axe précis.`;
+// Double mode (20/09, retour enseignant après test réel) : comme partout
+// ailleurs dans l'appli, l'enseignant peut fournir SA PROPRE situation
+// d'apprentissage (reproduite mot pour mot, jamais reformulée) ; s'il ne
+// fournit rien, le modèle en propose une -- mais seulement ancrée sur des
+// éléments déjà vérifiés (titre/auteur/thème/personnages fournis ou
+// confirmés par recherche documentaire), jamais un scénario inventé de
+// toutes pièces si aucune information réelle n'est disponible.
+function construireConsigneAxeEtudeSituationOeuvreLycee(axe, situationFournie) {
+  const situation = (situationFournie || '').toString().trim();
+  if (situation) {
+    return `Situation d'apprentissage : reproduis EXACTEMENT et INTÉGRALEMENT, sans y ajouter ni en retirer aucun détail, sans la reformuler, le texte fourni par l'enseignant ci-dessous : "${situation}"`;
+  }
+  return `Situation d'apprentissage : l'enseignant n'a fourni aucune situation d'apprentissage -- propose-en une, ancrée dans le quotidien ivoirien et conforme aux pratiques du système éducatif ivoirien (approche par compétences), mais UNIQUEMENT à partir d'éléments réels (thème, personnages, contexte de l'œuvre) déjà fournis par l'enseignant ou confirmés par recherche documentaire dans cette même séance -- si aucune information réelle sur l'œuvre n'est disponible, reste général (ne mentionne aucun nom de personnage ni aucun fait précis que tu ne connais pas avec certitude) plutôt que d'inventer un scénario. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les séances suivantes de cette même séquence -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance. N'Y MENTIONNE JAMAIS L'AXE D'ÉTUDE NI SON CONTENU ("${axe}") : les deux champs sont distincts et ne doivent partager AUCUNE formulation -- la situation d'apprentissage amène vers la découverte de l'œuvre/du groupement de textes en général, jamais vers l'axe précis.`;
 }
 
 // Conclusion (second cycle, 20/09) : deux structures RÉELLEMENT différentes
@@ -6419,7 +6431,8 @@ function limiterGenerationParIp(req, res, next) {
         systemPrompt += construireInstructionsIntroductionOeuvreLycee({
           genreOeuvre: genreOeuvreOI, titreOeuvre, auteurOeuvre, axeEtude,
           biographieAuteur: biographieEffective, themeOeuvre: themeEffectif,
-          personnagesOeuvre, lieuxOeuvre, corpusTextesGT
+          personnagesOeuvre, lieuxOeuvre, corpusTextesGT,
+          situationApprentissage: situationApprentissageOeuvre
         });
       } else if (typeSeanceOI === 'conclusion') {
         systemPrompt += construireInstructionsConclusionOeuvreLycee({

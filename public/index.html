@@ -471,6 +471,15 @@ textarea { resize: vertical; min-height: 90px; }
               <textarea id="oiCorpusTextesGTLycee" style="min-height:100px" placeholder="Ex: « Correspondances », Charles Baudelaire, Les Fleurs du Mal (1857)..."></textarea>
             </div>
           </div>
+          <div id="oiGroupeSituationApprentissageLycee" style="display:none">
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Situation d'apprentissage (optionnel)</label>
+              <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
+                Laisse vide pour que le modèle en propose une (ancrée sur les éléments réels déjà fournis ci-dessous, ou trouvés par recherche documentaire) -- ou saisis la tienne pour qu'elle soit reproduite telle quelle, sans reformulation. Réutilisée sans changement dans les séances suivantes de la séquence.
+              </p>
+              <textarea id="oiSituationApprentissageLycee" style="min-height:80px"></textarea>
+            </div>
+          </div>
           <div id="oiGroupeBioThemePersoLieuxLycee" style="display:none">
             <p style="font-size:12px;color:var(--gris2);margin-bottom:10px">
               Champs optionnels et indépendants : sans eux, la présentation de l'œuvre reste volontairement sobre et générale (aucune invention). Si biographie et thème sont tous deux vides, une recherche web automatique est tentée (résultat mis en cache).
@@ -1243,6 +1252,7 @@ function changerSeanceOeuvreLycee() {
   const estIntroOuConclusion = (type === 'introduction' || type === 'conclusion');
   document.getElementById('oiPanneauIntroductionConclusionLycee').style.display = estIntroOuConclusion ? 'block' : 'none';
   document.getElementById('oiGroupeCorpusGTLycee').style.display = (estIntroOuConclusion && estPoetique) ? 'block' : 'none';
+  document.getElementById('oiGroupeSituationApprentissageLycee').style.display = (type === 'introduction') ? 'block' : 'none';
   document.getElementById('oiGroupeBioThemePersoLieuxLycee').style.display = (type === 'introduction' && !estPoetique) ? 'block' : 'none';
 
   if (estIntroOuConclusion) {
@@ -1346,6 +1356,10 @@ async function genererFicheOeuvreIntegraleLycee() {
       champs.themeOeuvre = document.getElementById('oiThemeOeuvreLycee').value.trim();
       champs.personnagesOeuvre = document.getElementById('oiPersonnagesOeuvreLycee').value.trim();
       champs.lieuxOeuvre = document.getElementById('oiLieuxOeuvreLycee').value.trim();
+      // Optionnel : si vide, le serveur en propose une (cf. server.js
+      // construireConsigneAxeEtudeSituationOeuvreLycee) ; si fournie, elle
+      // est reproduite mot pour mot, jamais reformulée.
+      champs.situationApprentissageOeuvre = document.getElementById('oiSituationApprentissageLycee').value.trim();
     }
   }
 
