@@ -390,13 +390,14 @@ textarea { resize: vertical; min-height: 90px; }
       </div>
       </div>
 
-      <!-- Second cycle (13/09) : catalogue-piloté, structure différente du collège
-           ci-dessus (S1-S11 fixe) -- séquences/séances viennent de LeconOfficielleDPFC
-           pour le profil résolu depuis #oiClasse (cf. resoudreProfilSecondCycle côté
-           client). Seule Lecture dirigée est implémentée pour l'instant (cf.
-           mettreAJourModeOeuvreIntegrale/changerSeanceOeuvreLycee) : les autres types
-           de séance du catalogue (Culture littéraire, Exposé...) sont affichés mais
-           bloqués à la génération, jamais silencieusement mal générés. -->
+      <!-- Second cycle (13/09, complété 20/09) : catalogue-piloté, structure différente
+           du collège ci-dessus (S1-S11 fixe) -- séquences/séances viennent de
+           LeconOfficielleDPFC pour le profil résolu depuis #oiClasse (cf.
+           resoudreProfilSecondCycle côté client). Lecture dirigée, Culture littéraire,
+           Exposé, Introduction et Conclusion sont implémentés (cf.
+           TYPES_SEANCE_LYCEE_IMPLEMENTES) : Lecture méthodique, Évaluation et Correction
+           restent affichés mais bloqués à la génération, jamais silencieusement mal
+           générés. -->
       <div id="oiPanneauLycee" style="display:none">
         <h2 style="margin-top:18px">Séances de la séquence (second cycle)</h2>
         <div class="form-row">
@@ -446,6 +447,50 @@ textarea { resize: vertical; min-height: 90px; }
               Reproduit tel quel dans la fiche -- le modèle ne rédige que les consignes de préparation et la grille d'évaluation ci-dessous, jamais le contenu des sujets eux-mêmes.
             </p>
             <textarea id="oiSujetsGroupesExpose" style="min-height:100px" placeholder="Ex: Groupe 1 : la vie de Guy de Maupassant. Groupe 2 : le contexte historique de la Normandie au XIXe siècle. Groupe 3 : le mouvement réaliste en littérature."></textarea>
+          </div>
+        </div>
+
+        <!-- Introduction et Conclusion (second cycle) : l'axe d'étude (et, pour un GT
+             poétique, le corpus de textes retenus) saisi en Introduction est mémorisé
+             côté client (etatSequenceLycee) et réinjecté en lecture seule quand on
+             passe à la Conclusion de la même séquence -- jamais ressaisi ni reformulé. -->
+        <div id="oiPanneauIntroductionConclusionLycee" style="display:none">
+          <div class="form-group" style="margin-bottom:14px">
+            <label id="oiLabelAxeEtudeLycee">Axe d'étude *</label>
+            <p style="font-size:12px;color:var(--gris2);margin-bottom:8px" id="oiAideAxeEtudeLycee">
+              Obligatoire, quel que soit le reste du plan -- sera automatiquement repris (lecture seule) à la séance de Conclusion.
+            </p>
+            <textarea id="oiAxeEtudeLycee" style="min-height:60px" placeholder="Ex: La dénonciation de l'excision et du mariage forcé"></textarea>
+          </div>
+          <div id="oiGroupeCorpusGTLycee" style="display:none">
+            <div class="form-group" style="margin-bottom:14px">
+              <label id="oiLabelCorpusGTLycee">Liste des textes/poèmes retenus (titre, auteur, date) *</label>
+              <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
+                C'est l'enseignant qui choisit ce corpus -- le modèle ne l'invente jamais. Pour la Conclusion, ce corpus est repris tel quel de l'Introduction.
+              </p>
+              <textarea id="oiCorpusTextesGTLycee" style="min-height:100px" placeholder="Ex: « Correspondances », Charles Baudelaire, Les Fleurs du Mal (1857)..."></textarea>
+            </div>
+          </div>
+          <div id="oiGroupeBioThemePersoLieuxLycee" style="display:none">
+            <p style="font-size:12px;color:var(--gris2);margin-bottom:10px">
+              Champs optionnels et indépendants : sans eux, la présentation de l'œuvre reste volontairement sobre et générale (aucune invention). Si biographie et thème sont tous deux vides, une recherche web automatique est tentée (résultat mis en cache).
+            </p>
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Biographie de l'auteur (optionnel)</label>
+              <textarea id="oiBiographieAuteurLycee" style="min-height:60px"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Thème de l'œuvre (optionnel)</label>
+              <textarea id="oiThemeOeuvreLycee" style="min-height:50px"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Personnages (optionnel)</label>
+              <textarea id="oiPersonnagesOeuvreLycee" style="min-height:70px"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Lieux / espace (optionnel)</label>
+              <textarea id="oiLieuxOeuvreLycee" style="min-height:50px"></textarea>
+            </div>
           </div>
         </div>
       </div>
@@ -1111,7 +1156,9 @@ async function chargerCatalogueOeuvreLycee(profil) {
   document.getElementById('oiPanneauLectureDirigee').style.display = 'none';
   document.getElementById('oiPanneauCultureLitteraire').style.display = 'none';
   document.getElementById('oiPanneauExpose').style.display = 'none';
+  document.getElementById('oiPanneauIntroductionConclusionLycee').style.display = 'none';
   document.getElementById('oiTypeSeanceLyceeInfo').textContent = '';
+  etatSequenceLycee = {};
   try {
     const reponse = await fetch(`/api/lecons-officielles/liste?discipline=${encodeURIComponent('Français')}&classe=${encodeURIComponent(profil.profil)}&activite=${encodeURIComponent("Étude de l'œuvre intégrale")}`);
     catalogueOeuvreLycee = await reponse.json();
@@ -1143,7 +1190,13 @@ async function chargerCatalogueOeuvreLycee(profil) {
 
 // Types de séance implémentés côté frontend -- GARDER SYNCHRONISÉ avec
 // TYPES_SEANCE_LYCEE_IMPLEMENTES côté serveur (server.js).
-const TYPES_SEANCE_LYCEE_IMPLEMENTES = ['lecture_dirigee', 'culture_litteraire', 'expose'];
+const TYPES_SEANCE_LYCEE_IMPLEMENTES = ['lecture_dirigee', 'culture_litteraire', 'expose', 'introduction', 'conclusion'];
+// Mémorisation client, par numéroSéquence, de l'axe d'étude (et du corpus GT pour un
+// groupement de textes poétiques) saisis en Introduction -- purement en mémoire (pas de
+// localStorage, pas de persistance serveur), réinjectés en lecture seule en Conclusion.
+// Perdu si la page est rechargée : dans ce cas le champ redevient éditable (avec rappel
+// de ne jamais reformuler l'axe déjà utilisé en Introduction).
+let etatSequenceLycee = {};
 
 function changerSequenceOeuvreLycee() {
   const numLecon = document.getElementById('oiSequenceLycee').value;
@@ -1152,6 +1205,7 @@ function changerSequenceOeuvreLycee() {
   document.getElementById('oiPanneauLectureDirigee').style.display = 'none';
   document.getElementById('oiPanneauCultureLitteraire').style.display = 'none';
   document.getElementById('oiPanneauExpose').style.display = 'none';
+  document.getElementById('oiPanneauIntroductionConclusionLycee').style.display = 'none';
   document.getElementById('oiTypeSeanceLyceeInfo').textContent = '';
   const lecon = catalogueOeuvreLycee.find((l) => String(l.numeroLecon) === String(numLecon));
   const optVide = document.createElement('option');
@@ -1178,11 +1232,51 @@ function changerSeanceOeuvreLycee() {
   const seance = trouverSeanceOeuvreLyceeSelectionnee();
   const type = seance ? seance.typeSeanceOeuvre : null;
   const estImplemente = TYPES_SEANCE_LYCEE_IMPLEMENTES.includes(type);
+  const numeroSequence = document.getElementById('oiSequenceLycee').value;
+  const lecon = catalogueOeuvreLycee.find((l) => String(l.numeroLecon) === String(numeroSequence));
+  const estPoetique = lecon && lecon.genreOeuvre === 'poetique';
+
   document.getElementById('oiPanneauLectureDirigee').style.display = (type === 'lecture_dirigee') ? 'block' : 'none';
   document.getElementById('oiPanneauCultureLitteraire').style.display = (type === 'culture_litteraire') ? 'block' : 'none';
   document.getElementById('oiPanneauExpose').style.display = (type === 'expose') ? 'block' : 'none';
+
+  const estIntroOuConclusion = (type === 'introduction' || type === 'conclusion');
+  document.getElementById('oiPanneauIntroductionConclusionLycee').style.display = estIntroOuConclusion ? 'block' : 'none';
+  document.getElementById('oiGroupeCorpusGTLycee').style.display = (estIntroOuConclusion && estPoetique) ? 'block' : 'none';
+  document.getElementById('oiGroupeBioThemePersoLieuxLycee').style.display = (type === 'introduction' && !estPoetique) ? 'block' : 'none';
+
+  if (estIntroOuConclusion) {
+    document.getElementById('oiLabelAxeEtudeLycee').textContent = (type === 'conclusion')
+      ? "Axe d'étude (repris automatiquement de l'Introduction) *"
+      : "Axe d'étude *";
+    document.getElementById('oiAideAxeEtudeLycee').textContent = (type === 'conclusion')
+      ? "Renvoyé tel quel depuis l'Introduction -- ne doit jamais être ressaisi ni reformulé."
+      : "Obligatoire, quel que soit le reste du plan -- sera automatiquement repris (lecture seule) à la séance de Conclusion.";
+    document.getElementById('oiLabelCorpusGTLycee').textContent = (type === 'conclusion')
+      ? 'Liste des textes/poèmes retenus (reprise automatiquement de l\'Introduction) *'
+      : 'Liste des textes/poèmes retenus (titre, auteur, date) *';
+
+    const etat = etatSequenceLycee[numeroSequence] || {};
+    const champAxe = document.getElementById('oiAxeEtudeLycee');
+    const champCorpus = document.getElementById('oiCorpusTextesGTLycee');
+    if (type === 'conclusion' && etat.axeEtude) {
+      champAxe.value = etat.axeEtude;
+      champAxe.readOnly = true;
+    } else {
+      if (type === 'introduction') champAxe.value = '';
+      champAxe.readOnly = false;
+    }
+    if (type === 'conclusion' && etat.corpusTextesGT) {
+      champCorpus.value = etat.corpusTextesGT;
+      champCorpus.readOnly = true;
+    } else {
+      if (type === 'introduction') champCorpus.value = '';
+      champCorpus.readOnly = false;
+    }
+  }
+
   document.getElementById('oiTypeSeanceLyceeInfo').textContent = (seance && !estImplemente)
-    ? `Ce type de séance ("${type || 'non défini'}") n'est pas encore disponible -- seuls Lecture dirigée, Culture littéraire et Exposé sont implémentés pour l'instant.`
+    ? `Ce type de séance ("${type || 'non défini'}") n'est pas encore disponible pour l'instant.`
     : '';
 }
 
@@ -1205,9 +1299,11 @@ async function genererFicheOeuvreIntegraleLycee() {
   if (!titreOeuvre || !auteurOeuvre) { toast("❗ Titre de l'œuvre et auteur sont obligatoires"); return; }
   if (!numeroSequence || !seance) { toast('❗ Choisissez une séquence et une séance'); return; }
   if (!TYPES_SEANCE_LYCEE_IMPLEMENTES.includes(seance.typeSeanceOeuvre)) {
-    toast(`❗ Ce type de séance ("${seance.typeSeanceOeuvre || 'non défini'}") n'est pas encore disponible -- seuls Lecture dirigée, Culture littéraire et Exposé sont implémentés pour l'instant.`);
+    toast(`❗ Ce type de séance ("${seance.typeSeanceOeuvre || 'non défini'}") n'est pas encore disponible pour l'instant.`);
     return;
   }
+  const leconCourante = catalogueOeuvreLycee.find((l) => String(l.numeroLecon) === String(numeroSequence));
+  const estPoetiqueCourant = leconCourante && leconCourante.genreOeuvre === 'poetique';
 
   const champs = {
     enseignantId: document.getElementById('enseignantId').value.trim() || 'anonyme',
@@ -1238,6 +1334,19 @@ async function genererFicheOeuvreIntegraleLycee() {
     const exposeSujetsGroupes = document.getElementById('oiSujetsGroupesExpose').value.trim();
     if (!exposeSujetsGroupes) { toast('❗ Les sujets et la répartition des groupes sont obligatoires'); return; }
     champs.exposeSujetsGroupes = exposeSujetsGroupes;
+  } else if (seance.typeSeanceOeuvre === 'introduction' || seance.typeSeanceOeuvre === 'conclusion') {
+    const axeEtude = document.getElementById('oiAxeEtudeLycee').value.trim();
+    const corpusTextesGT = document.getElementById('oiCorpusTextesGTLycee').value.trim();
+    if (!axeEtude) { toast("❗ L'axe d'étude est obligatoire"); return; }
+    if (estPoetiqueCourant && !corpusTextesGT) { toast('❗ La liste des textes/poèmes retenus est obligatoire pour un groupement de textes'); return; }
+    champs.axeEtude = axeEtude;
+    if (estPoetiqueCourant) champs.corpusTextesGT = corpusTextesGT;
+    if (seance.typeSeanceOeuvre === 'introduction') {
+      champs.biographieAuteur = document.getElementById('oiBiographieAuteurLycee').value.trim();
+      champs.themeOeuvre = document.getElementById('oiThemeOeuvreLycee').value.trim();
+      champs.personnagesOeuvre = document.getElementById('oiPersonnagesOeuvreLycee').value.trim();
+      champs.lieuxOeuvre = document.getElementById('oiLieuxOeuvreLycee').value.trim();
+    }
   }
 
   document.getElementById('btnGenererOI').disabled = true;
@@ -1279,6 +1388,9 @@ async function genererFicheOeuvreIntegraleLycee() {
           ficheEnCours = { id: json.ficheId, contenu: contenuHTML };
           afficherFiche(contenuHTML);
           toast('✅ Fiche générée avec succès !');
+          if (seance.typeSeanceOeuvre === 'introduction') {
+            etatSequenceLycee[numeroSequence] = { axeEtude: champs.axeEtude, corpusTextesGT: champs.corpusTextesGT || '' };
+          }
         }
         if (json.error) throw new Error(json.error);
       }
