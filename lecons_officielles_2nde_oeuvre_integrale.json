@@ -9,18 +9,62 @@
     "seances": [
       { "numeroSeance": 1, "activite": "Étude de l'œuvre intégrale", "intitule": "Culture littéraire n°1", "typeSeanceOeuvre": "culture_litteraire" },
       { "numeroSeance": 2, "activite": "Étude de l'œuvre intégrale", "intitule": "Culture littéraire n°2", "typeSeanceOeuvre": "culture_litteraire" },
-      { "numeroSeance": 3, "activite": "Étude de l'œuvre intégrale", "intitule": "Introduction à l'étude de l'œuvre", "typeSeanceOeuvre": "introduction" },
-      { "numeroSeance": 4, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture dirigée n°1", "typeSeanceOeuvre": "lecture_dirigee" },
-      { "numeroSeance": 5, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°1", "typeSeanceOeuvre": "lecture_methodique" },
-      { "numeroSeance": 6, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture dirigée n°2", "typeSeanceOeuvre": "lecture_dirigee" },
-      { "numeroSeance": 7, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°2", "typeSeanceOeuvre": "lecture_methodique" },
-      { "numeroSeance": 8, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture dirigée n°3", "typeSeanceOeuvre": "lecture_dirigee" },
+      { "numeroSeance": 3, "activite": "Étude de l'œuvre intégrale", "intitule": "Introduction à l'étude de l'œuvre intégrale narrative", "typeSeanceOeuvre": "introduction" },
+      { "numeroSeance": 4, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°1", "typeSeanceOeuvre": "lecture_methodique" },
+      { "numeroSeance": 5, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture dirigée n°1", "typeSeanceOeuvre": "lecture_dirigee" },
+      { "numeroSeance": 6, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°2", "typeSeanceOeuvre": "lecture_methodique" },
+      { "numeroSeance": 7, "activite": "Étude de l'œuvre intégrale", "intitule": "Exposé n°1", "typeSeanceOeuvre": "expose" },
+      { "numeroSeance": 8, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture dirigée n°2", "typeSeanceOeuvre": "lecture_dirigee" },
       { "numeroSeance": 9, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°3", "typeSeanceOeuvre": "lecture_methodique" },
-      { "numeroSeance": 10, "activite": "Étude de l'œuvre intégrale", "intitule": "Exposé n°1", "typeSeanceOeuvre": "expose" },
+      { "numeroSeance": 10, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture dirigée n°3", "typeSeanceOeuvre": "lecture_dirigee" },
       { "numeroSeance": 11, "activite": "Étude de l'œuvre intégrale", "intitule": "Exposé n°2", "typeSeanceOeuvre": "expose" },
-      { "numeroSeance": 12, "activite": "Étude de l'œuvre intégrale", "intitule": "Conclusion à l'étude de l'œuvre", "typeSeanceOeuvre": "conclusion" },
-      { "numeroSeance": 13, "activite": "Étude de l'œuvre intégrale", "intitule": "Évaluation", "typeSeanceOeuvre": "evaluation" },
-      { "numeroSeance": 14, "activite": "Étude de l'œuvre intégrale", "intitule": "Correction de l'évaluation", "typeSeanceOeuvre": "correction" }
+      { "numeroSeance": 12, "activite": "Étude de l'œuvre intégrale", "intitule": "Conclusion de l'étude de l'œuvre intégrale narrative", "typeSeanceOeuvre": "conclusion" },
+      { "numeroSeance": 13, "activite": "Étude de l'œuvre intégrale", "intitule": "Évaluation de l'étude de l'œuvre intégrale", "typeSeanceOeuvre": "evaluation" },
+      { "numeroSeance": 14, "activite": "Étude de l'œuvre intégrale", "intitule": "Correction de l'évaluation de l'œuvre intégrale narrative", "typeSeanceOeuvre": "correction" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "2nde",
+    "activite": "Étude de l'œuvre intégrale",
+    "numeroLecon": 2,
+    "titreLecon": "Groupement de textes poétiques",
+    "genreOeuvre": "poetique",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Étude de l'œuvre intégrale", "intitule": "Culture littéraire 1 : connaître les genres poétiques (poèmes à forme fixe)", "typeSeanceOeuvre": "culture_litteraire" },
+      { "numeroSeance": 2, "activite": "Étude de l'œuvre intégrale", "intitule": "Culture littéraire 2 : connaître les genres poétiques (poèmes en vers libres)", "typeSeanceOeuvre": "culture_litteraire" },
+      { "numeroSeance": 3, "activite": "Étude de l'œuvre intégrale", "intitule": "Introduction à l'étude du GT", "typeSeanceOeuvre": "introduction" },
+      { "numeroSeance": 4, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°1", "typeSeanceOeuvre": "lecture_methodique" },
+      { "numeroSeance": 5, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°2", "typeSeanceOeuvre": "lecture_methodique" },
+      { "numeroSeance": 6, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°3", "typeSeanceOeuvre": "lecture_methodique" },
+      { "numeroSeance": 7, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°4", "typeSeanceOeuvre": "lecture_methodique" },
+      { "numeroSeance": 8, "activite": "Étude de l'œuvre intégrale", "intitule": "Conclusion à l'étude du groupement de textes poétiques", "typeSeanceOeuvre": "conclusion" },
+      { "numeroSeance": 9, "activite": "Étude de l'œuvre intégrale", "intitule": "Évaluation de l'étude du GT", "typeSeanceOeuvre": "evaluation" },
+      { "numeroSeance": 10, "activite": "Étude de l'œuvre intégrale", "intitule": "Correction de l'évaluation de l'étude du GT", "typeSeanceOeuvre": "correction" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "2nde",
+    "activite": "Étude de l'œuvre intégrale",
+    "numeroLecon": 3,
+    "titreLecon": "La pièce de théâtre",
+    "genreOeuvre": "theatrale",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Étude de l'œuvre intégrale", "intitule": "Culture littéraire : connaître les genres dramatiques (caractéristiques du texte théâtral)", "typeSeanceOeuvre": "culture_litteraire" },
+      { "numeroSeance": 2, "activite": "Étude de l'œuvre intégrale", "intitule": "Culture littéraire : connaître les genres dramatiques (la tragédie, la comédie, la tragi-comédie)", "typeSeanceOeuvre": "culture_litteraire" },
+      { "numeroSeance": 3, "activite": "Étude de l'œuvre intégrale", "intitule": "Introduction à l'étude de l'œuvre", "typeSeanceOeuvre": "introduction" },
+      { "numeroSeance": 4, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°1", "typeSeanceOeuvre": "lecture_methodique" },
+      { "numeroSeance": 5, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture dirigée n°1", "typeSeanceOeuvre": "lecture_dirigee" },
+      { "numeroSeance": 6, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°2", "typeSeanceOeuvre": "lecture_methodique" },
+      { "numeroSeance": 7, "activite": "Étude de l'œuvre intégrale", "intitule": "Exposé n°1", "typeSeanceOeuvre": "expose" },
+      { "numeroSeance": 8, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture dirigée n°2", "typeSeanceOeuvre": "lecture_dirigee" },
+      { "numeroSeance": 9, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture méthodique n°3", "typeSeanceOeuvre": "lecture_methodique" },
+      { "numeroSeance": 10, "activite": "Étude de l'œuvre intégrale", "intitule": "Exposé n°2", "typeSeanceOeuvre": "expose" },
+      { "numeroSeance": 11, "activite": "Étude de l'œuvre intégrale", "intitule": "Lecture dirigée n°3", "typeSeanceOeuvre": "lecture_dirigee" },
+      { "numeroSeance": 12, "activite": "Étude de l'œuvre intégrale", "intitule": "Conclusion de l'étude de l'œuvre", "typeSeanceOeuvre": "conclusion" },
+      { "numeroSeance": 13, "activite": "Étude de l'œuvre intégrale", "intitule": "Évaluation de l'étude de l'œuvre intégrale", "typeSeanceOeuvre": "evaluation" },
+      { "numeroSeance": 14, "activite": "Étude de l'œuvre intégrale", "intitule": "Correction de l'évaluation de l'œuvre intégrale", "typeSeanceOeuvre": "correction" }
     ]
   }
 ]

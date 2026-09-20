@@ -5459,6 +5459,150 @@ RÈGLE ABSOLUE : les parties II et III portent UNIQUEMENT sur la méthode de pr�
 SUJETS ET GROUPES FOURNIS PAR L'ENSEIGNANT (à reproduire tel quel en partie I via le jeton ci-dessus, jamais à développer ou commenter dans les parties II/III) :
 ${sujets}`;
 }
+
+// Introduction (second cycle, 20/09) : contrairement à la version collège
+// (construireInstructionsIntroductionOeuvre, structure fixe I/II/III pour
+// une séquence de 11 séances toujours "narrative"), le second cycle a TROIS
+// genres réels au catalogue (narrative, poétique/GT, théâtrale -- vérifié
+// sur le PDF DPFC 2026-2027 et sur deux vraies fiches, Soundjata et un GT
+// poétique Baudelaire/Hugo/Musset/Gautier) dont la structure d'Introduction
+// diffère : narrative/théâtrale = un seul auteur/une seule œuvre (biographie
+// + bibliographie + présentation de l'œuvre + axe d'étude) ; poétique/GT =
+// plusieurs auteurs/plusieurs textes choisis par l'enseignant (définition de
+// la notion de GT + identification des textes retenus, fournie telle quelle,
+// jamais devinée + bio-bibliographie de CHAQUE auteur + axe d'étude). L'axe
+// d'étude est TOUJOURS fourni par l'enseignant, jamais généré (cf. validation
+// bloquante dans /api/generer-fiche) -- c'est le seul champ non négociable,
+// même en Mode 1 (reste de la séance auto-générée).
+function construireInstructionsIntroductionOeuvreLycee({ genreOeuvre, titreOeuvre, auteurOeuvre, axeEtude, biographieAuteur, themeOeuvre, personnagesOeuvre, lieuxOeuvre, corpusTextesGT }) {
+  const titre = (titreOeuvre || '').toString().trim();
+  const auteur = (auteurOeuvre || '').toString().trim();
+  const axe = (axeEtude || '').toString().trim();
+
+  if (genreOeuvre === 'poetique') {
+    const corpus = (corpusTextesGT || '').toString().trim();
+    return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- INTRODUCTION À L'ÉTUDE D'UN GROUPEMENT DE TEXTES (GT) POÉTIQUE (les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes -- rédige UNIQUEMENT la structure I/II/III/IV ci-dessous à la place.) :
+
+I. Définition de la notion de groupement de textes
+1-2 phrases : un groupement de textes n'est pas une simple collection mais un ensemble de plusieurs textes (du même auteur ou d'auteurs différents) partageant une problématique ou un thème littéraire commun, appartenant au même genre littéraire.
+
+II. Identification des poèmes/textes retenus
+NE LES RÉDIGE PAS toi-même : reproduis EXACTEMENT et INTÉGRALEMENT, sans y ajouter ni en retirer aucun détail, la liste fournie par l'enseignant ci-dessous (titre, auteur, date/recueil d'origine, un par ligne) :
+"${corpus}"
+
+III. Bio-bibliographie des auteurs
+Pour CHAQUE auteur listé en partie II (un paragraphe court par auteur, 2-4 phrases) : identité/nationalité, dates de naissance (et de décès si applicable), mouvement ou courant littéraire, 1-2 œuvres majeures avec leur année. À partir de tes connaissances réelles sur CES auteurs précis -- si tu n'es pas certain d'un fait précis sur l'un d'eux, reste général pour celui-là plutôt que d'inventer un détail que tu ne connais pas avec certitude. N'invente JAMAIS un auteur, une œuvre ou une date qui ne figurent pas dans tes connaissances réelles.
+
+IV. Axe d'étude
+"${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Conclusion, à la fin de la séquence).
+
+${construireConsigneAxeEtudeSituationOeuvreLycee(axe)}`;
+  }
+
+  // narrative / theatrale (et tout genre par défaut non reconnu) : un seul
+  // auteur, une seule œuvre -- squelette calibré sur la vraie fiche
+  // Soundjata (Séance 3, "Présentation de l'auteur et de son œuvre").
+  const biographie = (biographieAuteur || '').toString().trim();
+  const theme = (themeOeuvre || '').toString().trim();
+  const personnages = (personnagesOeuvre || '').toString().trim();
+  const lieux = (lieuxOeuvre || '').toString().trim();
+
+  const consigneBiographie = biographie
+    ? `1- Biographie : t'appuyer EXACTEMENT sur ces informations (fournies par l'enseignant ou vérifiées par recherche documentaire), sans y ajouter ni en retirer aucun détail : "${biographie}"`
+    : `1- Biographie : bref, JAMAIS un paragraphe développé -- 2 à 3 phrases maximum, uniquement l'essentiel : nationalité/identité, date de naissance (et de décès si l'auteur n'est plus vivant), profession, activité principale (distinctions/prix notables). À partir de tes connaissances réelles sur cet auteur -- si tu n'es pas certain d'un fait précis (date exacte, détail biographique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude.`;
+  const consigneTheme = theme
+    ? `Thème : t'appuyer EXACTEMENT sur ce thème fourni par l'enseignant, sans y ajouter ni en retirer aucun détail : "${theme}"`
+    : `Thème : l'enseignant n'a fourni aucun thème précis -- si tu n'es pas certain du thème réel de cette œuvre précise, reste général (genre, tonalité) plutôt que d'inventer un thème ou une intrigue précise que tu ne connais pas avec certitude.`;
+  const consignePersonnages = personnages
+    ? `2- Les personnages : t'appuyer EXACTEMENT sur cette liste fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${personnages}"`
+    : `2- Les personnages : l'enseignant n'a fourni AUCUNE liste de personnages -- si tu n'es pas certain des personnages réels de cette œuvre précise (noms, rôles), N'INVENTE AUCUN nom de personnage : reste général, présentation plus sobre plutôt qu'un détail inventé.`;
+  const consigneLieux = lieux
+    ? `\n3- Lieux et espace : t'appuyer EXACTEMENT sur cette description fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${lieux}"`
+    : '';
+
+  return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (« ${titre} » de ${auteur}) (les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes -- rédige UNIQUEMENT la structure I/II/III ci-dessous à la place.) :
+
+I- Présentation de l'auteur
+${consigneBiographie}
+2- Bibliographie : liste des œuvres majeures de l'auteur avec leur année de publication, au format "Titre en année, Titre en année..." -- à partir de tes connaissances réelles, jamais inventée si tu n'es pas certain.
+
+II- Présentation de l'œuvre
+Présente le genre du récit ou de la pièce (roman, pièce de théâtre...) en 1-2 phrases (pas le thème -- traité séparément ci-dessous).
+${consigneTheme}
+${consignePersonnages}${consigneLieux}
+
+III- Axe d'étude
+"${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Conclusion, à la fin de la séquence).
+
+${construireConsigneAxeEtudeSituationOeuvreLycee(axe)}`;
+}
+
+// Rappel commun aux deux genres : la Situation d'apprentissage ne doit
+// jamais mentionner ni recopier l'axe d'étude -- même règle que le collège
+// (construireInstructionsIntroductionOeuvre), extraite ici pour être
+// partagée par les deux branches ci-dessus sans dupliquer le texte.
+function construireConsigneAxeEtudeSituationOeuvreLycee(axe) {
+  return `Situation d'apprentissage : rédige-la normalement (ancrée dans le quotidien ivoirien). IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les séances suivantes de cette même séquence -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance. N'Y MENTIONNE JAMAIS L'AXE D'ÉTUDE NI SON CONTENU ("${axe}") : les deux champs sont distincts et ne doivent partager AUCUNE formulation -- la situation d'apprentissage amène vers la découverte de l'œuvre/du groupement de textes en général, jamais vers l'axe précis.`;
+}
+
+// Conclusion (second cycle, 20/09) : deux structures RÉELLEMENT différentes
+// selon le genre, confirmées sur deux vraies fiches -- narrative/théâtrale
+// (Soundjata, Séance 8 : structure externe/interne + résumé et conclusion
+// synthétique) vs poétique/GT (fiche Baudelaire/Hugo/Musset/Gautier, Séance
+// 6 : rappel de l'axe + thématique centrale + jugement critique à partir de
+// l'écriture + jugement critique à partir du thème). PAS de plan enseignant
+// obligatoire ici (Mode 1 seul) -- la Conclusion synthétise ce qui a déjà
+// été étudié dans la séquence, à partir de l'axe d'étude (et, pour le GT, du
+// corpus de textes) déjà fournis en Introduction et réaffichés tels quels.
+function construireInstructionsConclusionOeuvreLycee({ genreOeuvre, titreOeuvre, auteurOeuvre, axeEtude, corpusTextesGT }) {
+  const titre = (titreOeuvre || '').toString().trim();
+  const auteur = (auteurOeuvre || '').toString().trim();
+  const axe = (axeEtude || '').toString().trim();
+
+  if (genreOeuvre === 'poetique') {
+    const corpus = (corpusTextesGT || '').toString().trim();
+    return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- CONCLUSION À L'ÉTUDE DU GROUPEMENT DE TEXTES (les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes -- rédige UNIQUEMENT la structure I/II/III/IV ci-dessous à la place.) :
+
+CORPUS RÉELLEMENT ÉTUDIÉ DANS CETTE SÉQUENCE (seule source de textes autorisée pour les 4 parties ci-dessous -- ne mentionne AUCUN texte ou auteur qui n'y figure pas) :
+"${corpus}"
+
+I. Rappel de l'axe d'étude
+"${axe}" -- reproduit ici EXACTEMENT tel que fourni en Introduction, sans reformulation.
+
+II. Thématique centrale
+1-2 phrases : le thème que l'étude des textes ci-dessus a permis de dégager, en lien direct avec l'axe d'étude rappelé ci-dessus.
+
+III. Jugement critique à partir de l'écriture
+Un paragraphe (3-4 phrases) sur les choix formels/stylistiques observés à travers les textes du corpus (registre, disposition, procédés) -- reste général si tu n'es pas certain d'un détail précis sur l'un des textes, jamais un fait inventé sur un texte que tu ne connais pas.
+
+IV. Jugement critique à partir du thème
+Un paragraphe (3-4 phrases) : ce que le thème commun aux textes du corpus révèle ou permet de juger, en te limitant aux auteurs/textes listés ci-dessus.
+
+RÈGLE ABSOLUE : les 4 parties ne portent QUE sur les textes et auteurs listés dans le corpus ci-dessus -- n'introduis jamais un texte, un auteur ou un fait qui n'y figure pas, même s'il te semble thématiquement proche.`;
+  }
+
+  // narrative / theatrale -- squelette calibré sur la vraie fiche Soundjata
+  // (Séance 8 : structure de l'œuvre + résumé et conclusion synthétique).
+  return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- CONCLUSION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (« ${titre} » de ${auteur}) (les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes -- rédige UNIQUEMENT la structure I/II ci-dessous à la place.) :
+
+I. Étude de la structure de l'œuvre
+1- Structure externe : nombre de parties/chapitres/actes si tu le sais avec certitude, sinon reste général (ex. "l'œuvre est organisée en plusieurs chapitres/actes").
+2- Structure interne : bref aperçu de l'espace-temps, des personnages principaux et des thèmes majeurs de l'œuvre -- uniquement à partir de tes connaissances réelles et vérifiées sur CETTE œuvre précise, jamais un détail inventé.
+3- Technique narrative : 1-2 phrases sur le mode de narration/énonciation employé, si tu le sais avec certitude.
+
+II. Résumé et conclusion synthétique
+Un résumé bref de l'œuvre (3-5 phrases, faits réels et vérifiés uniquement) suivi d'une conclusion synthétique qui referme la séquence en s'appuyant sur les séances déjà étudiées et sur l'axe d'étude ci-dessous.
+
+AXE D'ÉTUDE À REPRENDRE (fourni par l'enseignant en Introduction, OBLIGATOIRE, jamais un autre axe de ton choix, jamais ressaisi par l'enseignant) : "${axe}" -- structure les 2 sections ci-dessus autour de CET axe précis (reproduit ici EXACTEMENT tel que fourni, sans reformulation), sans le recopier littéralement dans chaque section.`;
+}
 // ============= FIN ÉTUDE DE L'ŒUVRE INTÉGRALE -- SECOND CYCLE =============
 
 // Recherche web (02/09) : quand l'enseignant n'a fourni NI biographie NI
@@ -5913,7 +6057,14 @@ function limiterGenerationParIp(req, res, next) {
       // groupes définis par l'enseignant, reproduits tels quels ; le modèle
       // ne génère QUE la méthodologie de préparation et la grille
       // d'évaluation, jamais le contenu des sujets (cf. construireInstructionsExpose).
-      exposeSujetsGroupes = ''
+      exposeSujetsGroupes = '',
+      // Introduction/Conclusion (second cycle, 20/09) -- axeEtude déjà
+      // existant (partagé avec le collège, cf. plus bas), corpusTextesGT
+      // nouveau, uniquement pertinent pour genreOeuvre === 'poetique' (liste
+      // des poèmes/textes retenus par l'enseignant, un par ligne : titre,
+      // auteur, date -- jamais devinée par le modèle, cf. validation
+      // bloquante ci-dessous).
+      corpusTextesGT = ''
     } = req.body;
     const estOeuvreIntegrale = sousModule === 'oeuvre_integrale';
     // Second cycle (13/09) : catalogue-piloté, jamais la structure fixe
@@ -5987,8 +6138,26 @@ function limiterGenerationParIp(req, res, next) {
     // (Introduction, Lecture méthodique, Conclusion, Évaluation, Correction)
     // reste explicitement refusé ci-dessous, jamais silencieusement mal
     // généré.
-    const TYPES_SEANCE_LYCEE_IMPLEMENTES = ['lecture_dirigee', 'culture_litteraire', 'expose'];
+    // Introduction/Conclusion (20/09) : ajoutés aux côtés de Lecture
+    // dirigée/Culture littéraire/Exposé -- cf. audit du même jour, ces deux
+    // types réutilisent le même mécanisme d'axe d'étude fourni par
+    // l'enseignant que le collège (construireInstructionsIntroductionOeuvre/
+    // ConclusionOeuvre), mais avec leurs propres fonctions dédiées au second
+    // cycle (structure genre-dépendante, jamais "séquence de 11 séances"
+    // codée en dur). Lecture méthodique/Évaluation/Correction restent hors
+    // périmètre pour l'instant (cf. décision du 20/09 : Lecture méthodique
+    // nécessite encore la réconciliation de l'en-tête REPERAGE vs le squelette
+    // collège, Évaluation/Correction n'ont aucune fonction équivalente
+    // écrite ni de vraie fiche de référence vue à ce jour).
+    const TYPES_SEANCE_LYCEE_IMPLEMENTES = ['lecture_dirigee', 'culture_litteraire', 'expose', 'introduction', 'conclusion'];
     let seanceCatalogueOI = null;
+    // genreOeuvreOI (20/09) : résolu ici depuis le catalogue (leconCatalogueOI,
+    // scope local à ce bloc) et hissé à ce niveau pour rester lisible dans le
+    // bloc de construction du systemPrompt plus bas, qui ne voit plus
+    // leconCatalogueOI lui-même (hors de portée). Détermine la structure
+    // d'Introduction/Conclusion à appliquer (narrative/theatrale vs
+    // poetique, cf. construireInstructionsIntroductionOeuvreLycee).
+    let genreOeuvreOI = null;
     if (estOeuvreIntegrale && profilInfoOI) {
       const leconCatalogueOI = await resoudreSequenceOeuvreLycee(profilInfoOI.profil, numeroSequence);
       const messageBlocageOI = validerSeanceOeuvreLycee(leconCatalogueOI, seance, typeSeanceOI);
@@ -5996,9 +6165,10 @@ function limiterGenerationParIp(req, res, next) {
         return envoyerBlocageSSE(res, messageBlocageOI, heartbeat);
       }
       seanceCatalogueOI = leconCatalogueOI.seances.find((s) => s.numeroSeance === parseInt(seance, 10));
+      genreOeuvreOI = (leconCatalogueOI.genreOeuvre || '').toString().trim() || null;
 
       if (!TYPES_SEANCE_LYCEE_IMPLEMENTES.includes(typeSeanceOI)) {
-        return envoyerBlocageSSE(res, `Le type de séance "${typeSeanceOI || '(non renseigné)'}" n'est pas encore disponible pour le second cycle -- seuls Lecture dirigée, Culture littéraire et Exposé sont implémentés pour l'instant.`, heartbeat);
+        return envoyerBlocageSSE(res, `Le type de séance "${typeSeanceOI || '(non renseigné)'}" n'est pas encore disponible pour le second cycle -- seuls Lecture dirigée, Culture littéraire, Exposé, Introduction et Conclusion sont implémentés pour l'instant.`, heartbeat);
       }
       if (!(titreOeuvre || '').toString().trim() || !(auteurOeuvre || '').toString().trim()) {
         return envoyerBlocageSSE(res, "Le titre et l'auteur de l'œuvre sont obligatoires pour générer une fiche de cette séquence.", heartbeat);
@@ -6007,6 +6177,32 @@ function limiterGenerationParIp(req, res, next) {
       if (typeSeanceOI === 'lecture_dirigee') {
         if (!(passagePages || '').toString().trim() || !(resumePassageLectureDirigee || '').toString().trim()) {
           return envoyerBlocageSSE(res, "Pour une séance de Lecture dirigée, l'enseignant doit fournir la référence des pages/chapitres à lire et un résumé factuel de cette portion (faits, personnages, chronologie, enjeux).", heartbeat);
+        }
+      } else if (typeSeanceOI === 'introduction') {
+        // Axe d'étude (20/09, spec exacte de l'enseignant) : TOUJOURS
+        // obligatoire, que l'enseignant fournisse ou non le reste du plan
+        // (Mode 1 + Mode 2 tous deux autorisés pour cette séance -- seul ce
+        // champ est un verrou non négociable, même logique que le premier
+        // cycle où la génération était bloquée tant que l'axe n'était pas
+        // saisi). Pour le genre poétique (GT), le corpus de textes/poèmes
+        // retenus est un second verrou : c'est l'enseignant qui choisit ces
+        // textes, le modèle ne peut ni les deviner ni les inventer.
+        if (!(axeEtude || '').toString().trim()) {
+          return envoyerBlocageSSE(res, "Pour la séance d'Introduction à l'étude de l'œuvre, l'axe d'étude doit être fourni par l'enseignant -- il est obligatoire, quel que soit le reste du plan.", heartbeat);
+        }
+        if (genreOeuvreOI === 'poetique' && !(corpusTextesGT || '').toString().trim()) {
+          return envoyerBlocageSSE(res, "Pour l'Introduction à l'étude d'un groupement de textes, l'enseignant doit fournir la liste des textes/poèmes retenus (titre, auteur, date) -- c'est lui qui choisit ce corpus.", heartbeat);
+        }
+      } else if (typeSeanceOI === 'conclusion') {
+        // Même axe d'étude qu'en Introduction, réaffiché ici -- résolution
+        // du 20/09 : pas de mémoire côté serveur, le frontend doit renvoyer
+        // la même valeur qu'à la séance d'Introduction de cette séquence
+        // (même mécanisme que le collège, cf. audit du 20/09).
+        if (!(axeEtude || '').toString().trim()) {
+          return envoyerBlocageSSE(res, "Pour la séance de Conclusion, l'axe d'étude fourni en Introduction doit être renvoyé -- il structure la Conclusion et ne doit jamais être ressaisi ni reformulé.", heartbeat);
+        }
+        if (genreOeuvreOI === 'poetique' && !(corpusTextesGT || '').toString().trim()) {
+          return envoyerBlocageSSE(res, "Pour la Conclusion d'un groupement de textes, la liste des textes/poèmes retenus fournie en Introduction doit être renvoyée -- le jugement critique doit porter exclusivement sur ces textes réels.", heartbeat);
         }
       } else if (typeSeanceOI === 'culture_litteraire') {
         // Bypass complet, comme la Séance 11 (Évaluation finale) du collège
@@ -6203,6 +6399,32 @@ function limiterGenerationParIp(req, res, next) {
       } else if (typeSeanceOI === 'expose') {
         systemPrompt += construireInstructionsExpose(exposeSujetsGroupes);
         sujetsGroupesExposeHTML = construireSectionSujetsGroupesExposeHTML(exposeSujetsGroupes);
+      } else if (typeSeanceOI === 'introduction') {
+        // Recherche web + cache (même principe que le collège, 02/09) :
+        // uniquement pour narrative/théâtrale (un seul auteur) -- jamais
+        // appelée si l'enseignant a déjà fourni biographie/thème, jamais
+        // utilisée pour écraser un champ enseignant déjà rempli. Non
+        // appliquée au genre poétique (plusieurs auteurs, cf. fonction ci-
+        // dessous) : laissé au modèle avec le même filet anti-fabrication
+        // que la biographie non fournie.
+        let biographieEffective = (biographieAuteur || '').toString().trim();
+        let themeEffectif = (themeOeuvre || '').toString().trim();
+        if (genreOeuvreOI !== 'poetique' && (!biographieEffective || !themeEffectif) && titreOeuvre && auteurOeuvre) {
+          const infosTrouvees = await rechercherInfosOeuvre(titreOeuvre, auteurOeuvre);
+          if (infosTrouvees.succes) {
+            if (!biographieEffective) biographieEffective = infosTrouvees.biographieAuteur;
+            if (!themeEffectif) themeEffectif = infosTrouvees.themeOeuvre;
+          }
+        }
+        systemPrompt += construireInstructionsIntroductionOeuvreLycee({
+          genreOeuvre: genreOeuvreOI, titreOeuvre, auteurOeuvre, axeEtude,
+          biographieAuteur: biographieEffective, themeOeuvre: themeEffectif,
+          personnagesOeuvre, lieuxOeuvre, corpusTextesGT
+        });
+      } else if (typeSeanceOI === 'conclusion') {
+        systemPrompt += construireInstructionsConclusionOeuvreLycee({
+          genreOeuvre: genreOeuvreOI, titreOeuvre, auteurOeuvre, axeEtude, corpusTextesGT
+        });
       }
       // 'culture_litteraire' n'atteint jamais ce point : bypass complet avec
       // retour anticipé plus haut, avant toute construction de systemPrompt.
