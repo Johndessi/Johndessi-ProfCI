@@ -6487,12 +6487,24 @@ function limiterGenerationParIp(req, res, next) {
       // 21/09 (retour enseignant, cf. fiche_francais_2nde_3.docx) : laissé
       // sans consigne, le modèle improvisait lui-même un texte de repli
       // ("Non disponible") dans le champ Compétence -- même défaut que le
-      // collège avant l'ajout du message déterministe ci-dessous (cf. bloc
-      // !estOeuvreIntegrale plus bas, même texte de repli, même mécanisme
-      // d'avertissement enseignant via avertissementRappel).
-      systemPrompt += `\n\nCHAMP COMPÉTENCE DE L'ENTÊTE : la numérotation officielle DPFC de la compétence n'est pas encore disponible pour ce niveau (second cycle). Dans le champ Compétence de l'entête, écris EXACTEMENT le texte suivant, sans numéro ni format "Compétence N", et SANS INVENTER un numéro ou un libellé, même plausible, et SANS écrire "Non disponible" ni aucune autre formulation de ton choix : "Numérotation officielle non disponible — vérifier avec le programme papier".`;
-      const avertissementCompetenceOI = 'Compétence officielle DPFC non déterminée avec certitude (non encore sourcée pour le second cycle) — le champ Compétence affiche un message à compléter manuellement avec le programme papier.';
-      avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementCompetenceOI}` : avertissementCompetenceOI;
+      // collège avant l'ajout du message déterministe ci-dessous. Complété
+      // le même jour : le Programme éducatif officiel du second cycle (DPFC,
+      // dpfc-ci.net, distinct de la progression annuelle) EXISTE et liste
+      // bien des compétences numérotées par activité (Français 2nde :
+      // Compétence 1 = Lecture, 2 = Perfectionnement de la langue et
+      // savoir-faire, 3 = Expression écrite) -- réutilise donc EXACTEMENT le
+      // même mécanisme CompetenceParActivite que le collège (cf. bloc
+      // !estOeuvreIntegrale plus bas) avec activite = ACTIVITE_OEUVRE_INTEGRALE
+      // ("Lecture") plutôt que de re-choisir arbitrairement une activité.
+      // Repli honnête inchangé si rien n'est encore seedé pour cette classe.
+      const competenceOITrouvee = await trouverCompetenceParActivite({ discipline: 'Français', classe, activite: ACTIVITE_OEUVRE_INTEGRALE });
+      if (competenceOITrouvee) {
+        systemPrompt += `\n\nCOMPÉTENCE OFFICIELLE DPFC : Compétence ${competenceOITrouvee.numero} : ${competenceOITrouvee.intitule}\n\nUtilise EXACTEMENT ce numéro et ce libellé dans le champ Compétence de l'entête, sans reformulation.`;
+      } else {
+        systemPrompt += `\n\nCHAMP COMPÉTENCE DE L'ENTÊTE : la numérotation officielle DPFC de la compétence n'est pas encore disponible pour ce niveau (second cycle). Dans le champ Compétence de l'entête, écris EXACTEMENT le texte suivant, sans numéro ni format "Compétence N", et SANS INVENTER un numéro ou un libellé, même plausible, et SANS écrire "Non disponible" ni aucune autre formulation de ton choix : "Numérotation officielle non disponible — vérifier avec le programme papier".`;
+        const avertissementCompetenceOI = 'Compétence officielle DPFC non déterminée avec certitude (non encore sourcée pour cette classe) — le champ Compétence affiche un message à compléter manuellement avec le programme papier.';
+        avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementCompetenceOI}` : avertissementCompetenceOI;
+      }
       systemPrompt += `\n\nCHAMP LEÇON DE L'ENTÊTE : écris EXACTEMENT "${leconAfficheeOI}" dans le champ Leçon de l'entête, sans reformulation.`;
 
       seanceAfficheeOI = `${seance} : ${(seanceCatalogueOI && seanceCatalogueOI.intitule) || ''}`.trim();
