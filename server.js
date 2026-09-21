@@ -5476,20 +5476,35 @@ function construireConsigneSituationApprentissageSeance1Lycee(situationFournie, 
 //     connaissances réelles et vérifiées sur l'œuvre/l'auteur/le mouvement
 //     littéraire -- même garde-fou anti-fabrication que partout ailleurs
 //     dans l'application (rester général plutôt qu'inventer un fait incertain).
-function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvre, contenuFourni, situationApprentissage, numeroSeance }) {
+function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvre, contenuFourni, situationApprentissage, numeroSeance, intituleOfficielSeance }) {
   const contenu = (contenuFourni || '').toString().trim();
   const titre = (titreOeuvre || '').toString().trim();
   const auteur = (auteurOeuvre || '').toString().trim();
+  const intituleOfficiel = (intituleOfficielSeance || '').toString().trim();
+
+  // Périmètre officiel (21/09, retour enseignant sur « Rebelle », cf.
+  // fiche_francais_2nde_4.docx face à la vraie progression DPFC) : sans
+  // intitulé officiel transmis, le modèle avait tendance, en Mode 1, à
+  // développer un exposé plus large que ce que prévoit la progression pour
+  // CETTE séance précise (ex. il ajoutait le schéma actantiel alors que la
+  // progression réserve cette séance aux seuls genres en prose et à leurs
+  // caractéristiques -- ce point est traité à une séance ultérieure). Cette
+  // consigne ne s'applique qu'en Mode 1 (rien fourni) : quand l'enseignant
+  // fournit lui-même un contenu/plan, c'est LUI qui fixe le périmètre (cf.
+  // consigneContenu ci-dessous, prioritaire).
+  const consignePerimetre = intituleOfficiel
+    ? ` Le périmètre exact de cette séance, tel que fixé par la progression DPFC officielle, est : "${intituleOfficiel}". Développe UNIQUEMENT les notions désignées par cet intitulé -- n'ajoute AUCUNE notion supplémentaire (ex. si l'intitulé ne mentionne que les genres en prose et leurs caractéristiques, ne développe ni le schéma narratif ni le schéma actantiel : ces notions relèvent d'une autre séance de la progression, même si elles te semblent thématiquement proches).`
+    : '';
 
   const consigneContenu = contenu
     ? `L'enseignant a fourni le contenu ci-dessous pour cette séance de Culture littéraire (exposé magistral sur le contexte historique/littéraire/biographique de l'œuvre) -- il peut s'agir soit d'un contenu déjà entièrement rédigé, soit d'un simple plan/d'une liste de points à développer, soit d'un mélange des deux :
 - Pour tout point déjà rédigé et développé dans le contenu fourni : REPRODUIS-LE fidèlement dans le tableau (Habiletés/Contenus et déroulement), sans en changer le sens, sans y ajouter ni en retirer aucun fait -- reformate-le seulement pour l'intégrer au tableau générique.
 - Pour tout point qui n'est qu'un intitulé/une entrée de plan (un simple titre de section sans développement) : développe-le TOI-MÊME à partir de tes connaissances réelles et vérifiées sur cette œuvre, cet auteur ou ce mouvement littéraire précis -- si tu n'es pas certain d'un fait précis sur ce point, reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude.
-- N'AJOUTE AUCUN point, notion ou sous-partie qui ne figure pas, même sous forme de simple intitulé, dans le contenu fourni ci-dessous -- ne complète jamais le plan de l'enseignant par des points de ton choix, et ne le réordonne pas.
+- N'AJOUTE AUCUN point, notion ou sous-partie qui ne figure pas, même sous forme de simple intitulé, dans le contenu fourni ci-dessous -- ne complète jamais le plan de l'enseignant par des points de ton choix, et ne le réordonne pas (ceci prévaut sur le périmètre officiel de la progression : si l'enseignant fournit un plan, c'est lui qui décide du périmètre réellement traité).
 
 CONTENU FOURNI PAR L'ENSEIGNANT (plan et/ou contenu déjà rédigé -- seule structure de points autorisée pour cette séance) :
 "${contenu}"`
-    : `L'enseignant n'a fourni ni contenu ni plan pour cette séance de Culture littéraire (exposé magistral sur le contexte historique/littéraire/biographique de l'œuvre « ${titre || '(titre non précisé)'} »${auteur ? `, ${auteur}` : ''}) -- génère TOI-MÊME l'intégralité du contenu de cet exposé (définitions utiles, contexte historique/littéraire, éléments biographiques pertinents, mouvement littéraire...), à partir de tes connaissances réelles et vérifiées sur cette œuvre précise, cet auteur et son contexte. Si tu n'es pas certain d'un fait précis (date, détail biographique ou historique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude -- N'INVENTE JAMAIS un fait, une date ou un événement que tu ne connais pas réellement.`;
+    : `L'enseignant n'a fourni ni contenu ni plan pour cette séance de Culture littéraire (exposé magistral sur le contexte historique/littéraire/biographique de l'œuvre « ${titre || '(titre non précisé)'} »${auteur ? `, ${auteur}` : ''}) -- génère TOI-MÊME l'intégralité du contenu de cet exposé (définitions utiles, contexte historique/littéraire, éléments biographiques pertinents, mouvement littéraire...), à partir de tes connaissances réelles et vérifiées sur cette œuvre précise, cet auteur et son contexte.${consignePerimetre} Si tu n'es pas certain d'un fait précis (date, détail biographique ou historique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude -- N'INVENTE JAMAIS un fait, une date ou un événement que tu ne connais pas réellement.`;
 
   const consigneSituation = Number(numeroSeance) === 1
     ? `\n\n${construireConsigneSituationApprentissageSeance1Lycee(situationApprentissage, titre, auteur)}`
@@ -5507,7 +5522,7 @@ CONTENU FOURNI PAR L'ENSEIGNANT (plan et/ou contenu déjà rédigé -- seule str
   // faits sur l'œuvre, cf. priorité absolue anti-fabrication de l'enseignant.
   const garantiEvaluation = `
 
-CONSIGNE ABSOLUE -- ÉVALUATION DE CETTE SÉANCE : à ce stade de la séquence, les élèves n'ont PAS ENCORE lu l'œuvre « ${titre || '(titre non précisé)'} » (la Culture littéraire est leur tout premier contact avec elle, avant même le début de la lecture) -- l'évaluation ne doit donc JAMAIS supposer une lecture déjà faite, même partielle (interdits : "vous avez lu...", "dans le passage lu...", ou toute question qui présuppose une connaissance du contenu narratif de l'œuvre). Elle doit porter UNIQUEMENT sur les notions de culture littéraire réellement enseignées dans cette séance (définitions des genres, schéma narratif, schéma actantiel...) -- par un exercice d'application générique (ex. identifier ces notions sur un texte/extrait fourni ou bien connu, jamais sur l'intrigue de « ${titre || 'l\'œuvre'} » elle-même). Si l'œuvre est malgré tout mentionnée dans l'évaluation, ne t'appuie QUE sur son titre/auteur/genre déjà connus -- n'invente JAMAIS un personnage, un thème ou un événement de cette œuvre que tu ne connais pas avec certitude, même à titre d'exemple.`;
+CONSIGNE ABSOLUE -- ÉVALUATION DE CETTE SÉANCE : à ce stade de la séquence, les élèves n'ont PAS ENCORE lu l'œuvre « ${titre || '(titre non précisé)'} » (la Culture littéraire est leur tout premier contact avec elle, avant même le début de la lecture) -- l'évaluation ne doit donc JAMAIS supposer une lecture déjà faite, même partielle (interdits : "vous avez lu...", "dans le passage lu...", ou toute question qui présuppose une connaissance du contenu narratif de l'œuvre). Elle doit porter UNIQUEMENT sur les notions réellement enseignées dans CETTE séance précise${intituleOfficiel ? ` (rappel du périmètre officiel : "${intituleOfficiel}")` : ''} -- par un exercice d'application générique (ex. identifier ces notions sur un texte/extrait fourni ou bien connu, jamais sur l'intrigue de « ${titre || 'l\'œuvre'} » elle-même), jamais sur une notion qui relève d'une autre séance de la progression. Si l'œuvre est malgré tout mentionnée dans l'évaluation, ne t'appuie QUE sur son titre/auteur/genre déjà connus -- n'invente JAMAIS un personnage, un thème ou un événement de cette œuvre que tu ne connais pas avec certitude, même à titre d'exemple.`;
 
   return `
 
@@ -6519,10 +6534,17 @@ function limiterGenerationParIp(req, res, next) {
       } else if (typeSeanceOI === 'culture_litteraire') {
         // 21/09 : n'est plus un bypass (cf. dépréciation de
         // construireFicheLibreOeuvreLyceeBypass ci-dessus) -- vrai appel
-        // modèle, tableau générique conservé.
+        // modèle, tableau générique conservé. intituleOfficielSeance (21/09,
+        // retour enseignant sur « Rebelle », cf. fiche_francais_2nde_4.docx) :
+        // sans lui, le modèle générait un exposé bien plus large que ce que
+        // prévoit la vraie progression DPFC pour CETTE séance précise (ex.
+        // schéma actantiel alors que la progression réserve cette séance aux
+        // seuls genres en prose et à leurs caractéristiques) -- désormais
+        // transmis comme périmètre officiel à ne jamais dépasser en Mode 1.
         systemPrompt += construireInstructionsCultureLitteraireLycee({
           titreOeuvre, auteurOeuvre, contenuFourni: contenuLibreCultureLitteraire,
-          situationApprentissage: situationApprentissageOeuvre, numeroSeance: seance
+          situationApprentissage: situationApprentissageOeuvre, numeroSeance: seance,
+          intituleOfficielSeance: seanceCatalogueOI && seanceCatalogueOI.intitule
         });
       }
     } else if (niveau !== 'primaire') {
