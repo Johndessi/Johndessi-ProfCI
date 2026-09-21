@@ -5397,14 +5397,17 @@ ${resume}`;
 }
 
 // Culture littéraire (15/09, spec exacte de l'enseignant) : exposé magistral
-// du professeur sur le contexte (historique/littéraire/biographique), dont
-// le contenu est intégralement saisi par l'enseignant et restitué tel quel
-// -- AUCUNE génération de faits par le modèle. Bypass complet, même principe
-// que construireFicheLibreOeuvreSeance11 au collège (Séance 11, Évaluation
-// finale), généralisé ici pour porter un intitulé de leçon/séance variable
-// (catalogue lycée, cf. seanceCatalogueOI) plutôt que la valeur fixe
-// "Évaluation finale" -- et sans champ Compétence forcé (cf. commentaire du
-// dispatch dans /api/generer-fiche : données DPFC lycée non sourcées).
+// du professeur sur le contexte (historique/littéraire/biographique).
+// DÉPRÉCIÉ le 21/09 (retour enseignant après test réel, cf. fiche_francais_2nde_2.pdf) :
+// cette fonction produisait un bypass complet (contenu enseignant restitué
+// tel quel, HORS du tableau Habiletés/Contenus générique) -- l'enseignant a
+// explicitement rejeté ce rendu ("On n'a pas eu ça dans une fiche de cours.
+// Il faut que ce soit dans un tableau, comme les autres.") et demandé un
+// vrai appel modèle produisant le tableau générique habituel, à partir d'un
+// contenu intégral, d'un simple plan, ou de rien du tout (cf.
+// construireInstructionsCultureLitteraireLycee ci-dessous, qui remplace ce
+// mécanisme). Conservée ici uniquement pour référence/historique -- plus
+// aucun appelant dans /api/generer-fiche.
 function construireFicheLibreOeuvreLyceeBypass({ discipline, classe, duree, titreOeuvre, auteurOeuvre, leconAffichee, seanceAffichee, contenuLibre, situationApprentissage }) {
   const corpsLibre = texteSupportVersHtml(contenuLibre);
   const situation = (situationApprentissage || '').toString().trim();
@@ -5435,6 +5438,67 @@ ${blocSituation}<p><strong>Œuvre :</strong> « ${echapperHtml((titreOeuvre || '
 ${corpsLibre}
 
 </div>`;
+}
+
+// Situation d'apprentissage, Séance 1 (Culture littéraire) uniquement --
+// même principe dual-mode que construireConsigneAxeEtudeSituationOeuvreLycee
+// (Introduction), mais SANS la contrainte "ne mentionne jamais l'axe
+// d'étude" (l'axe n'existe pas encore à ce stade de la séquence, il n'est
+// défini qu'à l'Introduction). Rédigée pour rester valable pour toute la
+// séquence (réutilisée telle quelle en Introduction si non re-saisie là-bas,
+// cf. etatSequenceLycee côté frontend).
+function construireConsigneSituationApprentissageSeance1Lycee(situationFournie, titre, auteur) {
+  const situation = (situationFournie || '').toString().trim();
+  if (situation) {
+    return `SITUATION D'APPRENTISSAGE (à placer une seule fois, en une courte introduction avant le tableau Habiletés/Contenus de cette séance) : reproduis EXACTEMENT et INTÉGRALEMENT, sans y ajouter ni en retirer aucun détail, sans la reformuler, le texte fourni par l'enseignant ci-dessous : "${situation}"`;
+  }
+  return `SITUATION D'APPRENTISSAGE (à placer une seule fois, en une courte introduction avant le tableau Habiletés/Contenus de cette séance) : l'enseignant n'a fourni aucune situation d'apprentissage -- propose-en une, ancrée dans le quotidien ivoirien et conforme aux pratiques du système éducatif ivoirien (approche par compétences), mais UNIQUEMENT à partir d'éléments réels déjà fournis par l'enseignant ci-dessus (le cas échéant) ou de tes connaissances réelles et vérifiées sur l'œuvre « ${(titre || '').toString().trim() || '(titre non précisé)'} »${(auteur || '').toString().trim() ? ` de ${(auteur || '').toString().trim()}` : ''} -- si aucune information réelle n'est disponible avec certitude, reste général (ne mentionne aucun nom de personnage ni aucun fait précis que tu ne connais pas avec certitude) plutôt que d'inventer un scénario. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les séances suivantes de cette même séquence (notamment l'Introduction) -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance.`;
+}
+
+// Culture littéraire, RÉÉCRITURE du 21/09 (remplace le bypass ci-dessus,
+// rejeté par l'enseignant après test réel -- cf. commentaire de dépréciation
+// sur construireFicheLibreOeuvreLyceeBypass) : contrairement à
+// l'Introduction/la Conclusion (structure I/II/III/IV dédiée qui REMPLACE le
+// tableau générique), Culture littéraire CONSERVE le tableau Habiletés/
+// Contenus + déroulement Présentation/Développement/Évaluation générique --
+// seul le CONTENU factuel qui alimente ce tableau change de source selon ce
+// que l'enseignant a fourni, exactement la consigne du 21/09 ("les autres
+// sont dans un tableau, donc il faut que ce soit dans un tableau [...] à
+// partir du plan déjà il faut que quelque chose sorte [...] si l'enseignant
+// tient à donner le plan et la connaissance, tout dépend de lui-même") :
+//   - Contenu intégralement rédigé par l'enseignant -> reproduit fidèlement
+//     (reformaté dans le tableau, aucun fait changé/ajouté/retiré).
+//   - Simple plan/liste de points -> chaque point développé par le modèle à
+//     partir de ses connaissances réelles et vérifiées, sans jamais ajouter
+//     de point hors plan.
+//   - Rien fourni -> génération intégrale par le modèle à partir de ses
+//     connaissances réelles et vérifiées sur l'œuvre/l'auteur/le mouvement
+//     littéraire -- même garde-fou anti-fabrication que partout ailleurs
+//     dans l'application (rester général plutôt qu'inventer un fait incertain).
+function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvre, contenuFourni, situationApprentissage, numeroSeance }) {
+  const contenu = (contenuFourni || '').toString().trim();
+  const titre = (titreOeuvre || '').toString().trim();
+  const auteur = (auteurOeuvre || '').toString().trim();
+
+  const consigneContenu = contenu
+    ? `L'enseignant a fourni le contenu ci-dessous pour cette séance de Culture littéraire (exposé magistral sur le contexte historique/littéraire/biographique de l'œuvre) -- il peut s'agir soit d'un contenu déjà entièrement rédigé, soit d'un simple plan/d'une liste de points à développer, soit d'un mélange des deux :
+- Pour tout point déjà rédigé et développé dans le contenu fourni : REPRODUIS-LE fidèlement dans le tableau (Habiletés/Contenus et déroulement), sans en changer le sens, sans y ajouter ni en retirer aucun fait -- reformate-le seulement pour l'intégrer au tableau générique.
+- Pour tout point qui n'est qu'un intitulé/une entrée de plan (un simple titre de section sans développement) : développe-le TOI-MÊME à partir de tes connaissances réelles et vérifiées sur cette œuvre, cet auteur ou ce mouvement littéraire précis -- si tu n'es pas certain d'un fait précis sur ce point, reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude.
+- N'AJOUTE AUCUN point, notion ou sous-partie qui ne figure pas, même sous forme de simple intitulé, dans le contenu fourni ci-dessous -- ne complète jamais le plan de l'enseignant par des points de ton choix, et ne le réordonne pas.
+
+CONTENU FOURNI PAR L'ENSEIGNANT (plan et/ou contenu déjà rédigé -- seule structure de points autorisée pour cette séance) :
+"${contenu}"`
+    : `L'enseignant n'a fourni ni contenu ni plan pour cette séance de Culture littéraire (exposé magistral sur le contexte historique/littéraire/biographique de l'œuvre « ${titre || '(titre non précisé)'} »${auteur ? `, ${auteur}` : ''}) -- génère TOI-MÊME l'intégralité du contenu de cet exposé (définitions utiles, contexte historique/littéraire, éléments biographiques pertinents, mouvement littéraire...), à partir de tes connaissances réelles et vérifiées sur cette œuvre précise, cet auteur et son contexte. Si tu n'es pas certain d'un fait précis (date, détail biographique ou historique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude -- N'INVENTE JAMAIS un fait, une date ou un événement que tu ne connais pas réellement.`;
+
+  const consigneSituation = Number(numeroSeance) === 1
+    ? `\n\n${construireConsigneSituationApprentissageSeance1Lycee(situationApprentissage, titre, auteur)}`
+    : '';
+
+  return `
+
+INSTRUCTIONS SPÉCIFIQUES -- CULTURE LITTÉRAIRE (exposé magistral de l'enseignant sur le contexte historique/littéraire/biographique de l'œuvre) : contrairement à l'Introduction et à la Conclusion, cette séance CONSERVE INTÉGRALEMENT la structure générique du tableau Habiletés/Contenus et du déroulement Présentation/Développement/Évaluation -- ne la remplace par aucune autre structure, aucune section I/II/III.
+
+${consigneContenu}${consigneSituation}`;
 }
 
 // Exposé (15/09, spec exacte de l'enseignant) : PAS une analyse du texte par
@@ -6070,11 +6134,11 @@ function limiterGenerationParIp(req, res, next) {
       // la portion lue, fourni par l'enseignant, seule source de faits
       // autorisée pour le questionnaire/corrigé (cf. construireInstructionsLectureDirigee).
       resumePassageLectureDirigee = '',
-      // Culture littéraire (second cycle uniquement, 15/09) -- exposé
-      // magistral du professeur sur le contexte, contenu intégralement saisi
-      // par l'enseignant, bypass complet du modèle (cf.
-      // construireFicheLibreOeuvreLyceeBypass, même principe que
-      // contenuLibreSeance11 au collège).
+      // Culture littéraire (second cycle uniquement, 15/09, réécrit le
+      // 21/09) -- exposé magistral du professeur sur le contexte,
+      // OPTIONNEL : contenu intégral, simple plan, ou rien -- toujours un
+      // vrai appel modèle produisant le tableau générique habituel (cf.
+      // construireInstructionsCultureLitteraireLycee, plus un bypass).
       contenuLibreCultureLitteraire = '',
       // Exposé (second cycle uniquement, 15/09) -- sujets/répartition des
       // groupes définis par l'enseignant, reproduits tels quels ; le modèle
@@ -6227,32 +6291,6 @@ function limiterGenerationParIp(req, res, next) {
         if (genreOeuvreOI === 'poetique' && !(corpusTextesGT || '').toString().trim()) {
           return envoyerBlocageSSE(res, "Pour la Conclusion d'un groupement de textes, la liste des textes/poèmes retenus fournie en Introduction doit être renvoyée -- le jugement critique doit porter exclusivement sur ces textes réels.", heartbeat);
         }
-      } else if (typeSeanceOI === 'culture_litteraire') {
-        // Bypass complet, comme la Séance 11 (Évaluation finale) du collège
-        // -- aucun appel modèle : cf. construireFicheLibreOeuvreLyceeBypass.
-        if (!(contenuLibreCultureLitteraire || '').toString().trim()) {
-          return envoyerBlocageSSE(res, "Pour une séance de Culture littéraire, l'enseignant doit saisir intégralement le contenu de l'exposé magistral (contexte historique/littéraire/biographique) -- aucune génération automatique n'existe pour cette séance.", heartbeat);
-        }
-        const leconAfficheeBypass = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre);
-        const seanceAfficheeBypass = `${seance} : ${(seanceCatalogueOI && seanceCatalogueOI.intitule) || ''}`.trim();
-        // Situation d'apprentissage : uniquement pertinente pour la toute
-        // première séance de la séquence (numéro 1), jamais pour la
-        // Culture littéraire n°2 -- cf. vrai document DPFC (Soundjata),
-        // où elle n'apparaît qu'une fois, avant la Séance 1.
-        const contenuHTMLBypass = construireFicheLibreOeuvreLyceeBypass({
-          discipline, classe, duree, titreOeuvre, auteurOeuvre,
-          leconAffichee: leconAfficheeBypass, seanceAffichee: seanceAfficheeBypass, contenuLibre: contenuLibreCultureLitteraire,
-          situationApprentissage: Number(seance) === 1 ? situationApprentissageOeuvre : ''
-        });
-        const ficheBypass = await Fiche.create({
-          enseignantId: enseignantId || 'anonyme',
-          discipline: discipline || 'Français', classe,
-          lecon: leconAfficheeBypass, seance, duree, niveau,
-          approche: approcheNormalisee, contenu: contenuHTMLBypass, origineGeneration: origineGenerationNormalisee
-        });
-        clearInterval(heartbeat);
-        res.write(`data: ${JSON.stringify({ done: true, ficheId: ficheBypass._id, contenuFinal: contenuHTMLBypass })}\n\n`);
-        return res.end();
       } else if (typeSeanceOI === 'expose') {
         if (!(exposeSujetsGroupes || '').toString().trim()) {
           return envoyerBlocageSSE(res, "Pour une séance d'Exposé, l'enseignant doit fournir les sujets et la répartition des groupes.", heartbeat);
@@ -6454,9 +6492,15 @@ function limiterGenerationParIp(req, res, next) {
         systemPrompt += construireInstructionsConclusionOeuvreLycee({
           genreOeuvre: genreOeuvreOI, titreOeuvre, auteurOeuvre, axeEtude, corpusTextesGT
         });
+      } else if (typeSeanceOI === 'culture_litteraire') {
+        // 21/09 : n'est plus un bypass (cf. dépréciation de
+        // construireFicheLibreOeuvreLyceeBypass ci-dessus) -- vrai appel
+        // modèle, tableau générique conservé.
+        systemPrompt += construireInstructionsCultureLitteraireLycee({
+          titreOeuvre, auteurOeuvre, contenuFourni: contenuLibreCultureLitteraire,
+          situationApprentissage: situationApprentissageOeuvre, numeroSeance: seance
+        });
       }
-      // 'culture_litteraire' n'atteint jamais ce point : bypass complet avec
-      // retour anticipé plus haut, avant toute construction de systemPrompt.
     } else if (niveau !== 'primaire') {
       // Contrairement à Leçon/Séance, le champ Activité n'était jamais
       // résolu explicitement -- le modèle devait le deviner du contexte, ce

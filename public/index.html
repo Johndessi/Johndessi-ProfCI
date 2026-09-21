@@ -441,9 +441,9 @@ textarea { resize: vertical; min-height: 90px; }
             </div>
           </div>
           <div class="form-group" style="margin-bottom:14px">
-            <label>Contenu intégral de l'exposé magistral (contexte historique/littéraire/biographique) *</label>
+            <label>Contenu de l'exposé magistral (contexte historique/littéraire/biographique) -- optionnel</label>
             <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
-              Saisie intégrale par l'enseignant, restituée telle quelle -- aucune génération automatique n'existe pour cette séance.
+              Facultatif. Colle ici un contenu déjà rédigé (restitué fidèlement) et/ou un simple plan/liste de points (chaque point sera développé par le modèle à partir de ses connaissances réelles, sans jamais en ajouter). Laisse vide pour que le modèle génère l'intégralité de l'exposé lui-même. Dans tous les cas, la fiche reste au format tableau habituel.
             </p>
             <textarea id="oiContenuCultureLitteraire" style="min-height:160px"></textarea>
           </div>
@@ -1367,9 +1367,9 @@ async function genererFicheOeuvreIntegraleLycee() {
     champs.passagePages = passagePages;
     champs.resumePassageLectureDirigee = resumePassageLectureDirigee;
   } else if (seance.typeSeanceOeuvre === 'culture_litteraire') {
-    const contenuLibreCultureLitteraire = document.getElementById('oiContenuCultureLitteraire').value.trim();
-    if (!contenuLibreCultureLitteraire) { toast("❗ Le contenu de l'exposé magistral est obligatoire"); return; }
-    champs.contenuLibreCultureLitteraire = contenuLibreCultureLitteraire;
+    // 21/09 : optionnel désormais -- contenu intégral, simple plan, ou rien
+    // (le modèle génère alors seul), cf. construireInstructionsCultureLitteraireLycee.
+    champs.contenuLibreCultureLitteraire = document.getElementById('oiContenuCultureLitteraire').value.trim();
     if (Number(seance.numeroSeance) === 1) {
       champs.situationApprentissageOeuvre = document.getElementById('oiSituationApprentissageSeance1').value.trim();
     }
