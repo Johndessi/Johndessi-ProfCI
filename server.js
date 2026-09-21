@@ -979,6 +979,33 @@ function injecterActiviteEntete(contenuHTML, activiteAttendue) {
   return injecterChampEntete(contenuHTML, 'Activité', activiteAttendue);
 }
 
+// Filet déterministe (21/09, cf. retour enseignant sur fiche_francais_2nde_4_1.docx --
+// « Rebelle », Culture littéraire) : malgré la consigne explicite des RÈGLES
+// ABSOLUES ("L'entête ne comporte QUE les 8 lignes... N'AJOUTE AUCUN champ
+// supplémentaire avant... même jamais Stagiaire/Professeur conseiller/
+// Inspecteur/Établissement"), le modèle a tout de même généré un faux
+// en-tête administratif avant le vrai contenu ("Ministère de l'éducation
+// nationale...", "LYCÉE [NOM DE L'ÉTABLISSEMENT]", "STAGIAIRE : Professeur
+// conseiller :"...) -- absent de TOUT gabarit de ce fichier (grep confirmé :
+// aucune de ces chaînes n'existe dans server.js ni public/index.html), donc
+// toujours une pure invention du modèle, visible aussi bien à l'écran que
+// dans l'export Word (les deux partent du même contenuHTML stocké). La
+// consigne seule n'étant pas fiable à 100% (déjà le cas pour "STAGIAIRE"
+// avant même ce fix, cf. commit 97366e5 qui a ajouté la consigne sans
+// suffire à elle seule), on coupe désormais déterministiquement tout ce qui
+// précède le vrai début du contenu structuré : la STRUCTURE OBLIGATOIRE EN
+// HTML donnée au modèle commence TOUJOURS par <div class="fiche-cours"> puis
+// <div class="entete-libre">, jamais rien avant -- donc tout texte présent
+// avant le premier de ces deux marqueurs est nécessairement une invention à
+// retirer. No-op si le HTML commence déjà correctement (cas normal).
+function nettoyerPreambuleHallucine(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const re = /<div[^>]*class="[^"]*\b(?:fiche-cours|entete-libre)\b[^"]*"/i;
+  const m = re.exec(contenuHTML);
+  if (!m || m.index <= 0) return contenuHTML;
+  return contenuHTML.slice(m.index);
+}
+
 // Même principe que ci-dessus, mais pour le paragraphe "Situation
 // d'apprentissage :" (jamais un champ de l'entête vertical -- un <p><strong>
 // isolé, cf. le gabarit ligne ~3916). Utilisé UNIQUEMENT quand la situation
@@ -7027,6 +7054,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     stream.on('finalMessage', async () => {
       clearInterval(heartbeat);
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
+      contenuHTML = nettoyerPreambuleHallucine(contenuHTML);
       contenuHTML = injecterActiviteEntete(contenuHTML, activiteAffichee);
       contenuHTML = nettoyerCellulePresentationRituelle(contenuHTML);
       contenuHTML = nettoyerPlaceholdersNonExecutes(contenuHTML);
