@@ -355,6 +355,15 @@ textarea { resize: vertical; min-height: 90px; }
             <option>Tle A</option><option>Tle C</option><option>Tle D</option>
           </select>
         </div>
+        <div class="form-group" style="max-width:140px">
+          <label>Approche</label>
+          <select id="oiApproche">
+            <option value="APC" selected>APC</option>
+            <option value="FPC">FPC</option>
+            <option value="PPO">PPO</option>
+            <option value="flexible">Flexible</option>
+          </select>
+        </div>
       </div>
       <div class="form-group" style="margin-bottom:14px" id="oiAxeEtudeGroup">
         <label>Axe d'étude de la séquence * (saisi une fois en Séance 1, jamais deviné par le modèle, réutilisé automatiquement en Séance 10)</label>
@@ -1357,7 +1366,7 @@ async function genererFicheOeuvreIntegraleLycee() {
     seance: String(seance.numeroSeance),
     typeSeanceOI: seance.typeSeanceOeuvre,
     duree: '1 heure',
-    approche: 'APC'
+    approche: document.getElementById('oiApproche').value
   };
 
   if (seance.typeSeanceOeuvre === 'lecture_dirigee') {
@@ -1604,7 +1613,7 @@ async function genererFicheOeuvreIntegrale() {
     situationApprentissageOeuvre: seq.situationApprentissage,
     seance: String(seanceNum),
     duree: '1 heure',
-    approche: 'APC',
+    approche: document.getElementById('oiApproche').value,
     planSeancesOI: JSON.stringify(seq.planSeances)
   };
 

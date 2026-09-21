@@ -4687,6 +4687,7 @@ ADAPTATIONS PAR DISCIPLINE :
 
 RÈGLES ABSOLUES :
 - Réponds UNIQUEMENT en HTML pur, JAMAIS de backticks, JAMAIS de markdown
+- L'entête ne comporte QUE les 8 lignes indiquées ci-dessus (Discipline/Date/Classe/Compétence/Activité/Durée/Leçon/Séance) -- N'AJOUTE AUCUN champ supplémentaire avant, après ou entre elles, même s'il t'a semblé vu dans un autre modèle de fiche (ex. jamais "Stagiaire", "Professeur conseiller", "Inspecteur", "Établissement" ou tout autre champ hors de cette liste).
 - Situation d'apprentissage toujours ancrée dans le quotidien ivoirien (lycées, marchés, quartiers CI)
 - Traces écrites = contenu réel complet du cours (définitions, règles, exemples concrets)
 ${reglesVerbesTaxonomiques}${reglesTableauDeveloppement}- Tout le contenu de la fiche (corpus, dialogues, exemples, exercices, corrections) est rédigé EXCLUSIVEMENT en français -- n'insère jamais un mot ou une expression d'une autre langue (anglais compris) au milieu d'une phrase française.
@@ -5494,11 +5495,25 @@ CONTENU FOURNI PAR L'ENSEIGNANT (plan et/ou contenu déjà rédigé -- seule str
     ? `\n\n${construireConsigneSituationApprentissageSeance1Lycee(situationApprentissage, titre, auteur)}`
     : '';
 
+  // Garde-fou ÉVALUATION (21/09, retour enseignant après test réel sur
+  // « Rebelle », cf. fiche_francais_2nde_3.docx) : la Culture littéraire est
+  // le PREMIER contact avec l'œuvre (souvent avant même que les élèves ne
+  // l'aient empruntée/commencée, cf. situation d'apprentissage de la Séance
+  // 1) -- sans cette consigne, le modèle générait une évaluation qui
+  // supposait les élèves déjà avancés dans la lecture ("Vous avez lu la
+  // première partie de...") ET, pire, inventait au passage des détails
+  // d'intrigue de l'œuvre (personnages, thème) qu'il ne connaît pas avec
+  // certitude -- double faute : incohérence pédagogique ET fabrication de
+  // faits sur l'œuvre, cf. priorité absolue anti-fabrication de l'enseignant.
+  const garantiEvaluation = `
+
+CONSIGNE ABSOLUE -- ÉVALUATION DE CETTE SÉANCE : à ce stade de la séquence, les élèves n'ont PAS ENCORE lu l'œuvre « ${titre || '(titre non précisé)'} » (la Culture littéraire est leur tout premier contact avec elle, avant même le début de la lecture) -- l'évaluation ne doit donc JAMAIS supposer une lecture déjà faite, même partielle (interdits : "vous avez lu...", "dans le passage lu...", ou toute question qui présuppose une connaissance du contenu narratif de l'œuvre). Elle doit porter UNIQUEMENT sur les notions de culture littéraire réellement enseignées dans cette séance (définitions des genres, schéma narratif, schéma actantiel...) -- par un exercice d'application générique (ex. identifier ces notions sur un texte/extrait fourni ou bien connu, jamais sur l'intrigue de « ${titre || 'l\'œuvre'} » elle-même). Si l'œuvre est malgré tout mentionnée dans l'évaluation, ne t'appuie QUE sur son titre/auteur/genre déjà connus -- n'invente JAMAIS un personnage, un thème ou un événement de cette œuvre que tu ne connais pas avec certitude, même à titre d'exemple.`;
+
   return `
 
 INSTRUCTIONS SPÉCIFIQUES -- CULTURE LITTÉRAIRE (exposé magistral de l'enseignant sur le contexte historique/littéraire/biographique de l'œuvre) : contrairement à l'Introduction et à la Conclusion, cette séance CONSERVE INTÉGRALEMENT la structure générique du tableau Habiletés/Contenus et du déroulement Présentation/Développement/Évaluation -- ne la remplace par aucune autre structure, aucune section I/II/III.
 
-${consigneContenu}${consigneSituation}`;
+${consigneContenu}${consigneSituation}${garantiEvaluation}`;
 }
 
 // Exposé (15/09, spec exacte de l'enseignant) : PAS une analyse du texte par
@@ -6454,6 +6469,15 @@ function limiterGenerationParIp(req, res, next) {
       leconAfficheeOI = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre);
       activiteAffichee = ACTIVITE_OEUVRE_INTEGRALE;
       systemPrompt += `\n\nCHAMP ACTIVITÉ DE L'ENTÊTE : écris EXACTEMENT "${ACTIVITE_OEUVRE_INTEGRALE}" dans le champ Activité de l'entête -- jamais "Étude de l'œuvre intégrale" ni une autre formulation.`;
+      // 21/09 (retour enseignant, cf. fiche_francais_2nde_3.docx) : laissé
+      // sans consigne, le modèle improvisait lui-même un texte de repli
+      // ("Non disponible") dans le champ Compétence -- même défaut que le
+      // collège avant l'ajout du message déterministe ci-dessous (cf. bloc
+      // !estOeuvreIntegrale plus bas, même texte de repli, même mécanisme
+      // d'avertissement enseignant via avertissementRappel).
+      systemPrompt += `\n\nCHAMP COMPÉTENCE DE L'ENTÊTE : la numérotation officielle DPFC de la compétence n'est pas encore disponible pour ce niveau (second cycle). Dans le champ Compétence de l'entête, écris EXACTEMENT le texte suivant, sans numéro ni format "Compétence N", et SANS INVENTER un numéro ou un libellé, même plausible, et SANS écrire "Non disponible" ni aucune autre formulation de ton choix : "Numérotation officielle non disponible — vérifier avec le programme papier".`;
+      const avertissementCompetenceOI = 'Compétence officielle DPFC non déterminée avec certitude (non encore sourcée pour le second cycle) — le champ Compétence affiche un message à compléter manuellement avec le programme papier.';
+      avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementCompetenceOI}` : avertissementCompetenceOI;
       systemPrompt += `\n\nCHAMP LEÇON DE L'ENTÊTE : écris EXACTEMENT "${leconAfficheeOI}" dans le champ Leçon de l'entête, sans reformulation.`;
 
       seanceAfficheeOI = `${seance} : ${(seanceCatalogueOI && seanceCatalogueOI.intitule) || ''}`.trim();
