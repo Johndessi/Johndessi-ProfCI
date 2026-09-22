@@ -5038,6 +5038,44 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
   }
 });
 
+// Suppression ciblée de documents LeconOfficielleDPFC (nettoyage admin,
+// ex. doublons orphelins créés par un re-seed ayant changé la clé d'upsert
+// discipline/classe/activite/numeroLecon). discipline, classe et activite
+// sont exigés pour empêcher une purge accidentelle de tout le catalogue ;
+// numeroLecon est un filtre optionnel supplémentaire. Renvoie la liste des
+// _id supprimés pour permettre une vérification a posteriori.
+app.delete('/api/admin/lecons-officielles', verifierCleAdmin, async (req, res) => {
+  try {
+    const discipline = (req.query.discipline || '').toString().trim();
+    const classe = (req.query.classe || '').toString().trim();
+    const activite = (req.query.activite || '').toString().trim();
+    const numeroLeconRaw = req.query.numeroLecon;
+
+    if (!discipline || !classe || !activite) {
+      return res.status(400).json({ error: 'discipline, classe et activite sont requis pour supprimer' });
+    }
+
+    const filtre = { discipline, classe, activite };
+    if (numeroLeconRaw != null && numeroLeconRaw !== '') {
+      const numeroLecon = parseInt(numeroLeconRaw, 10);
+      if (!Number.isFinite(numeroLecon)) {
+        return res.status(400).json({ error: 'numeroLecon invalide' });
+      }
+      filtre.numeroLecon = numeroLecon;
+    }
+
+    const aSupprimer = await LeconOfficielleDPFC.find(filtre).select('_id discipline classe activite numeroLecon titreLecon').lean();
+    if (!aSupprimer.length) {
+      return res.json({ success: true, deletedCount: 0, deleted: [] });
+    }
+
+    const resultat = await LeconOfficielleDPFC.deleteMany(filtre);
+    res.json({ success: true, deletedCount: resultat.deletedCount, deleted: aSupprimer });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Inspection/purge du cache de recherche web Étude intégrale
 // (InfoOeuvreIntegrale, cf. rechercherInfosOeuvre). Ajouté le 04/09 :
 // les correctifs "citations exactes obligatoires" ont changé la logique de
