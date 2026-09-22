@@ -5541,11 +5541,30 @@ function construireConsigneSituationApprentissageSeance1Lycee(situationFournie, 
 //     connaissances réelles et vérifiées sur l'œuvre/l'auteur/le mouvement
 //     littéraire -- même garde-fou anti-fabrication que partout ailleurs
 //     dans l'application (rester général plutôt qu'inventer un fait incertain).
-function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvre, contenuFourni, situationApprentissage, numeroSeance, intituleOfficielSeance }) {
+function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvre, contenuFourni, situationApprentissage, numeroSeance, intituleOfficielSeance, biographieAuteur, themeOeuvre }) {
   const contenu = (contenuFourni || '').toString().trim();
   const titre = (titreOeuvre || '').toString().trim();
   const auteur = (auteurOeuvre || '').toString().trim();
   const intituleOfficiel = (intituleOfficielSeance || '').toString().trim();
+
+  // Faits vérifiés par recherche web (22/09, incident Ferdinand Oyono/TleA
+  // Leçon 1 Séance 1 : le modèle a affirmé une naissance "à Ebolowa, dans le
+  // Cameroun français (alors Afrique équatoriale française)" -- affirmation
+  // historiquement fausse, le Cameroun étant un territoire sous mandat/
+  // tutelle française distinct de l'AEF -- alors même que la consigne
+  // "reste général si tu n'es pas certain" était déjà en place et n'a pas
+  // suffi : une consigne de prudence seule ne fiabilise pas un fait
+  // biographique/historique précis. Cette séance utilisait jusqu'ici les
+  // seules "connaissances" du modèle, sans jamais passer par
+  // rechercherInfosOeuvre (le cache web déjà utilisé pour la séance
+  // Introduction, cf. plus haut) -- corrigé au niveau de l'appel (cf. le
+  // bloc culture_litteraire dans /api/generer-fiche) : quand des faits
+  // vérifiés sont disponibles, ce sont les SEULS faits précis autorisés ici.
+  const biographieVerifiee = (biographieAuteur || '').toString().trim();
+  const themeVerifie = (themeOeuvre || '').toString().trim();
+  const blocFaitsVerifies = (biographieVerifiee || themeVerifie)
+    ? `\n\nFAITS VÉRIFIÉS PAR RECHERCHE DOCUMENTAIRE SUR L'AUTEUR/L'ŒUVRE -- ce sont les SEULS faits biographiques ou historiques précis (date, lieu, événement, contexte politique/administratif) que tu es autorisé à citer : n'en invente ni n'en complète aucun autre, même plausible ; pour tout point biographique/historique non couvert par ces faits vérifiés, reste général plutôt que d'ajouter un détail précis de ton cru :${biographieVerifiee ? `\n- Biographie/contexte de l'auteur (vérifié) : "${biographieVerifiee}"` : ''}${themeVerifie ? `\n- Thème/contexte de l'œuvre (vérifié) : "${themeVerifie}"` : ''}`
+    : '';
 
   // Périmètre officiel (21/09, retour enseignant sur « Rebelle », cf.
   // fiche_francais_2nde_4.docx face à la vraie progression DPFC) : sans
@@ -5568,8 +5587,8 @@ function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvr
 - N'AJOUTE AUCUN point, notion ou sous-partie qui ne figure pas, même sous forme de simple intitulé, dans le contenu fourni ci-dessous -- ne complète jamais le plan de l'enseignant par des points de ton choix, et ne le réordonne pas (ceci prévaut sur le périmètre officiel de la progression : si l'enseignant fournit un plan, c'est lui qui décide du périmètre réellement traité).
 
 CONTENU FOURNI PAR L'ENSEIGNANT (plan et/ou contenu déjà rédigé -- seule structure de points autorisée pour cette séance) :
-"${contenu}"`
-    : `L'enseignant n'a fourni ni contenu ni plan pour cette séance de Culture littéraire (exposé magistral sur le contexte historique/littéraire/biographique de l'œuvre « ${titre || '(titre non précisé)'} »${auteur ? `, ${auteur}` : ''}) -- génère TOI-MÊME l'intégralité du contenu de cet exposé (définitions utiles, contexte historique/littéraire, éléments biographiques pertinents, mouvement littéraire...), à partir de tes connaissances réelles et vérifiées sur cette œuvre précise, cet auteur et son contexte.${consignePerimetre} Si tu n'es pas certain d'un fait précis (date, détail biographique ou historique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude -- N'INVENTE JAMAIS un fait, une date ou un événement que tu ne connais pas réellement.`;
+"${contenu}"${blocFaitsVerifies}`
+    : `L'enseignant n'a fourni ni contenu ni plan pour cette séance de Culture littéraire (exposé magistral sur le contexte historique/littéraire/biographique de l'œuvre « ${titre || '(titre non précisé)'} »${auteur ? `, ${auteur}` : ''}) -- génère TOI-MÊME l'intégralité du contenu de cet exposé (définitions utiles, contexte historique/littéraire, éléments biographiques pertinents, mouvement littéraire...), à partir de tes connaissances réelles et vérifiées sur cette œuvre précise, cet auteur et son contexte.${consignePerimetre} Si tu n'es pas certain d'un fait précis (date, détail biographique ou historique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude -- N'INVENTE JAMAIS un fait, une date ou un événement que tu ne connais pas réellement.${blocFaitsVerifies}`;
 
   const consigneSituation = Number(numeroSeance) === 1
     ? `\n\n${construireConsigneSituationApprentissageSeance1Lycee(situationApprentissage, titre, auteur)}`
@@ -6618,10 +6637,29 @@ function limiterGenerationParIp(req, res, next) {
         // schéma actantiel alors que la progression réserve cette séance aux
         // seuls genres en prose et à leurs caractéristiques) -- désormais
         // transmis comme périmètre officiel à ne jamais dépasser en Mode 1.
+        // 22/09 : recherche web + cache (même principe que 'introduction'
+        // ci-dessus, cf. rechercherInfosOeuvre) -- corrige l'incident du
+        // 22/09 sur TleA Leçon 1 Séance 1 (fait biographique inventé sur
+        // Ferdinand Oyono, cf. commentaire dans
+        // construireInstructionsCultureLitteraireLycee). Cette séance
+        // n'appelait jusqu'ici jamais rechercherInfosOeuvre, contrairement à
+        // 'introduction' -- seule différence : ici les faits vérifiés
+        // viennent compléter la consigne existante plutôt que remplacer une
+        // structure dédiée.
+        let biographieEffectiveCL = (biographieAuteur || '').toString().trim();
+        let themeEffectifCL = (themeOeuvre || '').toString().trim();
+        if (genreOeuvreOI !== 'poetique' && (!biographieEffectiveCL || !themeEffectifCL) && titreOeuvre && auteurOeuvre) {
+          const infosTrouveesCL = await rechercherInfosOeuvre(titreOeuvre, auteurOeuvre);
+          if (infosTrouveesCL.succes) {
+            if (!biographieEffectiveCL) biographieEffectiveCL = infosTrouveesCL.biographieAuteur;
+            if (!themeEffectifCL) themeEffectifCL = infosTrouveesCL.themeOeuvre;
+          }
+        }
         systemPrompt += construireInstructionsCultureLitteraireLycee({
           titreOeuvre, auteurOeuvre, contenuFourni: contenuLibreCultureLitteraire,
           situationApprentissage: situationApprentissageOeuvre, numeroSeance: seance,
-          intituleOfficielSeance: seanceCatalogueOI && seanceCatalogueOI.intitule
+          intituleOfficielSeance: seanceCatalogueOI && seanceCatalogueOI.intitule,
+          biographieAuteur: biographieEffectiveCL, themeOeuvre: themeEffectifCL
         });
       }
     } else if (niveau !== 'primaire') {
