@@ -399,14 +399,14 @@ textarea { resize: vertical; min-height: 90px; }
       </div>
       </div>
 
-      <!-- Second cycle (13/09, complété 20/09) : catalogue-piloté, structure différente
-           du collège ci-dessus (S1-S11 fixe) -- séquences/séances viennent de
-           LeconOfficielleDPFC pour le profil résolu depuis #oiClasse (cf.
+      <!-- Second cycle (13/09, complété 20/09, 23/09) : catalogue-piloté, structure
+           différente du collège ci-dessus (S1-S11 fixe) -- séquences/séances viennent
+           de LeconOfficielleDPFC pour le profil résolu depuis #oiClasse (cf.
            resoudreProfilSecondCycle côté client). Lecture dirigée, Culture littéraire,
-           Exposé, Introduction et Conclusion sont implémentés (cf.
-           TYPES_SEANCE_LYCEE_IMPLEMENTES) : Lecture méthodique, Évaluation et Correction
-           restent affichés mais bloqués à la génération, jamais silencieusement mal
-           générés. -->
+           Exposé, Introduction, Conclusion et Lecture méthodique (Mode "plan fourni"
+           seul) sont implémentés (cf. TYPES_SEANCE_LYCEE_IMPLEMENTES) : Évaluation et
+           Correction restent affichées mais bloquées à la génération, jamais
+           silencieusement mal générées. -->
       <div id="oiPanneauLycee" style="display:none">
         <h2 style="margin-top:18px">Séances de la séquence (second cycle)</h2>
         <div class="form-row">
@@ -465,6 +465,34 @@ textarea { resize: vertical; min-height: 90px; }
               Reproduit tel quel dans la fiche -- le modèle ne rédige que les consignes de préparation et la grille d'évaluation ci-dessous, jamais le contenu des sujets eux-mêmes.
             </p>
             <textarea id="oiSujetsGroupesExpose" style="min-height:100px" placeholder="Ex: Groupe 1 : la vie de Guy de Maupassant. Groupe 2 : le contexte historique de la Normandie au XIXe siècle. Groupe 3 : le mouvement réaliste en littérature."></textarea>
+          </div>
+        </div>
+
+        <!-- Lecture méthodique (second cycle, 23/09, corrigé le 25/09) : Mode
+             "plan fourni par l'enseignant" SEUL -- pas de mode automatique tant
+             que le référentiel "Repérage" du second cycle n'est pas confirmé sur
+             une vraie fiche de référence pour ce mode (cf. commentaire sur
+             TYPES_SEANCE_LYCEE_IMPLEMENTES côté serveur). Texte support
+             OPTIONNEL (corrigé le 25/09, confirmé sur un vrai cours de 2nde) :
+             aucune fiche réelle ne reproduit le texte intégral de l'œuvre --
+             l'enseignant s'appuie sur le manuel et ne cite que les vers/passages
+             nécessaires, déjà présents dans les colonnes Repérage du plan. Seul
+             le plan de cours est obligatoire ; le modèle se contente de le
+             mettre en forme fidèlement. -->
+        <div id="oiPanneauLectureMethodique" style="display:none">
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Texte étudié (support) -- optionnel</label>
+            <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
+              Facultatif : référence bibliographique courte (titre, auteur, recueil, date) ou texte intégral, les deux sont acceptés, aucun format ni longueur minimale. Laisse vide si tu t'appuies sur le manuel -- les citations exactes déjà présentes dans le plan ci-dessous suffisent alors.
+            </p>
+            <textarea id="oiTexteSupportLectureMethodique" style="min-height:100px"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Plan de cours complet (présentation du texte, hypothèse, axes, repérages, analyses, interprétations) *</label>
+            <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
+              Aucune génération automatique n'existe pour cette séance : rédige toi-même la présentation du texte (titre/auteur/œuvre/date), l'hypothèse de lecture, les axes retenus (2 ou plus), et pour chacun les entrées de repérage (citations exactes -- vers, mots), leurs analyses et interprétations. Les noms d'entrées sont libres (ex. "Structure du texte", "Le lexique", "Les figures de style"...), pas de liste imposée. Le modèle met fidèlement en forme ce plan, sans jamais y ajouter une catégorie, un axe ou une citation de son cru.
+            </p>
+            <textarea id="oiPlanCoursLectureMethodique" style="min-height:220px"></textarea>
           </div>
         </div>
 
@@ -1184,6 +1212,7 @@ async function chargerCatalogueOeuvreLycee(profil) {
   document.getElementById('oiPanneauCultureLitteraire').style.display = 'none';
   document.getElementById('oiPanneauExpose').style.display = 'none';
   document.getElementById('oiPanneauIntroductionConclusionLycee').style.display = 'none';
+  document.getElementById('oiPanneauLectureMethodique').style.display = 'none';
   document.getElementById('oiTypeSeanceLyceeInfo').textContent = '';
   etatSequenceLycee = {};
   try {
@@ -1216,8 +1245,9 @@ async function chargerCatalogueOeuvreLycee(profil) {
 }
 
 // Types de séance implémentés côté frontend -- GARDER SYNCHRONISÉ avec
-// TYPES_SEANCE_LYCEE_IMPLEMENTES côté serveur (server.js).
-const TYPES_SEANCE_LYCEE_IMPLEMENTES = ['lecture_dirigee', 'culture_litteraire', 'expose', 'introduction', 'conclusion'];
+// TYPES_SEANCE_LYCEE_IMPLEMENTES côté serveur (server.js). Lecture méthodique
+// (23/09) : Mode "plan fourni par l'enseignant" seul, cf. oiPanneauLectureMethodique.
+const TYPES_SEANCE_LYCEE_IMPLEMENTES = ['lecture_dirigee', 'culture_litteraire', 'expose', 'introduction', 'conclusion', 'lecture_methodique'];
 // Mémorisation client, par numéroSéquence, de l'axe d'étude (et du corpus GT pour un
 // groupement de textes poétiques) saisis en Introduction -- purement en mémoire (pas de
 // localStorage, pas de persistance serveur), réinjectés en lecture seule en Conclusion.
@@ -1233,6 +1263,7 @@ function changerSequenceOeuvreLycee() {
   document.getElementById('oiPanneauCultureLitteraire').style.display = 'none';
   document.getElementById('oiPanneauExpose').style.display = 'none';
   document.getElementById('oiPanneauIntroductionConclusionLycee').style.display = 'none';
+  document.getElementById('oiPanneauLectureMethodique').style.display = 'none';
   document.getElementById('oiTypeSeanceLyceeInfo').textContent = '';
   const lecon = catalogueOeuvreLycee.find((l) => String(l.numeroLecon) === String(numLecon));
   const optVide = document.createElement('option');
@@ -1268,6 +1299,7 @@ function changerSeanceOeuvreLycee() {
   document.getElementById('oiPanneauLectureDirigee').style.display = (type === 'lecture_dirigee') ? 'block' : 'none';
   document.getElementById('oiPanneauCultureLitteraire').style.display = (type === 'culture_litteraire') ? 'block' : 'none';
   document.getElementById('oiPanneauExpose').style.display = (type === 'expose') ? 'block' : 'none';
+  document.getElementById('oiPanneauLectureMethodique').style.display = (type === 'lecture_methodique') ? 'block' : 'none';
 
   // Situation d'apprentissage : placée à la Séance 1 (Culture littéraire),
   // conformément au vrai document DPFC -- jamais à la Séance 2 de Culture
@@ -1386,6 +1418,19 @@ async function genererFicheOeuvreIntegraleLycee() {
     const exposeSujetsGroupes = document.getElementById('oiSujetsGroupesExpose').value.trim();
     if (!exposeSujetsGroupes) { toast('❗ Les sujets et la répartition des groupes sont obligatoires'); return; }
     champs.exposeSujetsGroupes = exposeSujetsGroupes;
+  } else if (seance.typeSeanceOeuvre === 'lecture_methodique') {
+    // 23/09 : Mode "plan fourni par l'enseignant" seul -- champs génériques
+    // texteSupport/planCours déjà utilisés ailleurs dans l'appli (collège),
+    // réutilisés tels quels ici (cf. construireInstructionsLectureMethodiqueLycee
+    // côté serveur).
+    // 25/09 : texteSupport optionnel -- aucune fiche réelle ne reproduit le
+    // texte intégral, les citations exactes sont déjà dans le plan (colonnes
+    // Repérage). Seul planCours reste obligatoire.
+    const texteSupportLM = document.getElementById('oiTexteSupportLectureMethodique').value.trim();
+    const planCoursLM = document.getElementById('oiPlanCoursLectureMethodique').value.trim();
+    if (!planCoursLM) { toast('❗ Le plan de cours complet est obligatoire'); return; }
+    if (texteSupportLM) champs.texteSupport = texteSupportLM;
+    champs.planCours = planCoursLM;
   } else if (seance.typeSeanceOeuvre === 'introduction' || seance.typeSeanceOeuvre === 'conclusion') {
     const axeEtude = document.getElementById('oiAxeEtudeLycee').value.trim();
     const corpusTextesGT = document.getElementById('oiCorpusTextesGTLycee').value.trim();

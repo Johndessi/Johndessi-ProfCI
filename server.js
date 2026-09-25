@@ -5641,6 +5641,80 @@ INSTRUCTIONS SPÉCIFIQUES -- CULTURE LITTÉRAIRE (exposé magistral de l'enseign
 ${consigneContenu}${consigneSituation}${garantiEvaluation}`;
 }
 
+// Lecture méthodique, SECOND CYCLE (23/09, corrigé le 25/09) : contrairement
+// au collège (construireInstructionsLectureMethodique/AvecPlanEnseignant),
+// qui dispose d'un Mode 1 automatique adossé à REFERENTIEL_TYPES_TEXTE (8
+// types de texte collège, catégories grammaticales/lexicales, validés sur
+// corpus réel), le second cycle n'a NI référentiel équivalent par genre
+// (narrative/poétique/théâtrale) NI vraie fiche de référence enseignant pour
+// le mode automatique -- deviner cette catégorisation reproduirait le
+// problème déjà rencontré plusieurs fois cette session sur l'anti-
+// fabrication. Implémenté donc en Mode "plan fourni par l'enseignant" SEUL :
+// l'enseignant rédige lui-même l'intégralité du contenu pédagogique
+// (présentation du texte, hypothèse de lecture, axes, entrées de repérage
+// avec CITATIONS EXACTES déjà incluses, analyses, interprétations) -- le
+// modèle se contente de le mettre en forme fidèlement, jamais de compléter
+// par une catégorie, un axe ou une citation de son cru. Reprend le même
+// squelette 4 colonnes que le collège (Entrées/.../Analyse/Interprétation),
+// mais sous l'en-tête "Repérage" -- confirmé comme la terminologie officielle
+// du second cycle par le document DPFC -- au lieu de "Indices textuels"
+// (vocabulaire collège). Entrées LIBRES (pas de liste fixe comme au collège,
+// 2 à 4 par axe) -- confirmé sur pièce (vrai cours de 2nde, GT poétique) le
+// 25/09, en même temps que la correction ci-dessous.
+//
+// Correction du 25/09 : texteSupport est OPTIONNEL, pas obligatoire --
+// aucune fiche réelle de Lecture méthodique lycée ne reproduit le texte
+// intégral de l'œuvre (l'enseignant s'appuie sur le manuel et ne cite que
+// les vers/passages nécessaires, DÉJÀ présents dans les colonnes Repérage du
+// plan fourni). Le marqueur {{TEXTE_SUPPORT}} n'est donc utilisé QUE si
+// l'enseignant a rempli ce champ (référence bibliographique courte ou texte
+// intégral, les deux sont légitimes, aucun format ni longueur imposés) --
+// sinon la règle anti-invention s'appuie directement sur planCours, seule
+// source alors disponible pour les citations exactes.
+function construireInstructionsLectureMethodiqueLycee({ planCours, texteSupport, intituleOfficielSeance }) {
+  const plan = (planCours || '').toString().trim();
+  const support = (texteSupport || '').toString().trim();
+  const intituleOfficiel = (intituleOfficielSeance || '').toString().trim();
+
+  // Même principe que Culture littéraire (21/09) : quand un intitulé officiel
+  // du catalogue est disponible, il fixe le périmètre réel de l'analyse --
+  // jamais un axe hors de ce périmètre même si le texte support s'y prêterait.
+  const consignePerimetre = intituleOfficiel
+    ? ` Le périmètre exact de cette séance, tel que fixé par la progression DPFC officielle, est : "${intituleOfficiel}" -- si le plan de l'enseignant ci-dessous s'en écarte, mets-le en forme tel quel malgré tout (c'est TOUJOURS lui qui prévaut sur l'intitulé officiel, cf. règle ci-dessous), l'intitulé sert uniquement à cadrer la Situation d'apprentissage et la ligne PRÉSENTATION.`
+    : '';
+
+  const consigneTexteSupport = support
+    ? `TEXTE SUPPORT -- UNE SEULE INSERTION DANS TOUT LE DOCUMENT : utilise le marqueur {{TEXTE_SUPPORT}} UNE SEULE FOIS, à un seul endroit de la fiche -- jamais recopié, mentionné ou réinséré ailleurs.\n\n`
+    : '';
+  const sourceRepérage = support
+    ? 'depuis le texte support (marqueur {{TEXTE_SUPPORT}}) OU depuis les citations déjà données dans le plan de l\'enseignant ci-dessous'
+    : 'depuis les citations déjà données dans le plan de l\'enseignant ci-dessous (aucun texte support séparé n\'a été fourni pour cette séance -- le plan est ici la SEULE source de citations)';
+
+  return `
+
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- LECTURE MÉTHODIQUE (second cycle, Mode "plan fourni par l'enseignant" -- SEUL mode actuellement disponible pour cette séance : l'enseignant a rédigé lui-même l'intégralité du contenu pédagogique du développement -- hypothèse de lecture, axes, repérages, analyses, interprétations. Les instructions ci-dessous REMPLACENT, pour le tableau Habiletés/Contenus, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION SEULEMENT, la structure Présentation/Développement/Évaluation générique décrite plus haut. L'entête et la Situation d'apprentissage restent inchangés par ailleurs.) :
+
+TABLEAU HABILETÉS ET CONTENUS -- formule FIXE ci-dessous, obligatoire, NE JAMAIS la réinventer ni l'adapter au texte :
+${habiletesLectureMethodique('lycee')}
+
+${consigneTexteSupport}DÉVELOPPEMENT -- reproduis FIDÈLEMENT, réparti sur 4 lignes numérotées I à IV du tableau DÉROULEMENT (jamais moins, jamais plus), chacune avec les 5 colonnes standard (Moments didactiques/Durée | Stratégies pédagogiques/Plan du cours | Activités de l'enseignant | Activités des élèves | Traces écrites), le plan ci-dessous rédigé par l'enseignant -- sans changer le sens, sans y ajouter ni en retirer aucun élément, reformaté seulement pour l'intégrer à ces colonnes :
+
+I. PRÉSENTATION DU TEXTE : reprends la présentation du texte (titre, source/édition, auteur, nature, date de publication) telle que fournie par l'enseignant dans son plan -- sous forme de questions-réponses en Activités de l'enseignant/des élèves, la présentation elle-même en Traces écrites (1 à 2 phrases). Ne reproduis JAMAIS le texte intégral de l'œuvre ici, seulement sa présentation (titre/auteur/œuvre/date).
+
+II. HYPOTHÈSE GÉNÉRALE -- en Traces écrites : reprends l'hypothèse de lecture EXACTEMENT comme rédigée par l'enseignant, sans reformulation ni ajout.
+
+III. VÉRIFICATION DE L'HYPOTHÈSE -- en Traces écrites de cette ligne III, le libellé des axes fournis par l'enseignant (ex. "Axe 1 : ... / Axe 2 : ...", parfois plus de 2 axes -- reproduis exactement le nombre d'axes que l'enseignant a fournis, jamais un nombre fixe imposé). JUSTE APRÈS le tableau DÉROULEMENT complet (donc après son </table>, jamais à l'intérieur d'une cellule), pour CHAQUE axe fourni par l'enseignant, construis un tableau séparé à 4 colonnes intitulées EXACTEMENT « Entrée | Repérage | Analyse | Interprétation » (jamais "Indices textuels" : c'est la terminologie du collège, pas celle du second cycle) -- une ligne par entrée fournie par l'enseignant pour cet axe (2 à 4 entrées par axe selon ce que l'enseignant a fourni, jamais un nombre imposé, jamais une entrée de ton cru : les noms d'entrées comme "Structure du texte", "Le lexique", "Les figures de style"... sont LIBREMENT choisis par l'enseignant selon le texte, pas une liste fixe).
+   RÈGLE ABSOLUE ANTI-INVENTION : toute citation placée dans la colonne « Repérage » doit être recopiée MOT POUR MOT ${sourceRepérage} -- jamais reformulée, jamais complétée, jamais inventée. Si l'enseignant n'a fourni ni entrée ni citation exacte pour un point de son plan, écris "à compléter par l'enseignant" dans la case correspondante plutôt que d'inventer un contenu absent.
+   N'AJOUTE NI NE RETIRE aucun axe, aucune entrée, aucune analyse ou interprétation par rapport à ce que l'enseignant a rédigé -- ta seule tâche ici est la mise en forme et la correction orthographique/grammaticale, jamais l'ajout d'une catégorie d'analyse de ton cru.
+
+IV. BILAN GÉNÉRAL -- en Traces écrites : reprends le bilan tel que fourni par l'enseignant ; à défaut, rédige toi-même une synthèse brève reprenant EXPLICITEMENT l'hypothèse de départ (Traces écrites de la ligne II ci-dessus) et confirmant sa vérification avec la formule EXACTE « Notre hypothèse générale est donc vérifiée. » -- sans ajouter aucune analyse nouvelle absente des axes déjà reproduits en III.
+
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT, séparée du Bilan général -- ne jamais fusionner les deux) : reprends l'évaluation telle que fournie par l'enseignant dans son plan ; à défaut, rédige TOI-MÊME quelques questions individuelles à l'écrit testant UNIQUEMENT le contenu réel des axes déjà reproduits en III -- jamais un nouveau texte, jamais une notion absente du plan de l'enseignant.${consignePerimetre}
+
+PLAN FOURNI PAR L'ENSEIGNANT (seule source de contenu pédagogique autorisée pour le développement de cette séance -- reproduis-le fidèlement dans la structure ci-dessus, ne le complète JAMAIS par une analyse, un axe ou une catégorie de ton cru) :
+"${plan}"`;
+}
+
 // Exposé (15/09, spec exacte de l'enseignant) : PAS une analyse du texte par
 // le modèle -- une fiche-guide pour encadrer des exposés préparés ET
 // présentés par les élèves. L'enseignant définit les sujets/groupes (partie
@@ -6371,12 +6445,27 @@ function limiterGenerationParIp(req, res, next) {
     // l'enseignant que le collège (construireInstructionsIntroductionOeuvre/
     // ConclusionOeuvre), mais avec leurs propres fonctions dédiées au second
     // cycle (structure genre-dépendante, jamais "séquence de 11 séances"
-    // codée en dur). Lecture méthodique/Évaluation/Correction restent hors
-    // périmètre pour l'instant (cf. décision du 20/09 : Lecture méthodique
-    // nécessite encore la réconciliation de l'en-tête REPERAGE vs le squelette
-    // collège, Évaluation/Correction n'ont aucune fonction équivalente
-    // écrite ni de vraie fiche de référence vue à ce jour).
-    const TYPES_SEANCE_LYCEE_IMPLEMENTES = ['lecture_dirigee', 'culture_litteraire', 'expose', 'introduction', 'conclusion'];
+    // codée en dur).
+    // Lecture méthodique (23/09) : ajoutée à son tour, mais en Mode "plan
+    // fourni par l'enseignant" UNIQUEMENT (cf. construireInstructionsLectureMethodiqueLycee) --
+    // état des lieux du 23/09 : 53 des 155 séances du catalogue seedé sont de
+    // ce type, la vraie terminologie du second cycle ("REPÉRAGE", distincte du
+    // "Indices textuels" collège) est confirmée par le document DPFC, mais ni
+    // son référentiel de catégories par genre ni une vraie fiche de référence
+    // lycée n'ont pu être obtenus à ce jour -- le mode automatique du collège
+    // (REFERENTIEL_TYPES_TEXTE, determinerSlotsAxe) reste donc hors de portée
+    // ici : on ne devine pas cette catégorisation. En Mode plan fourni,
+    // l'enseignant écrit lui-même l'intégralité du contenu pédagogique
+    // (hypothèse, axes, repérages -- citations exactes du texte support --,
+    // analyses, interprétations) ; le modèle se contente de le mettre en
+    // forme fidèlement dans le même squelette 4 colonnes que le collège, sous
+    // l'en-tête "Repérage" plutôt que "Indices textuels", sans jamais inventer
+    // une catégorie ou une citation absente du texte support fourni. Le mode
+    // automatique restera hors périmètre tant que ce référentiel n'est pas
+    // confirmé sur pièce. Évaluation/Correction restent hors périmètre pour
+    // l'instant (aucune fonction équivalente écrite ni de vraie fiche de
+    // référence vue à ce jour).
+    const TYPES_SEANCE_LYCEE_IMPLEMENTES = ['lecture_dirigee', 'culture_litteraire', 'expose', 'introduction', 'conclusion', 'lecture_methodique'];
     let seanceCatalogueOI = null;
     // genreOeuvreOI (20/09) : résolu ici depuis le catalogue (leconCatalogueOI,
     // scope local à ce bloc) et hissé à ce niveau pour rester lisible dans le
@@ -6434,6 +6523,25 @@ function limiterGenerationParIp(req, res, next) {
       } else if (typeSeanceOI === 'expose') {
         if (!(exposeSujetsGroupes || '').toString().trim()) {
           return envoyerBlocageSSE(res, "Pour une séance d'Exposé, l'enseignant doit fournir les sujets et la répartition des groupes.", heartbeat);
+        }
+      } else if (typeSeanceOI === 'lecture_methodique') {
+        // Lecture méthodique second cycle (23/09, corrigé le 25/09) : Mode
+        // "plan fourni par l'enseignant" UNIQUEMENT -- pas d'équivalent du
+        // mode automatique du collège (REFERENTIEL_TYPES_TEXTE,
+        // determinerSlotsAxe...) tant que le vrai référentiel "Repérage" du
+        // second cycle n'a pas été confirmé sur une vraie fiche de référence
+        // pour le mode automatique -- cf. audit du 20-23/09. En revanche, la
+        // STRUCTURE du mode plan-fourni a bien été confirmée entre-temps sur
+        // pièce (vrai cours de 2nde, GT poétique) : texteSupport y est
+        // OPTIONNEL -- aucune fiche réelle ne reproduit le texte intégral de
+        // l'œuvre, l'enseignant s'appuie sur le manuel et ne cite que les
+        // vers/passages nécessaires, DÉJÀ présents dans planCours (colonnes
+        // Repérage). Correction du 25/09 : retire le blocage précédent, qui
+        // exigeait à tort un texteSupport séparé -- seul planCours reste
+        // obligatoire, seule vraie source de contenu pédagogique de cette
+        // séance (cf. construireInstructionsLectureMethodiqueLycee).
+        if (!planCoursEstSubstantiel(planCours)) {
+          return envoyerBlocageSSE(res, "Pour une séance de Lecture méthodique, l'enseignant doit fournir son plan de cours complet (présentation du texte, hypothèse de lecture, axes, repérages -- citations exactes --, analyses, interprétations) -- aucune génération automatique n'existe pour cette sous-activité en dehors du plan fourni.", heartbeat);
         }
       }
     }
@@ -6686,6 +6794,15 @@ function limiterGenerationParIp(req, res, next) {
           situationApprentissage: situationApprentissageOeuvre, numeroSeance: seance,
           intituleOfficielSeance: seanceCatalogueOI && seanceCatalogueOI.intitule,
           biographieAuteur: biographieEffectiveCL, themeOeuvre: themeEffectifCL
+        });
+      } else if (typeSeanceOI === 'lecture_methodique') {
+        // 23/09, corrigé le 25/09 : Mode "plan fourni par l'enseignant" seul
+        // (cf. commentaire sur construireInstructionsLectureMethodiqueLycee)
+        // -- validation déjà faite plus haut (planCoursEstSubstantiel
+        // uniquement, texteSupport optionnel).
+        systemPrompt += construireInstructionsLectureMethodiqueLycee({
+          planCours, texteSupport,
+          intituleOfficielSeance: seanceCatalogueOI && seanceCatalogueOI.intitule
         });
       }
     } else if (niveau !== 'primaire') {
