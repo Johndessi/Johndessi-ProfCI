@@ -4537,6 +4537,51 @@ function resumerSeancesPrecedentes(fichesPrecedentes) {
   }).join('\n\n');
 }
 
+// Interdiction nommée, élargie le 23/09 après un second incident distinct :
+// le premier fix (22/09, Ferdinand Oyono/TleA) ne couvrait que la
+// classification administrative/territoriale précise (Cameroun rattaché à
+// tort à l'AEF) et a effectivement tenu sur ce point précis lors des tests
+// suivants (Oyono, puis Kane/Sénégal). Mais un troisième test (1ère A,
+// Négritude) a révélé une AUTRE catégorie de fait précis invérifié que
+// cette interdiction ne couvrait pas : la composition d'un mouvement
+// littéraire -- le modèle a affirmé que Frantz Fanon était un des trois
+// fondateurs de la Négritude, alors que le trio fondateur réel (revue
+// "L'Étudiant noir", 1935) est Césaire/Senghor/Damas ; Fanon est un
+// penseur postcolonial plus tardif, jamais associé à la fondation du
+// mouvement. Un quatrième test (Terminale/1ère, Kourouma, "Les Soleils
+// des indépendances") a confirmé que les deux catégories déjà nommées
+// (territoriale, composition de mouvement) tenaient bien, mais a révélé
+// une TROISIÈME catégorie non couverte : le détail éditorial/bibliographique
+// -- le modèle a affirmé "édition originale, 1970" alors que l'édition
+// originale réelle est de 1968 (Presses de l'Université de Montréal),
+// 1970 n'étant qu'une réédition française (Seuil). Conclusion confirmée :
+// corriger catégorie par catégorie au fil des incidents ne suffit pas --
+// le modèle invente un fait précis plausible dès qu'une catégorie n'est
+// pas explicitement nommée dans l'interdiction, quelle que soit cette
+// catégorie. Cette version étend donc l'interdiction aux détails éditoriaux
+// (date/lieu d'édition originale, maison d'édition, numéro d'édition), en
+// plus des trois catégories déjà couvertes.
+//
+// Déclarée ICI, au niveau module, et non plus dupliquée localement dans
+// chaque fonction de construction d'instructions (Culture littéraire,
+// Introduction lycée, Introduction collège en avaient chacune leur propre
+// copie quasi identique) : un 5e incident (25/09, Lecture méthodique 2nde,
+// "L'Albatros") a montré que la table Bibliographie générique du squelette
+// PARTAGÉ ci-dessous (construirePromptSecondaire, utilisé par TOUS les
+// types de séance, collège ET second cycle) n'était couverte par AUCUNE de
+// ces copies locales -- puisqu'aucune n'est jamais injectée dans ce
+// squelette commun. Le modèle a alors inventé des références
+// bibliographiques précises et plausibles (auteur réel, titre/éditeur/date
+// inventés) pour une séance dont la fonction dédiée n'avait pourtant pas ce
+// trou. Plutôt que d'ajouter un correctif séance par séance (qui laisserait
+// le même trou ouvert pour chaque futur type de séance non encore couvert),
+// la constante est injectée une seule fois ici, dans le squelette partagé,
+// pour couvrir toutes les séances de toutes les disciplines et des deux
+// cycles d'un coup -- cf. usage dans construirePromptSecondaire ci-dessous
+// et dans les fonctions qui la référencent désormais au lieu de la
+// dupliquer.
+const INTERDICTION_FAIT_PRECIS_NON_VERIFIE = ` INTERDICTION EXPLICITE : n'affirme JAMAIS un fait précis et invérifié sur un lieu, une époque, un mouvement/groupe, une personne, ou une édition -- ceci inclut, sans s'y limiter : une classification administrative/politique/territoriale précise (rattachement à une fédération, statut de territoire/colonie, division administrative précise) ; la composition exacte d'un mouvement, courant ou groupe (qui l'a fondé, qui en fait partie) ; l'attribution d'une action, d'une œuvre ou d'un rôle à une personne nommée ; une date ou un événement précis ; un détail éditorial/bibliographique précis (date ou lieu de l'édition originale, maison d'édition, numéro d'édition -- ne distingue pas une édition originale d'une réédition si tu n'es pas certain de laquelle est la première). Pour tout point de ce type, reste général (nomme le pays/lieu actuel sans préciser son statut historique ; désigne un mouvement littéraire sans nommer ses fondateurs ou membres si tu n'es pas certain ; mentionne l'œuvre sans préciser une date d'édition si tu n'es pas certain qu'il s'agit bien de l'édition originale) -- SAUF si cette information figure mot pour mot dans des faits vérifiés fournis par ailleurs.`;
+
 function construirePromptSecondaire(avecVerbesTaxonomiques, avecRappelSeancePrecedente, inclureDeveloppementGenerique = true) {
   const commentaireHabiletes = avecVerbesTaxonomiques
     ? '<!-- lignes avec verbes taxonomiques : Identifier, Reconnaître, Connaître, Analyser, Appliquer, Produire -->'
@@ -4715,6 +4760,7 @@ ADAPTATIONS PAR DISCIPLINE :
 RÈGLES ABSOLUES :
 - Réponds UNIQUEMENT en HTML pur, JAMAIS de backticks, JAMAIS de markdown
 - L'entête ne comporte QUE les 8 lignes indiquées ci-dessus (Discipline/Date/Classe/Compétence/Activité/Durée/Leçon/Séance) -- N'AJOUTE AUCUN champ supplémentaire avant, après ou entre elles, même s'il t'a semblé vu dans un autre modèle de fiche (ex. jamais "Stagiaire", "Professeur conseiller", "Inspecteur", "Établissement" ou tout autre champ hors de cette liste).
+- Toute référence citée dans la table Bibliographie (auteur d'un ouvrage critique, titre, maison d'édition, année) doit être réelle et exacte -- jamais un ouvrage, un éditeur ou une date plausibles mais inventés, même pour un auteur secondaire réel. Si tu n'es pas certain qu'une référence précise existe telle quelle, cite la référence de l'œuvre principale elle-même (déjà connue avec certitude) plutôt qu'une référence critique secondaire inventée, ou n'ajoute qu'un intitulé générique (ex. "Manuel scolaire de la classe", "Études critiques sur l'auteur") sans nom d'auteur/éditeur/date précis. Cette même exigence de non-invention vaut plus largement pour tout fait précis (biographique, historique, éditorial) mentionné n'importe où ailleurs dans la fiche (Situation d'apprentissage, Traces écrites...), au-delà des règles déjà données plus loin dans ce message pour un type de séance particulier.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE}
 - Situation d'apprentissage toujours ancrée dans le quotidien ivoirien (lycées, marchés, quartiers CI)
 - Traces écrites = contenu réel complet du cours (définitions, règles, exemples concrets)
 ${reglesVerbesTaxonomiques}${reglesTableauDeveloppement}- Tout le contenu de la fiche (corpus, dialogues, exemples, exercices, corrections) est rédigé EXCLUSIVEMENT en français -- n'insère jamais un mot ou une expression d'une autre langue (anglais compris) au milieu d'une phrase française.
@@ -5580,31 +5626,14 @@ function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvr
     ? ` Le périmètre exact de cette séance, tel que fixé par la progression DPFC officielle, est : "${intituleOfficiel}". Développe UNIQUEMENT les notions désignées par cet intitulé -- n'ajoute AUCUNE notion supplémentaire (ex. si l'intitulé ne mentionne que les genres en prose et leurs caractéristiques, ne développe ni le schéma narratif ni le schéma actantiel : ces notions relèvent d'une autre séance de la progression, même si elles te semblent thématiquement proches).`
     : '';
 
-  // Interdiction nommée, élargie le 23/09 après un second incident distinct :
-  // le premier fix (22/09, Ferdinand Oyono/TleA) ne couvrait que la
-  // classification administrative/territoriale précise (Cameroun rattaché à
-  // tort à l'AEF) et a effectivement tenu sur ce point précis lors des tests
-  // suivants (Oyono, puis Kane/Sénégal). Mais un troisième test (1ère A,
-  // Négritude) a révélé une AUTRE catégorie de fait précis invérifié que
-  // cette interdiction ne couvrait pas : la composition d'un mouvement
-  // littéraire -- le modèle a affirmé que Frantz Fanon était un des trois
-  // fondateurs de la Négritude, alors que le trio fondateur réel (revue
-  // "L'Étudiant noir", 1935) est Césaire/Senghor/Damas ; Fanon est un
-  // penseur postcolonial plus tardif, jamais associé à la fondation du
-  // mouvement. Un quatrième test (Terminale/1ère, Kourouma, "Les Soleils
-  // des indépendances") a confirmé que les deux catégories déjà nommées
-  // (territoriale, composition de mouvement) tenaient bien, mais a révélé
-  // une TROISIÈME catégorie non couverte : le détail éditorial/bibliographique
-  // -- le modèle a affirmé "édition originale, 1970" alors que l'édition
-  // originale réelle est de 1968 (Presses de l'Université de Montréal),
-  // 1970 n'étant qu'une réédition française (Seuil). Conclusion confirmée :
-  // corriger catégorie par catégorie au fil des incidents ne suffit pas --
-  // le modèle invente un fait précis plausible dès qu'une catégorie n'est
-  // pas explicitement nommée dans l'interdiction, quelle que soit cette
-  // catégorie. Cette version étend donc l'interdiction aux détails éditoriaux
-  // (date/lieu d'édition originale, maison d'édition, numéro d'édition), en
-  // plus des trois catégories déjà couvertes.
-  const interdictionFaitPrecisNonVerifie = ` INTERDICTION EXPLICITE : n'affirme JAMAIS un fait précis et invérifié sur un lieu, une époque, un mouvement/groupe, une personne, ou une édition -- ceci inclut, sans s'y limiter : une classification administrative/politique/territoriale précise (rattachement à une fédération, statut de territoire/colonie, division administrative précise) ; la composition exacte d'un mouvement, courant ou groupe (qui l'a fondé, qui en fait partie) ; l'attribution d'une action, d'une œuvre ou d'un rôle à une personne nommée ; une date ou un événement précis ; un détail éditorial/bibliographique précis (date ou lieu de l'édition originale, maison d'édition, numéro d'édition -- ne distingue pas une édition originale d'une réédition si tu n'es pas certain de laquelle est la première). Pour tout point de ce type, reste général (nomme le pays/lieu actuel sans préciser son statut historique ; désigne un mouvement littéraire sans nommer ses fondateurs ou membres si tu n'es pas certain ; mentionne l'œuvre sans préciser une date d'édition si tu n'es pas certain qu'il s'agit bien de l'édition originale) -- SAUF si cette information figure mot pour mot dans des faits vérifiés fournis par ailleurs.`;
+  // Interdiction anti-fabrication (historique complet et raisons de chaque
+  // élargissement : cf. commentaire sur INTERDICTION_FAIT_PRECIS_NON_VERIFIE,
+  // déclarée au niveau module juste avant construirePromptSecondaire) --
+  // référencée ici au lieu d'être dupliquée localement (25/09 : ancienne
+  // copie locale retirée, cf. même refactor pour construireInstructionsIntroductionOeuvreLycee
+  // et construireInstructionsIntroductionOeuvre, qui avaient chacune leur
+  // propre copie quasi identique).
+  const interdictionFaitPrecisNonVerifie = INTERDICTION_FAIT_PRECIS_NON_VERIFIE;
 
   const consigneContenu = contenu
     ? `L'enseignant a fourni le contenu ci-dessous pour cette séance de Culture littéraire (exposé magistral sur le contexte historique/littéraire/biographique de l'œuvre) -- il peut s'agir soit d'un contenu déjà entièrement rédigé, soit d'un simple plan/d'une liste de points à développer, soit d'un mélange des deux :
@@ -5804,7 +5833,7 @@ ${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}`;
 
   const consigneBiographie = biographie
     ? `1- Biographie : t'appuyer EXACTEMENT sur ces informations (fournies par l'enseignant ou vérifiées par recherche documentaire), sans y ajouter ni en retirer aucun détail : "${biographie}"`
-    : `1- Biographie : bref, JAMAIS un paragraphe développé -- 2 à 3 phrases maximum, uniquement l'essentiel : nationalité/identité, date de naissance (et de décès si l'auteur n'est plus vivant), profession, activité principale (distinctions/prix notables). À partir de tes connaissances réelles sur cet auteur -- si tu n'es pas certain d'un fait précis (date exacte, détail biographique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude. INTERDICTION EXPLICITE (22-23/09, incidents Ferdinand Oyono/AEF, Négritude/Fanon, puis Kourouma/édition -- élargie au-delà de la seule classification territoriale) : n'affirme JAMAIS de fait précis et invérifié sur le lieu de naissance, une époque, un mouvement/groupe littéraire, une personne, ou une édition -- ceci inclut une classification administrative/territoriale précise (rattachement à une fédération ou un territoire colonial, statut administratif exact) ET la composition exacte d'un mouvement ou groupe (qui l'a fondé, qui en fait partie) ET l'attribution d'une action ou d'une œuvre à une personne nommée ET un détail éditorial précis (date/lieu de l'édition originale, maison d'édition -- ne distingue pas une édition originale d'une réédition si tu n'es pas certain de laquelle est la première) -- nomme uniquement le pays actuel (ex. "au Cameroun") et reste général sur tout point de ce type dont tu n'es pas certain, sauf si cette information figure mot pour mot dans des faits vérifiés fournis par ailleurs.`;
+    : `1- Biographie : bref, JAMAIS un paragraphe développé -- 2 à 3 phrases maximum, uniquement l'essentiel : nationalité/identité, date de naissance (et de décès si l'auteur n'est plus vivant), profession, activité principale (distinctions/prix notables). À partir de tes connaissances réelles sur cet auteur.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE}`;
   const consigneTheme = theme
     ? `Thème : t'appuyer EXACTEMENT sur ce thème fourni par l'enseignant, sans y ajouter ni en retirer aucun détail : "${theme}"`
     : `Thème : l'enseignant n'a fourni aucun thème précis -- si tu n'es pas certain du thème réel de cette œuvre précise, reste général (genre, tonalité) plutôt que d'inventer un thème ou une intrigue précise que tu ne connais pas avec certitude.`;
@@ -6046,7 +6075,7 @@ function construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, e
   // inchangé (rester vague, jamais inventer un fait précis).
   const consigneBiographie = biographie
     ? `1- Biographie : t'appuyer EXACTEMENT sur ces informations (fournies par l'enseignant ou vérifiées par recherche documentaire), sans y ajouter ni en retirer aucun détail : "${biographie}"`
-    : `1- Biographie : bref, JAMAIS un paragraphe développé -- 2 à 3 phrases maximum, uniquement l'essentiel : nationalité/identité, date de naissance (et de décès si l'auteur n'est plus vivant), profession, activité principale (distinctions/prix notables). À partir de tes connaissances réelles sur cet auteur -- si tu n'es pas certain d'un fait précis (date exacte, détail biographique), reste général plutôt que d'inventer un détail que tu ne connais pas avec certitude. INTERDICTION EXPLICITE (22-23/09, incidents Ferdinand Oyono/AEF, Négritude/Fanon, puis Kourouma/édition -- élargie au-delà de la seule classification territoriale) : n'affirme JAMAIS de fait précis et invérifié sur le lieu de naissance, une époque, un mouvement/groupe littéraire, une personne, ou une édition -- ceci inclut une classification administrative/territoriale précise (rattachement à une fédération ou un territoire colonial, statut administratif exact) ET la composition exacte d'un mouvement ou groupe (qui l'a fondé, qui en fait partie) ET l'attribution d'une action ou d'une œuvre à une personne nommée ET un détail éditorial précis (date/lieu de l'édition originale, maison d'édition -- ne distingue pas une édition originale d'une réédition si tu n'es pas certain de laquelle est la première) -- nomme uniquement le pays actuel (ex. "au Cameroun") et reste général sur tout point de ce type dont tu n'es pas certain, sauf si cette information figure mot pour mot dans des faits vérifiés fournis par ailleurs.`;
+    : `1- Biographie : bref, JAMAIS un paragraphe développé -- 2 à 3 phrases maximum, uniquement l'essentiel : nationalité/identité, date de naissance (et de décès si l'auteur n'est plus vivant), profession, activité principale (distinctions/prix notables). À partir de tes connaissances réelles sur cet auteur.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE}`;
 
   // Structure I-II-III calibrée MOT POUR MOT sur la fiche de référence
   // "Maeva" (Fatou Fanny-Cissé, 3e, DPFC), fournie le 01/09 -- remplace
