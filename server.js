@@ -1770,6 +1770,29 @@ function estExpressionOrale({ discipline, lecon, theme, activite }) {
   return cible.includes('expression orale');
 }
 
+// Perfectionnement de la langue / Savoir-faire (25/09) : les libellés second
+// cycle qui remplacent Grammaire/Orthographe/Expression orale (cf.
+// optionsActiviteSecondCycleHTML côté frontend, 13/09) -- jamais ajoutés à
+// ces détections au moment de leur introduction, ce qui rendait le gate
+// Leçon/Séance officielle DPFC (cf. plus bas dans /api/generer-fiche)
+// injoignable pour ces deux activités : un test réel (25/09, "Les figures de
+// style ou de rhétorique", 2nde) a montré le modèle inventer une leçon
+// entièrement différente ("La phrase simple et la phrase complexe"), sans
+// aucun avertissement -- le catalogue était pourtant correctement seedé et
+// l'ID correctement résolu, seule l'injonction de titre exact dans le prompt
+// n'était jamais construite. Même famille que Grammaire/Orthographe/
+// Expression orale : aucun squelette dédié, seulement la résolution Leçon/
+// Séance officielle.
+function estPerfectionnementLangue({ discipline, lecon, theme, activite }) {
+  const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
+  return cible.includes('perfectionnement de la langue');
+}
+
+function estSavoirFaire({ discipline, lecon, theme, activite }) {
+  const cible = normaliserTexte(`${discipline || ''} ${lecon || ''} ${theme || ''} ${activite || ''}`);
+  return cible.includes('savoir-faire') || cible.includes('savoir faire');
+}
+
 // Le résumé est une activité d'Expression écrite (catalogue DPFC, discipline
 // Français), mais sa démarche réelle (validée le 08/08 contre 2 fiches
 // réelles vérifiées, 3e et 4e) est INCOMPATIBLE avec le squelette générique
@@ -6948,6 +6971,11 @@ function limiterGenerationParIp(req, res, next) {
       const estGram = estGrammaire({ discipline, lecon, theme, activite });
       const estOrtho = estOrthographe({ discipline, lecon, theme, activite });
       const estEO = estExpressionOrale({ discipline, lecon, theme, activite });
+      // Second cycle (25/09, correctif) : mêmes principe et périmètre que
+      // estGram/estOrtho/estEO ci-dessus -- cf. commentaire sur
+      // estPerfectionnementLangue/estSavoirFaire.
+      const estPerfLangue = estPerfectionnementLangue({ discipline, lecon, theme, activite });
+      const estSavFaire = estSavoirFaire({ discipline, lecon, theme, activite });
 
       // Résolution par ID (menus dépendants de l'UI, cf. plus bas) faite ICI,
       // AVANT le matching du référentiel de type de texte ci-dessous : sinon
@@ -7076,12 +7104,23 @@ function limiterGenerationParIp(req, res, next) {
       }
 
       // Champ Leçon de l'entête : pour Lecture méthodique, Expression écrite,
-      // Exploitation de texte, Grammaire, Orthographe et Expression orale,
-      // remplace le titre générique que le modèle avait tendance à inventer
-      // par le vrai intitulé du programme DPFC (ou le message d'indisponibilité,
-      // jamais un titre inventé, si le catalogue ne couvre pas encore cette
+      // Exploitation de texte, Grammaire, Orthographe, Expression orale,
+      // Perfectionnement de la langue et Savoir-faire, remplace le titre
+      // générique que le modèle avait tendance à inventer par le vrai
+      // intitulé du programme DPFC (ou le message d'indisponibilité, jamais
+      // un titre inventé, si le catalogue ne couvre pas encore cette
       // discipline/classe/sous-thème).
-      if (estLM || estEE || estExploitation || estGram || estOrtho || estEO) {
+      // Filet général (25/09, cf. incident Perfectionnement de la langue/
+      // Savoir-faire) : en plus de la liste de libellés ci-dessus -- qui doit
+      // être tenue à jour à chaque nouvelle activité catalogue-pilotée, ce qui
+      // avait été oublié pour ces deux-là -- le simple fait que l'enseignant
+      // ait sélectionné une leçon/séance PAR ID (menus dépendants de l'UI)
+      // suffit à lui seul à entrer dans ce bloc, quel que soit le libellé
+      // d'activité : un choix explicite par ID est un signal fiable qu'une
+      // vraie entrée de catalogue existe et doit être appliquée, jamais
+      // laissée au modèle à deviner. Ceci couvre aussi toute FUTURE activité
+      // catalogue-pilotée qu'on oublierait d'ajouter à la liste ci-dessus.
+      if (estLM || estEE || estExploitation || estGram || estOrtho || estEO || estPerfLangue || estSavFaire || (leconOfficielleId && seanceOfficielleId)) {
         // Le document source DPFC ("PROGRESSIONS DE FRANÇAIS") est une progression
         // UNIQUE couvrant toutes les activités de Français (lecture, expression
         // écrite, grammaire...) — la recherche se fait donc toujours sous la
@@ -7098,6 +7137,8 @@ function limiterGenerationParIp(req, res, next) {
           : estEE ? 'Expression écrite'
           : estGram ? 'Grammaire'
           : estOrtho ? 'Orthographe'
+          : estPerfLangue ? 'Perfectionnement de la langue'
+          : estSavFaire ? 'Savoir-faire'
           : 'Expression orale';
 
         // Sélection via l'UI de menus dépendants (identification par ID, jamais
