@@ -1647,6 +1647,32 @@ function structureConclusionOeuvrePresente(contenuHTML) {
   return !squeletteGeneriqueOeuvrePresent($);
 }
 
+// Filet déterministe (25/09) -- personnage nommé à risque, incident réel
+// (Conclusion théâtrale, "Trois prétendants... un mari") : "Abessolo (le
+// père de Juliette)" présenté à tort comme le père (en réalité le grand-
+// père dans la pièce), 3 prétendants inventés ("Edouard/Kouma/Michaël" au
+// lieu des vrais "Ndi/Mbia/Tchetgen"). Contrairement au squelette générique
+// (repères textuels fixes, détectables à coup sûr), il n'existe AUCUN moyen
+// déterministe de vérifier qu'un nom de personnage correspond réellement à
+// l'œuvre -- ceci n'est PAS un filet exhaustif, seulement une détection du
+// SCHÉMA EXACT de l'incident constaté (nom propre suivi d'un rôle
+// familial/social entre parenthèses ou après une virgule, ex. "Nom (le
+// père...)", "Nom, la sœur..."), pour rattraper au moins cette forme de
+// fabrication et avertir l'enseignant plutôt que la laisser passer
+// silencieusement. Ne se déclenche QUE si l'enseignant n'a fourni AUCUNE
+// liste de personnages (sinon le modèle reprend légitimement les noms
+// fournis) : dans ce cas, la consigne demande explicitement de décrire les
+// personnages par leur fonction, jamais par un nom propre non certain.
+const ROLES_PERSONNAGE_RISQUE = 'p[eè]re|m[eè]re|fr[eè]re|s[oœ]ur|fils|mari|femme|[eé]poux|[eé]pouse|grand-p[eè]re|grand-m[eè]re|oncle|tante|cousin|cousine|pr[eé]tendant|pr[eé]tendante|roi|reine|prince|princesse|h[eé]ros|h[eé]ro[iï]ne|protagoniste|antagoniste|chef|guerrier|sorcier|griot|esclave|ma[iî]tre|servante|nourrice|tuteur|tutrice';
+function personnageNommeRisquePresent(contenuHTML) {
+  if (!contenuHTML) return null;
+  const $ = cheerio.load(contenuHTML);
+  const texte = $.root().text();
+  const re = new RegExp(`\\b([A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'’-]{2,})\\s*[,(]\\s*(?:le |la |l['’]|les )?(${ROLES_PERSONNAGE_RISQUE})\\b`, 'i');
+  const m = texte.match(re);
+  return m ? m[0].trim() : null;
+}
+
 // Filet déterministe SECOND CYCLE (25/09) -- équivalent, pour Introduction/
 // Conclusion de l'œuvre intégrale au second cycle, de structureIntroductionOeuvrePresente/
 // structureConclusionOeuvrePresente ci-dessus (collège). Généralisé en UNE
@@ -6165,7 +6191,7 @@ STRUCTURE OBLIGATOIRE SPÉCIFIQUE — SÉANCE 1, INTRODUCTION À L'ÉTUDE DE L'�
 
 I- PRÉSENTATION DE L'AUTEUR
 ${consigneBiographie}
-2- Bibliographie : liste des œuvres majeures de l'auteur avec leur année de publication, au format "Titre en année, Titre en année..." -- à partir de tes connaissances réelles, jamais inventée si tu n'es pas certain.
+2- Bibliographie : liste des œuvres majeures de l'auteur avec leur année de publication, au format "Titre en année, Titre en année..." -- à partir de tes connaissances réelles.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE} Si tu n'es certain avec exactitude ni du titre ni de l'année d'une œuvre secondaire, ne la mentionne PAS plutôt que de citer un titre approximatif ou une année incertaine -- limite-toi alors à l'œuvre principale déjà connue avec certitude (« ${titre} »).
 
 II- PRÉSENTATION DE L'ŒUVRE
 Présente le genre du récit (roman, recueil...) et le nombre de chapitres si tu le sais, en 1-2 phrases (pas le thème -- traité séparément ci-dessous).
@@ -6237,7 +6263,7 @@ II- JUGEMENT CRITIQUE
 Un paragraphe (3-5 phrases) : la réalité/le sujet de société que l'œuvre aborde, le registre de langue et le style d'écriture utilisés par l'auteur, la visée de l'œuvre (ce que l'auteur cherche à faire comprendre ou ressentir au lecteur).
 
 III- SCHÉMA ACTANTIEL
-Un paragraphe (3-5 phrases) résumant la dynamique de l'œuvre : qui veut/cherche quoi, qui s'y oppose ou fait obstacle, comment cela se résout ou évolue -- en te concentrant sur les personnages et enjeux réels de l'œuvre.
+Un paragraphe (3-5 phrases) résumant la dynamique de l'œuvre : qui veut/cherche quoi, qui s'y oppose ou fait obstacle, comment cela se résout ou évolue -- en te concentrant sur les enjeux réels de l'œuvre. NE CITE AUCUN NOM PROPRE de personnage (ni identité, ni lien de parenté, ni rôle précis) sauf si tu es certain à 100% qu'il correspond exactement à cette œuvre précise -- un nom de personnage mal attribué (mauvais rôle, mauvais lien familial, ou personnage n'existant simplement pas dans cette œuvre) est une fabrication au même titre qu'une date inventée. En cas de doute, décris les personnages par leur fonction dans l'intrigue (ex. "le protagoniste", "son adversaire", "la figure paternelle") sans leur donner de nom.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE}
 
 AXE D'ÉTUDE À REPRENDRE (fourni par l'enseignant en Séance 1, OBLIGATOIRE, jamais un autre axe de ton choix, jamais ressaisi par l'enseignant) : "${axe}" -- structure les 3 sections ci-dessus autour de CET axe précis (reproduit ici EXACTEMENT tel que fourni, sans reformulation), sans le recopier littéralement dans chaque section.
 
@@ -7391,6 +7417,12 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         } else if (seanceNumOIFinal === 10 && !structureConclusionOeuvrePresente(contenuHTML)) {
           res.write(`data: ${JSON.stringify({ avertissement: "La structure attendue (I- Les thèmes abordés / II- Jugement critique / III- Schéma actantiel) n'a pas été générée correctement pour cette fiche -- le modèle a produit une autre structure (probablement le squelette générique Habiletés/Contenus). Ne pas utiliser cette fiche telle quelle : régénérez-la." })}\n\n`);
         }
+        if ((seanceNumOIFinal === 1 || seanceNumOIFinal === 10) && !(personnagesOeuvre || '').toString().trim()) {
+          const extraitRisque = personnageNommeRisquePresent(contenuHTML);
+          if (extraitRisque) {
+            res.write(`data: ${JSON.stringify({ avertissement: `La fiche nomme un personnage ("${extraitRisque}") alors qu'aucune liste de personnages n'a été fournie par l'enseignant -- ce nom (et le rôle qui lui est attribué) n'a pas pu être vérifié et pourrait être inventé ou mal attribué. Vérifiez son exactitude dans l'œuvre réelle avant d'utiliser cette fiche.` })}\n\n`);
+          }
+        }
       } else if (estOeuvreIntegrale && profilInfoOI) {
         // Second cycle -- pas d'injection Compétence (cf. commentaire plus
         // haut, données non sourcées pour l'instant).
@@ -7448,6 +7480,18 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           const etapesAttendues = typeSeanceOI === 'introduction'
             ? (estPoetique ? ETAPES_INTRODUCTION_OEUVRE_LYCEE_POETIQUE : ETAPES_INTRODUCTION_OEUVRE_LYCEE_NARRATIVE)
             : (estPoetique ? ETAPES_CONCLUSION_OEUVRE_LYCEE_POETIQUE : ETAPES_CONCLUSION_OEUVRE_LYCEE_NARRATIVE);
+          if (!estPoetique && !(personnagesOeuvre || '').toString().trim()) {
+            // Filet déterministe (25/09) -- même incident que ci-dessus,
+            // constaté sur cette branche narrative/théâtrale précisément
+            // (cf. commentaire sur personnageNommeRisquePresent) ; ne
+            // s'applique qu'au genre narrative/théâtrale, seul concerné par
+            // un "Structure interne"/"Les personnages" en texte libre --
+            // le poétique n'a pas de notion de personnages.
+            const extraitRisque = personnageNommeRisquePresent(contenuHTML);
+            if (extraitRisque) {
+              res.write(`data: ${JSON.stringify({ avertissement: `La fiche nomme un personnage ("${extraitRisque}") alors qu'aucune liste de personnages n'a été fournie par l'enseignant -- ce nom (et le rôle qui lui est attribué) n'a pas pu être vérifié et pourrait être inventé ou mal attribué. Vérifiez son exactitude dans l'œuvre réelle avant d'utiliser cette fiche.` })}\n\n`);
+            }
+          }
           if (!structureRemplacementSeanceOeuvreLyceePresente(contenuHTML, etapesAttendues)) {
             res.write(`data: ${JSON.stringify({ avertissement: `La structure attendue pour cette séance de ${typeSeanceOI === 'introduction' ? 'Introduction' : 'Conclusion'} (parties I à ${estPoetique ? 'IV' : (typeSeanceOI === 'introduction' ? 'III' : 'II')} en texte libre, sans tableau Habiletés/Contenus ni tableau Développement/Évaluation) n'a pas été respectée -- le modèle a probablement gardé le squelette générique de fiche (Habiletés/Contenus et/ou tableau 5 colonnes Présentation/Développement/Évaluation) au lieu de le remplacer, ou ajouté une évaluation non prévue pour cette séance. Ne pas utiliser cette fiche telle quelle : régénérez-la.` })}\n\n`);
           }
