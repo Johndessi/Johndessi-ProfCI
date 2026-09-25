@@ -5928,7 +5928,7 @@ NE LES RÉDIGE PAS toi-même : reproduis EXACTEMENT et INTÉGRALEMENT, sans y aj
 "${corpus}"
 
 III. Bio-bibliographie des auteurs
-Pour CHAQUE auteur listé en partie II (un paragraphe court par auteur, 2-4 phrases) : identité/nationalité, dates de naissance (et de décès si applicable), mouvement ou courant littéraire, 1-2 œuvres majeures avec leur année. À partir de tes connaissances réelles sur CES auteurs précis.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE}
+Pour CHAQUE auteur listé en partie II (un paragraphe court par auteur, 2-4 phrases) : identité/nationalité, dates de naissance (et de décès si applicable), 1-2 œuvres majeures avec leur année, et UNIQUEMENT SI tu la connais avec certitude et sans ambiguïté, son rattachement à un mouvement ou courant littéraire -- l'appartenance à un mouvement est parfois contestée ou évolue selon les périodes de la carrière d'un auteur ou selon les critiques : dans le doute, omets purement et simplement ce point plutôt que d'en affirmer un que tu n'es pas sûr, sans le remplacer par un autre champ inventé. À partir de tes connaissances réelles sur CES auteurs précis.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE}
 
 IV. Axe d'étude
 "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Conclusion, à la fin de la séquence).
