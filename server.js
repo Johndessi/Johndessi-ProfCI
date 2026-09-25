@@ -1647,6 +1647,55 @@ function structureConclusionOeuvrePresente(contenuHTML) {
   return !squeletteGeneriqueOeuvrePresent($);
 }
 
+// Filet déterministe SECOND CYCLE (25/09) -- équivalent, pour Introduction/
+// Conclusion de l'œuvre intégrale au second cycle, de structureIntroductionOeuvrePresente/
+// structureConclusionOeuvrePresente ci-dessus (collège). Généralisé en UNE
+// fonction paramétrée plutôt que dupliqué 4 fois (Introduction/Conclusion ×
+// poétique/narrative-théâtrale) : les 4 fonctions concernées
+// (construireInstructionsIntroductionOeuvreLycee, construireInstructionsConclusionOeuvreLycee,
+// leurs deux branches chacune) portent TOUTES la même consigne "REMPLACENT
+// INTÉGRALEMENT... rédige UNIQUEMENT la structure I/II[/III/IV] à la place"
+// que le collège -- et donc TOUTES le même risque de biais de continuité de
+// génération (déjà documenté pour le collège, cf. commentaire du 02/09 plus
+// bas dans /api/generer-fiche). Un test réel du 25/09 (Conclusion GT
+// poétique, 2nde) l'a confirmé pour au moins un des 4 cas : le modèle avait
+// gardé le tableau Habiletés/Contenus ET le squelette 5 colonnes
+// PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION que la consigne demande justement de
+// retirer, en y ajoutant même une ligne ÉVALUATION jamais demandée. Les 3
+// autres cas n'ont pas encore été testés en conditions réelles à cette date
+// -- rien n'indique qu'ils y échapperaient, la consigne et le biais sous-
+// jacent étant identiques ; ce filet couvre donc les 4 d'un coup plutôt que
+// d'attendre un incident séparé pour chacun.
+function structureRemplacementSeanceOeuvreLyceePresente(contenuHTML, regexEtapesAttendues) {
+  if (!contenuHTML) return false;
+  const $ = cheerio.load(contenuHTML);
+  const texteHorsTableau = texteHorsTableauMajuscule($);
+  if (!regexEtapesAttendues.every((re) => re.test(texteHorsTableau))) return false;
+  return !squeletteGeneriqueOeuvrePresent($);
+}
+
+const ETAPES_INTRODUCTION_OEUVRE_LYCEE_POETIQUE = [
+  /\bI[\s.\-–—]{0,3}D[EÉ]FINITION\s+DE\s+LA\s+NOTION\s+DE\s+GROUPEMENT\b/,
+  /\bII[\s.\-–—]{0,3}IDENTIFICATION\s+DES\s+PO[EÈ]MES/,
+  /\bIII[\s.\-–—]{0,3}BIO-?BIBLIOGRAPHIE\s+DES\s+AUTEURS\b/,
+  /\bIV[\s.\-–—]{0,3}AXE\s+D['’][EÉ]TUDE\b/
+];
+const ETAPES_INTRODUCTION_OEUVRE_LYCEE_NARRATIVE = [
+  /\bI[\s.\-–—]{0,3}PR[EÉ]SENTATION\s+DE\s+L['’]AUTEUR\b/,
+  /\bII[\s.\-–—]{0,3}PR[EÉ]SENTATION\s+DE\s+L['’]ŒUVRE\b/,
+  /\bIII[\s.\-–—]{0,3}AXE\s+D['’][EÉ]TUDE\b/
+];
+const ETAPES_CONCLUSION_OEUVRE_LYCEE_POETIQUE = [
+  /\bI[\s.\-–—]{0,3}RAPPEL\s+DE\s+L['’]AXE\s+D['’][EÉ]TUDE\b/,
+  /\bII[\s.\-–—]{0,3}TH[EÉ]MATIQUE\s+CENTRALE\b/,
+  /\bIII[\s.\-–—]{0,3}JUGEMENT\s+CRITIQUE\s+[AÀ]\s+PARTIR\s+DE\s+L['’][EÉ]CRITURE\b/,
+  /\bIV[\s.\-–—]{0,3}JUGEMENT\s+CRITIQUE\s+[AÀ]\s+PARTIR\s+DU\s+TH[EÈ]ME\b/
+];
+const ETAPES_CONCLUSION_OEUVRE_LYCEE_NARRATIVE = [
+  /\bI[\s.\-–—]{0,3}[EÉ]TUDE\s+DE\s+LA\s+STRUCTURE\s+DE\s+L['’]ŒUVRE\b/,
+  /\bII[\s.\-–—]{0,3}R[EÉ]SUM[EÉ]\s+ET\s+CONCLUSION\s+SYNTH[EÉ]TIQUE\b/
+];
+
 // Détection stricte : uniquement "lecture méthodique" (ni "lecture" seule, ni
 // "résumé de texte", ni "commentaire de texte", qui gardent la structure générique).
 function estLectureMethodique({ discipline, lecon, theme, activite }) {
@@ -5900,7 +5949,7 @@ function construireInstructionsConclusionOeuvreLycee({ genreOeuvre, titreOeuvre,
     const corpus = (corpusTextesGT || '').toString().trim();
     return `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- CONCLUSION À L'ÉTUDE DU GROUPEMENT DE TEXTES (les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes -- rédige UNIQUEMENT la structure I/II/III/IV ci-dessous à la place.) :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- CONCLUSION À L'ÉTUDE DU GROUPEMENT DE TEXTES : cette fiche N'A PAS de tableau Habiletés/Contenus générique ET N'A PAS le tableau DÉROULEMENT 5 colonnes (Moments didactiques/Stratégies pédagogiques/Activités de l'enseignant/Activités des élèves/Traces écrites) avec ses lignes PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION habituelles -- AUCUN DES DEUX ne doit apparaître nulle part dans ta réponse, même vide, même partiellement, même sous une forme abrégée. Rédige UNIQUEMENT, en texte structuré libre (chaque partie = un titre suivi d'un ou plusieurs paragraphes, JAMAIS à l'intérieur d'un tableau), les 4 parties I à IV ci-dessous, RIEN D'AUTRE : pas de ligne ni de section ÉVALUATION, pas d'exercice, pas de question, pas de corrigé, pas de travail individuel à faire par les élèves -- cette séance de Conclusion synthétise ce qui a déjà été évalué dans la séquence, elle n'évalue jamais rien elle-même, quoi qu'il te semble utile d'ajouter par ailleurs :
 
 CORPUS RÉELLEMENT ÉTUDIÉ DANS CETTE SÉQUENCE (seule source de textes autorisée pour les 4 parties ci-dessous -- ne mentionne AUCUN texte ou auteur qui n'y figure pas) :
 "${corpus}"
@@ -5917,14 +5966,14 @@ Un paragraphe (3-4 phrases) sur les choix formels/stylistiques observés à trav
 IV. Jugement critique à partir du thème
 Un paragraphe (3-4 phrases) : ce que le thème commun aux textes du corpus révèle ou permet de juger, en te limitant aux auteurs/textes listés ci-dessus.
 
-RÈGLE ABSOLUE : les 4 parties ne portent QUE sur les textes et auteurs listés dans le corpus ci-dessus -- n'introduis jamais un texte, un auteur ou un fait qui n'y figure pas, même s'il te semble thématiquement proche.`;
+RÈGLE ABSOLUE : les 4 parties ne portent QUE sur les textes et auteurs listés dans le corpus ci-dessus -- n'introduis jamais un texte, un auteur ou un fait qui n'y figure pas, même s'il te semble thématiquement proche. RAPPEL FINAL : ta réponse ne contient QUE les parties I à IV en texte libre -- jamais de tableau Habiletés/Contenus, jamais de tableau DÉROULEMENT 5 colonnes, jamais de section ÉVALUATION.`;
   }
 
   // narrative / theatrale -- squelette calibré sur la vraie fiche Soundjata
   // (Séance 8 : structure de l'œuvre + résumé et conclusion synthétique).
   return `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- CONCLUSION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (« ${titre} » de ${auteur}) (les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes -- rédige UNIQUEMENT la structure I/II ci-dessous à la place.) :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- CONCLUSION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (« ${titre} » de ${auteur}) : cette fiche N'A PAS de tableau Habiletés/Contenus générique ET N'A PAS le tableau DÉROULEMENT 5 colonnes (Moments didactiques/Stratégies pédagogiques/Activités de l'enseignant/Activités des élèves/Traces écrites) avec ses lignes PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION habituelles -- AUCUN DES DEUX ne doit apparaître nulle part dans ta réponse, même vide, même partiellement, même sous une forme abrégée. Rédige UNIQUEMENT, en texte structuré libre (chaque partie = un titre suivi d'un ou plusieurs paragraphes, JAMAIS à l'intérieur d'un tableau), les 2 parties I/II ci-dessous, RIEN D'AUTRE : pas de ligne ni de section ÉVALUATION, pas d'exercice, pas de question, pas de corrigé, pas de travail individuel à faire par les élèves -- cette séance de Conclusion synthétise ce qui a déjà été évalué dans la séquence, elle n'évalue jamais rien elle-même, quoi qu'il te semble utile d'ajouter par ailleurs :
 
 I. Étude de la structure de l'œuvre
 1- Structure externe : nombre de parties/chapitres/actes si tu le sais avec certitude, sinon reste général (ex. "l'œuvre est organisée en plusieurs chapitres/actes").
@@ -5934,7 +5983,7 @@ I. Étude de la structure de l'œuvre
 II. Résumé et conclusion synthétique
 Un résumé bref de l'œuvre (3-5 phrases, faits réels et vérifiés uniquement) suivi d'une conclusion synthétique qui referme la séquence en s'appuyant sur les séances déjà étudiées et sur l'axe d'étude ci-dessous.
 
-AXE D'ÉTUDE À REPRENDRE (fourni par l'enseignant en Introduction, OBLIGATOIRE, jamais un autre axe de ton choix, jamais ressaisi par l'enseignant) : "${axe}" -- structure les 2 sections ci-dessus autour de CET axe précis (reproduit ici EXACTEMENT tel que fourni, sans reformulation), sans le recopier littéralement dans chaque section.`;
+AXE D'ÉTUDE À REPRENDRE (fourni par l'enseignant en Introduction, OBLIGATOIRE, jamais un autre axe de ton choix, jamais ressaisi par l'enseignant) : "${axe}" -- structure les 2 sections ci-dessus autour de CET axe précis (reproduit ici EXACTEMENT tel que fourni, sans reformulation), sans le recopier littéralement dans chaque section. RAPPEL FINAL : ta réponse ne contient QUE les parties I et II en texte libre -- jamais de tableau Habiletés/Contenus, jamais de tableau DÉROULEMENT 5 colonnes, jamais de section ÉVALUATION.`;
 }
 // ============= FIN ÉTUDE DE L'ŒUVRE INTÉGRALE -- SECOND CYCLE =============
 
@@ -7378,6 +7427,25 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           // inventé.
           if (/r[ée]ponses?\s+attendues?|corrig[ée]|correction\s+collective/i.test(contenuHTML)) {
             res.write(`data: ${JSON.stringify({ avertissement: "La fiche générée semble contenir un corrigé ou des réponses-modèles pour l'Évaluation, alors que ce n'est jamais autorisé pour une Lecture méthodique en mode plan fourni (le modèle a pu compléter une citation tronquée du plan par du texte inventé). NE PAS UTILISER cette fiche telle quelle : vérifiez le contenu de l'Évaluation et de toute citation, ou régénérez la fiche." })}\n\n`);
+          }
+        }
+        if (typeSeanceOI === 'introduction' || typeSeanceOI === 'conclusion') {
+          // Filet déterministe (25/09) -- cf. commentaire sur
+          // structureRemplacementSeanceOeuvreLyceePresente : même biais de
+          // continuité de génération que le collège (structureIntroductionOeuvrePresente/
+          // structureConclusionOeuvrePresente ci-dessus), confirmé en test réel
+          // pour la Conclusion GT poétique (2nde) -- le modèle avait gardé le
+          // tableau Habiletés/Contenus ET le squelette 5 colonnes
+          // PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION que la consigne demande de
+          // remplacer intégralement, en y ajoutant même une ÉVALUATION jamais
+          // demandée. Couvre les 4 cas (Introduction/Conclusion ×
+          // poétique/narrative-théâtrale) d'un coup.
+          const estPoetique = genreOeuvreOI === 'poetique';
+          const etapesAttendues = typeSeanceOI === 'introduction'
+            ? (estPoetique ? ETAPES_INTRODUCTION_OEUVRE_LYCEE_POETIQUE : ETAPES_INTRODUCTION_OEUVRE_LYCEE_NARRATIVE)
+            : (estPoetique ? ETAPES_CONCLUSION_OEUVRE_LYCEE_POETIQUE : ETAPES_CONCLUSION_OEUVRE_LYCEE_NARRATIVE);
+          if (!structureRemplacementSeanceOeuvreLyceePresente(contenuHTML, etapesAttendues)) {
+            res.write(`data: ${JSON.stringify({ avertissement: `La structure attendue pour cette séance de ${typeSeanceOI === 'introduction' ? 'Introduction' : 'Conclusion'} (parties I à ${estPoetique ? 'IV' : (typeSeanceOI === 'introduction' ? 'III' : 'II')} en texte libre, sans tableau Habiletés/Contenus ni tableau Développement/Évaluation) n'a pas été respectée -- le modèle a probablement gardé le squelette générique de fiche (Habiletés/Contenus et/ou tableau 5 colonnes Présentation/Développement/Évaluation) au lieu de le remplacer, ou ajouté une évaluation non prévue pour cette séance. Ne pas utiliser cette fiche telle quelle : régénérez-la.` })}\n\n`);
           }
         }
       }
