@@ -5864,7 +5864,7 @@ NE LES RÉDIGE PAS toi-même : reproduis EXACTEMENT et INTÉGRALEMENT, sans y aj
 "${corpus}"
 
 III. Bio-bibliographie des auteurs
-Pour CHAQUE auteur listé en partie II (un paragraphe court par auteur, 2-4 phrases) : identité/nationalité, dates de naissance (et de décès si applicable), mouvement ou courant littéraire, 1-2 œuvres majeures avec leur année. À partir de tes connaissances réelles sur CES auteurs précis -- si tu n'es pas certain d'un fait précis sur l'un d'eux, reste général pour celui-là plutôt que d'inventer un détail que tu ne connais pas avec certitude. N'invente JAMAIS un auteur, une œuvre ou une date qui ne figurent pas dans tes connaissances réelles.
+Pour CHAQUE auteur listé en partie II (un paragraphe court par auteur, 2-4 phrases) : identité/nationalité, dates de naissance (et de décès si applicable), mouvement ou courant littéraire, 1-2 œuvres majeures avec leur année. À partir de tes connaissances réelles sur CES auteurs précis.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE}
 
 IV. Axe d'étude
 "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Conclusion, à la fin de la séquence).
@@ -5901,7 +5901,7 @@ STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉG
 
 I- Présentation de l'auteur
 ${consigneBiographie}
-2- Bibliographie : liste des œuvres majeures de l'auteur avec leur année de publication, au format "Titre en année, Titre en année..." -- à partir de tes connaissances réelles, jamais inventée si tu n'es pas certain.
+2- Bibliographie : liste des œuvres majeures de l'auteur avec leur année de publication, au format "Titre en année, Titre en année..." -- à partir de tes connaissances réelles.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE} Si tu n'es certain avec exactitude ni du titre ni de l'année d'une œuvre secondaire, ne la mentionne PAS plutôt que de citer un titre approximatif ou une année incertaine -- limite-toi alors à l'œuvre principale déjà connue avec certitude (« ${titre} »).
 
 II- Présentation de l'œuvre
 Présente le genre du récit ou de la pièce (roman, pièce de théâtre...) en 1-2 phrases (pas le thème -- traité séparément ci-dessous).
@@ -5981,7 +5981,7 @@ STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- CONCLUSION À L'ÉTUDE DE L'ŒUVRE INTÉGRA
 
 I. Étude de la structure de l'œuvre
 1- Structure externe : nombre de parties/chapitres/actes si tu le sais avec certitude, sinon reste général (ex. "l'œuvre est organisée en plusieurs chapitres/actes").
-2- Structure interne : bref aperçu de l'espace-temps, des personnages principaux et des thèmes majeurs de l'œuvre -- uniquement à partir de tes connaissances réelles et vérifiées sur CETTE œuvre précise, jamais un détail inventé.
+2- Structure interne : bref aperçu de l'espace-temps et des thèmes majeurs de l'œuvre -- uniquement à partir de tes connaissances réelles et vérifiées sur CETTE œuvre précise. Pour les personnages principaux : NE CITE AUCUN NOM PROPRE de personnage (ni identité, ni lien de parenté, ni rôle précis) sauf si tu es certain à 100% qu'il correspond exactement à cette œuvre précise -- un nom de personnage mal attribué (mauvais rôle, mauvais lien familial, ou personnage n'existant simplement pas dans cette œuvre) est une fabrication au même titre qu'une date inventée. En cas de doute, décris les personnages par leur fonction dans l'intrigue (ex. "le père de l'héroïne", "les prétendants") sans leur donner de nom.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE}
 3- Technique narrative : 1-2 phrases sur le mode de narration/énonciation employé, si tu le sais avec certitude.
 
 II. Résumé et conclusion synthétique
