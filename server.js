@@ -5854,7 +5854,7 @@ function construireInstructionsIntroductionOeuvreLycee({ genreOeuvre, titreOeuvr
     const corpus = (corpusTextesGT || '').toString().trim();
     return `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- INTRODUCTION À L'ÉTUDE D'UN GROUPEMENT DE TEXTES (GT) POÉTIQUE (les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes -- rédige UNIQUEMENT la structure I/II/III/IV ci-dessous à la place.) :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- INTRODUCTION À L'ÉTUDE D'UN GROUPEMENT DE TEXTES (GT) POÉTIQUE : cette fiche N'A PAS de tableau Habiletés/Contenus générique ET N'A PAS le tableau DÉROULEMENT 5 colonnes (Moments didactiques/Stratégies pédagogiques/Activités de l'enseignant/Activités des élèves/Traces écrites) avec ses lignes PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION habituelles -- AUCUN DES DEUX ne doit apparaître nulle part dans ta réponse, même vide, même partiellement, même sous une forme abrégée. Rédige UNIQUEMENT, en texte structuré libre (chaque partie = un titre suivi d'un ou plusieurs paragraphes, JAMAIS à l'intérieur d'un tableau), les 4 parties I à IV ci-dessous, RIEN D'AUTRE : pas de ligne ni de section ÉVALUATION, pas d'exercice, pas de question, pas de corrigé, pas de travail individuel ou oral à faire par les élèves -- cette séance d'Introduction ouvre la séquence, elle n'évalue jamais rien, quoi qu'il te semble utile d'ajouter par ailleurs :
 
 I. Définition de la notion de groupement de textes
 1-2 phrases : un groupement de textes n'est pas une simple collection mais un ensemble de plusieurs textes (du même auteur ou d'auteurs différents) partageant une problématique ou un thème littéraire commun, appartenant au même genre littéraire.
@@ -5869,7 +5869,9 @@ Pour CHAQUE auteur listé en partie II (un paragraphe court par auteur, 2-4 phra
 IV. Axe d'étude
 "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Conclusion, à la fin de la séquence).
 
-${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}`;
+${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}
+
+RAPPEL FINAL : ta réponse ne contient QUE les parties I à IV en texte libre -- jamais de tableau Habiletés/Contenus, jamais de tableau DÉROULEMENT 5 colonnes, jamais de section ÉVALUATION.`;
   }
 
   // narrative / theatrale (et tout genre par défaut non reconnu) : un seul
@@ -5895,7 +5897,7 @@ ${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}`;
 
   return `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (« ${titre} » de ${auteur}) (les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes -- rédige UNIQUEMENT la structure I/II/III ci-dessous à la place.) :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (« ${titre} » de ${auteur}) : cette fiche N'A PAS de tableau Habiletés/Contenus générique ET N'A PAS le tableau DÉROULEMENT 5 colonnes (Moments didactiques/Stratégies pédagogiques/Activités de l'enseignant/Activités des élèves/Traces écrites) avec ses lignes PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION habituelles -- AUCUN DES DEUX ne doit apparaître nulle part dans ta réponse, même vide, même partiellement, même sous une forme abrégée. Rédige UNIQUEMENT, en texte structuré libre (chaque partie = un titre suivi d'un ou plusieurs paragraphes, JAMAIS à l'intérieur d'un tableau), les 3 parties I à III ci-dessous, RIEN D'AUTRE : pas de ligne ni de section ÉVALUATION, pas d'exercice, pas de question, pas de corrigé, pas de travail individuel ou oral à faire par les élèves -- cette séance d'Introduction ouvre la séquence, elle n'évalue jamais rien, quoi qu'il te semble utile d'ajouter par ailleurs :
 
 I- Présentation de l'auteur
 ${consigneBiographie}
@@ -5909,7 +5911,9 @@ ${consignePersonnages}${consigneLieux}
 III- Axe d'étude
 "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Conclusion, à la fin de la séquence).
 
-${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}`;
+${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}
+
+RAPPEL FINAL : ta réponse ne contient QUE les parties I à III en texte libre -- jamais de tableau Habiletés/Contenus, jamais de tableau DÉROULEMENT 5 colonnes, jamais de section ÉVALUATION.`;
 }
 
 // Rappel commun aux deux genres : la Situation d'apprentissage ne doit
