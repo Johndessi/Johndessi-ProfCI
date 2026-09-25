@@ -753,6 +753,16 @@ async function trouverCompetencesDPFC({ discipline, classe }) {
 // uniquement). Correspondance exacte normalisée sur l'activité, jamais de
 // déduction/devinette : une activité non seedée retourne simplement null, et
 // l'appelant retombe sur la logique CompetenceDPFC existante.
+// Correctif (25/09) : le document DPFC source regroupe parfois plusieurs
+// activités sous UNE SEULE compétence combinée (constaté en 2nde : la
+// compétence n°2 est seedée "Perfectionnement de la langue et savoir-faire",
+// jamais "Perfectionnement de la langue" ni "Savoir-faire" séparément) --
+// une requête pour l'une ou l'autre activité individuelle échouait donc
+// systématiquement (avertissement "Compétence non déterminée" alors que la
+// compétence existe bel et bien). Le split sur " et " retrouve chaque
+// activité individuelle au sein d'un libellé combiné, sans halluciner de
+// numéro ni de texte -- une activité qui ne fait partie d'aucun libellé
+// combiné existant continue de retourner null comme avant.
 async function trouverCompetenceParActivite({ discipline, classe, activite }) {
   if (!activite) return null;
   const candidats = await CompetenceParActivite.find({
@@ -760,7 +770,11 @@ async function trouverCompetenceParActivite({ discipline, classe, activite }) {
     classe: regexExactInsensible(classe)
   });
   const activiteNorm = normaliserTexte(activite);
-  return candidats.find((c) => normaliserTexte(c.activite) === activiteNorm) || null;
+  return candidats.find((c) => {
+    const candidatNorm = normaliserTexte(c.activite);
+    if (candidatNorm === activiteNorm) return true;
+    return candidatNorm.split(' et ').map((partie) => partie.trim()).includes(activiteNorm);
+  }) || null;
 }
 
 // Recherche floue (texte libre) : la séance officielle DPFC dont l'intitulé
