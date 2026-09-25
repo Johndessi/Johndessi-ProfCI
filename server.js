@@ -5694,6 +5694,8 @@ function construireInstructionsLectureMethodiqueLycee({ planCours, texteSupport,
 
 STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- LECTURE MÉTHODIQUE (second cycle, Mode "plan fourni par l'enseignant" -- SEUL mode actuellement disponible pour cette séance : l'enseignant a rédigé lui-même l'intégralité du contenu pédagogique du développement -- hypothèse de lecture, axes, repérages, analyses, interprétations. Les instructions ci-dessous REMPLACENT, pour le tableau Habiletés/Contenus, la structure du DÉVELOPPEMENT et le contenu de l'ÉVALUATION SEULEMENT, la structure Présentation/Développement/Évaluation générique décrite plus haut. L'entête et la Situation d'apprentissage restent inchangés par ailleurs.) :
 
+INTERDICTION ABSOLUE, LA PLUS IMPORTANTE DE TOUTE CETTE CONSIGNE, VALABLE PARTOUT DANS CETTE FICHE (Développement ET Évaluation) : ne rédige JAMAIS de corrigé, de "correction", de "correction collective" ni de "réponse attendue"/"réponses attendues" pour l'Évaluation -- l'Évaluation de cette fiche est TOUJOURS une liste de questions SEULE, sans aucune réponse, même partielle, même présentée comme un exemple ou une aide au professeur. Ne complète JAMAIS, nulle part dans la fiche, une citation tronquée par "..." dans le plan de l'enseignant (ex. "le sang... ouvertes") par le texte que tu penses manquant, même si tu es certain de connaître l'œuvre par cœur -- une citation tronquée dans le plan reste tronquée partout où elle est réutilisée. Violer cette règle équivaut à inventer un fait non fourni, strictement interdit.
+
 TABLEAU HABILETÉS ET CONTENUS -- formule FIXE ci-dessous, obligatoire, NE JAMAIS la réinventer ni l'adapter au texte :
 ${habiletesLectureMethodique('lycee')}
 
@@ -7333,6 +7335,20 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
             res.write(`data: ${JSON.stringify({ avertissement: "La partie \"I. Sujets et répartition des groupes\" n'a pas été générée correctement pour cette fiche (le modèle n'a pas reproduit le repère attendu). Ne pas utiliser cette fiche telle quelle : régénérez-la." })}\n\n`);
           } else {
             contenuHTML = injecterMarqueurUneFois(contenuHTML, '{{SUJETS_GROUPES_EXPOSE}}', sujetsGroupesExposeHTML);
+          }
+        }
+        if (typeSeanceOI === 'lecture_methodique') {
+          // Filet déterministe (25/09) : test réel constaté en production --
+          // malgré l'interdiction explicite (cf. construireInstructionsLectureMethodiqueLycee),
+          // le modèle a produit à deux reprises un corrigé/une "correction
+          // collective" pour l'Évaluation, en complétant de son propre chef
+          // une citation tronquée par "..." dans le plan de l'enseignant --
+          // une fabrication de contenu non fourni. Jamais un échec
+          // silencieux : un avertissement fort plutôt qu'une fiche présentée
+          // comme fiable alors qu'elle contient potentiellement un contenu
+          // inventé.
+          if (/r[ée]ponses?\s+attendues?|corrig[ée]|correction\s+collective/i.test(contenuHTML)) {
+            res.write(`data: ${JSON.stringify({ avertissement: "La fiche générée semble contenir un corrigé ou des réponses-modèles pour l'Évaluation, alors que ce n'est jamais autorisé pour une Lecture méthodique en mode plan fourni (le modèle a pu compléter une citation tronquée du plan par du texte inventé). NE PAS UTILISER cette fiche telle quelle : vérifiez le contenu de l'Évaluation et de toute citation, ou régénérez la fiche." })}\n\n`);
           }
         }
       }
