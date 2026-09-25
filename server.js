@@ -6187,7 +6187,7 @@ function construireInstructionsIntroductionOeuvre({ titreOeuvre, auteurOeuvre, e
 
   return `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE — SÉANCE 1, INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (cette fiche ouvre une séquence de 11 séances consacrée à l'étude intégrale de « ${titre} » de ${auteur}. Les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes décrits plus haut -- rédige UNIQUEMENT la structure I/II/III ci-dessous à la place. Le reste de l'entête (Discipline, Classe, Durée) et la Situation d'apprentissage restent inchangés et se rédigent normalement.) :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — SÉANCE 1, INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (cette fiche ouvre une séquence de 11 séances consacrée à l'étude intégrale de « ${titre} » de ${auteur}) : cette fiche N'A PAS de tableau Habiletés/Contenus générique ET N'A PAS le tableau DÉROULEMENT 5 colonnes (Moments didactiques/Stratégies pédagogiques/Activités de l'enseignant/Activités des élèves/Traces écrites) avec ses lignes PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION habituelles -- AUCUN DES DEUX ne doit apparaître nulle part dans ta réponse, même vide, même partiellement, même sous une forme abrégée. Rédige UNIQUEMENT, en texte structuré libre (chaque partie = un titre suivi d'un ou plusieurs paragraphes, JAMAIS à l'intérieur d'un tableau), les 3 parties I à III ci-dessous, RIEN D'AUTRE : pas de ligne ni de section ÉVALUATION, pas d'exercice, pas de question, pas de corrigé, pas de travail individuel ou oral à faire par les élèves -- cette séance d'Introduction ouvre la séquence, elle n'évalue jamais rien, quoi qu'il te semble utile d'ajouter par ailleurs. Le reste de l'entête (Discipline, Classe, Durée) et la Situation d'apprentissage restent inchangés et se rédigent normalement.
 
 I- PRÉSENTATION DE L'AUTEUR
 ${consigneBiographie}
@@ -6204,7 +6204,9 @@ III- Axe d'étude
 
 Situation d'apprentissage : rédige-la normalement (ancrée dans le quotidien ivoirien), en t'appuyant sur le contexte suivant fourni par l'enseignant -- établissement/classe : "${etab}" -- et sur le titre/auteur de l'œuvre ci-dessus. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les 10 séances suivantes de cette même séquence -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance (n'y mentionne rien de spécifique à "aujourd'hui" ou à cette seule introduction). N'Y MENTIONNE JAMAIS L'AXE D'ÉTUDE NI SON CONTENU (ci-dessus) : les deux champs sont distincts et ne doivent partager AUCUNE formulation -- la situation d'apprentissage amène vers la découverte de l'œuvre en général, jamais vers l'axe précis.
 
-${construireConsigneTaxonomiqueOeuvre(1)}`;
+${construireConsigneTaxonomiqueOeuvre(1)}
+
+RAPPEL FINAL : ta réponse ne contient QUE les parties I à III en texte libre (plus la Situation d'apprentissage déjà cadrée ci-dessus) -- jamais de tableau Habiletés/Contenus, jamais de tableau DÉROULEMENT 5 colonnes, jamais de section ÉVALUATION.`;
 }
 
 // Progression taxonomique (Bloom) des verbes d'Habiletés/consignes à travers
@@ -6254,7 +6256,7 @@ function construireInstructionsConclusionOeuvre({ titreOeuvre, auteurOeuvre, axe
   // cette séance uniquement, même principe que la Séance 1.
   return `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE — SÉANCE 10, CONCLUSION DE L'ÉTUDE DE L'ŒUVRE INTÉGRALE (cette fiche clôt la séquence de 11 séances consacrée à l'étude intégrale de « ${titre} » de ${auteur}. Les instructions ci-dessous REMPLACENT INTÉGRALEMENT, pour cette séance uniquement, le tableau Habiletés/Contenus générique et la structure Présentation/Développement/Évaluation du tableau 5 colonnes décrits plus haut -- rédige UNIQUEMENT la structure I/II/III ci-dessous à la place. Le reste de l'entête et la Situation d'apprentissage restent inchangés.) :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE — SÉANCE 10, CONCLUSION DE L'ÉTUDE DE L'ŒUVRE INTÉGRALE (cette fiche clôt la séquence de 11 séances consacrée à l'étude intégrale de « ${titre} » de ${auteur}) : cette fiche N'A PAS de tableau Habiletés/Contenus générique ET N'A PAS le tableau DÉROULEMENT 5 colonnes (Moments didactiques/Stratégies pédagogiques/Activités de l'enseignant/Activités des élèves/Traces écrites) avec ses lignes PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION habituelles -- AUCUN DES DEUX ne doit apparaître nulle part dans ta réponse, même vide, même partiellement, même sous une forme abrégée. Rédige UNIQUEMENT, en texte structuré libre (chaque partie = un titre suivi d'un ou plusieurs paragraphes, JAMAIS à l'intérieur d'un tableau), les 3 parties I à III ci-dessous, RIEN D'AUTRE : pas de ligne ni de section ÉVALUATION, pas d'exercice, pas de question, pas de corrigé, pas de travail individuel ou oral à faire par les élèves -- cette séance de Conclusion synthétise ce qui a déjà été évalué dans la séquence, elle n'évalue jamais rien elle-même, quoi qu'il te semble utile d'ajouter par ailleurs. Le reste de l'entête et la Situation d'apprentissage restent inchangés.
 
 I- LES THÈMES ABORDÉS
 Liste à puces des thèmes réellement traités dans l'œuvre au fil de la séquence (une ligne par thème, pas de développement).
@@ -6267,7 +6269,9 @@ Un paragraphe (3-5 phrases) résumant la dynamique de l'œuvre : qui veut/cherch
 
 AXE D'ÉTUDE À REPRENDRE (fourni par l'enseignant en Séance 1, OBLIGATOIRE, jamais un autre axe de ton choix, jamais ressaisi par l'enseignant) : "${axe}" -- structure les 3 sections ci-dessus autour de CET axe précis (reproduit ici EXACTEMENT tel que fourni, sans reformulation), sans le recopier littéralement dans chaque section.
 
-${construireConsigneTaxonomiqueOeuvre(10)}`;
+${construireConsigneTaxonomiqueOeuvre(10)}
+
+RAPPEL FINAL : ta réponse ne contient QUE les parties I à III en texte libre -- jamais de tableau Habiletés/Contenus, jamais de tableau DÉROULEMENT 5 colonnes, jamais de section ÉVALUATION.`;
 }
 
 function construireInstructionsLectureSuivie(seanceNum) {
