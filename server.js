@@ -1387,9 +1387,14 @@ function ajouterReferencesLigneCitations(texteBrut, lignesNumerotees, options = 
   const numeroSansGuillemets = trouverNumeroLigneCitation(texteTrim, lignesNumerotees);
   if (numeroSansGuillemets === null) {
     nonLocalisees.push(texteTrim);
-    return { texte, nonLocalisees };
+    // Bug réel confirmé (test réel, fiche Ahoundjué 6e, .docx généré) : ce
+    // repli renvoyait le texte tel quel, SANS AUCUN guillemet -- puisque le
+    // modèle n'en avait mis aucun, contrairement au cas normal (guillemets
+    // conservés/normalisés par la branche principale ci-dessus). Uniformisé
+    // en « » ici aussi, même quand la citation reste non localisée.
+    return { texte: `« ${texteTrim} »`, nonLocalisees };
   }
-  return { texte: `${texte} L${numeroSansGuillemets}`, nonLocalisees };
+  return { texte: `« ${texteTrim} » L${numeroSansGuillemets}`, nonLocalisees };
 }
 
 // Rendu HTML numéroté du texte support (cas NON déjà numéroté uniquement --
