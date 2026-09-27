@@ -4241,6 +4241,8 @@ ${consigneTexte}
 
 Utilise l'outil fourni pour transmettre ce contenu. Pour chaque section (vocabulaire, grammaire, techniqueExpression, evaluation) : "strategie" = résumé très court de la démarche ; "enseignant" = questions/consignes posées par l'enseignant ; "eleves" = réponses attendues, alignées 1 pour 1 avec les questions ; "traces" = ce qui reste écrit au tableau (contenu réel, jamais un jeton). IMPORTANT : chaque champ (strategie, enseignant, eleves, traces) est TOUJOURS une seule chaîne de caractères -- si tu as plusieurs questions/réponses pour une même section, sépare-les par des retours à la ligne À L'INTÉRIEUR de cette même chaîne, jamais sous forme de liste séparée.
 
+CITATIONS DU TEXTE (dans "enseignant"/"eleves"/"traces", pour VOCABULAIRE/GRAMMAIRE/TECHNIQUE D'EXPRESSION) : tout mot ou passage cité du texte support doit être entre guillemets français « » -- jamais entre guillemets simples ('...'), jamais sans guillemets. L'application ajoute automatiquement, après chaque citation, sa référence de ligne réelle -- n'ajoute JAMAIS toi-même une référence de ligne ou de vers (interdits : "(l. 3)", "(ligne 4)") : tu ne comptes pas les lignes de façon fiable.
+
 VOCABULAIRE : pas seulement des mots isolés -- selon ce que CE texte permet réellement (jamais forcé, jamais inventé), choisis parmi sens en contexte, sens propre/figuré d'un mot (SANS nommer de figure de style -- réservé à techniqueExpression), dérivation/famille de mots, synonymes/antonymes, niveau de langue ; explique chaque point EN CONTEXTE et fais employer le mot dans une phrase nouvelle ; plusieurs points si le texte le permet, jamais réduit à un seul par principe. JAMAIS les mots comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style ici.
 
 GRAMMAIRE : UN SEUL point de langue isolé est INSUFFISANT -- selon ce que CE texte permet réellement (jamais forcé, jamais inventé), choisis parmi type(s) de phrases, temps verbaux et leur valeur, accords, conjugaison, expansion du GN, fonctions (sujet/COD/COI/CC), déterminant/pronom ; chaque point illustré par un exemple RÉEL du texte ; plusieurs points si le texte le permet. JAMAIS les mots comparaison/métaphore/personnification/hyperbole/énumération/gradation/figure de style ici.
@@ -4296,6 +4298,31 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
     const texteSupportFinal = texteFourni || (parsed.texteSupport || '').toString().trim();
     if (!texteSupportFinal) throw new Error('aucun texte support (ni fourni, ni inventé par le modèle)');
 
+    // Référence de ligne (27/09, cf. construireLignesNumerotees) : même
+    // mécanisme que la Lecture méthodique, réutilisé tel quel -- calculée ici
+    // (jamais par le modèle) dès que texteSupportFinal est connu, y compris
+    // en Mode "sans texte support" où ce texte n'existe qu'à partir de cette
+    // ligne (inventé par le modèle ci-dessus). estLettre : même référentiel
+    // de type de texte que la Lecture méthodique, uniquement pour détecter
+    // la lettre personnelle -- Exploitation de texte n'utilise ce référentiel
+    // pour AUCUNE autre raison (cf. commentaire à l'appel de cette fonction).
+    const referentielExploitation = trouverReferentielTypeTexte(lecon, classe);
+    const estLettreExploitation = referentielExploitation && referentielExploitation.typeTexte === 'lettre personnelle';
+    const { lignesNumerotees, dejaNumerote } = construireLignesNumerotees(texteSupportFinal, estLettreExploitation);
+    const citationsNonLocalisees = [];
+    const augmenterChamp = (champ) => {
+      if (!champ) return;
+      ['enseignant', 'eleves', 'traces'].forEach((cle) => {
+        const { texte, nonLocalisees } = ajouterReferencesLigneCitations(champ[cle], lignesNumerotees);
+        champ[cle] = texte;
+        if (nonLocalisees.length) citationsNonLocalisees.push(...nonLocalisees);
+      });
+    };
+    augmenterChamp(parsed.vocabulaire);
+    augmenterChamp(parsed.grammaire);
+    if (sectionIIIIncluse) augmenterChamp(parsed.techniqueExpression);
+    augmenterChamp(parsed.evaluation);
+
     // data-expl-auto="1" : même attribut que v1, pour rester détectable par
     // supprimerLignesExploitationAutoDupliquees si le modèle principal
     // écrit malgré tout une ligne libre en plus (filet redondant conservé).
@@ -4311,11 +4338,11 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
     if (sectionIIIIncluse) lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.III, parsed.techniqueExpression));
     lignes.push(ligne(LIBELLES_MOMENT_EXPLOITATION_AUTO.EVAL, parsed.evaluation));
 
-    return { succes: true, texteSupportFinal, lignesHTML: lignes.join('\n'), sectionIIIIncluse, erreur: null };
+    return { succes: true, texteSupportFinal, lignesHTML: lignes.join('\n'), sectionIIIIncluse, lignesNumerotees, dejaNumerote, citationsNonLocalisees, erreur: null };
   }
 
   async function tenterAvecRetries() {
-    let resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: null };
+    let resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, lignesNumerotees: null, dejaNumerote: false, citationsNonLocalisees: [], erreur: null };
     const NB_TENTATIVES_MAX = 2;
     for (let tentative = 1; tentative <= NB_TENTATIVES_MAX; tentative++) {
       try {
@@ -4324,7 +4351,7 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
       } catch (e) {
         const prefixe = tentative < NB_TENTATIVES_MAX ? '⚠️ (nouvelle tentative)' : '❌';
         console.error(`${prefixe} genererDeroulementExploitationAuto (tentative ${tentative}/${NB_TENTATIVES_MAX}):`, e.message);
-        resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, erreur: e.message };
+        resultat = { succes: false, texteSupportFinal: texteFourni, lignesHTML: '', sectionIIIIncluse: false, lignesNumerotees: null, dejaNumerote: false, citationsNonLocalisees: [], erreur: e.message };
       }
     }
     return resultat;
@@ -4340,7 +4367,7 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
       !resultatPresentation.succes ? `présentation : ${resultatPresentation.erreur}` : null,
       !resultatPrincipal.succes ? `contenu : ${resultatPrincipal.erreur}` : null
     ].filter(Boolean).join(' | ');
-    return { succes: false, texteSupportFinal: texteFourni, tableCompletHTML: '', sectionIIIIncluse: false, erreur: erreurs };
+    return { succes: false, texteSupportFinal: texteFourni, tableCompletHTML: '', sectionIIIIncluse: false, lignesNumerotees: null, dejaNumerote: false, citationsNonLocalisees: [], erreur: erreurs };
   }
 
   // Table COMPLÈTE (en-tête inclus) depuis la v3 (15/09) : le modèle
@@ -4364,6 +4391,9 @@ ${resultatPrincipal.lignesHTML}
     texteSupportFinal: resultatPrincipal.texteSupportFinal,
     tableCompletHTML,
     sectionIIIIncluse: resultatPrincipal.sectionIIIIncluse,
+    lignesNumerotees: resultatPrincipal.lignesNumerotees,
+    dejaNumerote: resultatPrincipal.dejaNumerote,
+    citationsNonLocalisees: resultatPrincipal.citationsNonLocalisees,
     erreur: null
   };
 }
@@ -7525,6 +7555,18 @@ function limiterGenerationParIp(req, res, next) {
           systemPrompt += construireInstructionsExploitationDeTexte(resultatExploitationAuto);
           exploitationAutoResultat = resultatExploitationAuto;
           modeAutoExploitationDeterministe = true;
+          // Référence de ligne (27/09) : calculée à l'intérieur de
+          // genererDeroulementExploitationAuto (seul endroit connaissant le
+          // texte support définitif, y compris quand il est inventé par le
+          // modèle en Mode "sans texte support") -- récupérée ici pour
+          // l'affichage numéroté du texte support (cf. injecterTexteSupport,
+          // même variables route que la Lecture méthodique) et pour
+          // l'avertissement sur les citations non localisées.
+          lignesNumereesLM = resultatExploitationAuto.lignesNumerotees;
+          dejaNumeroteLM = resultatExploitationAuto.dejaNumerote;
+          if (resultatExploitationAuto.citationsNonLocalisees && resultatExploitationAuto.citationsNonLocalisees.length) {
+            citationsNonLocaliseesLM.push(...resultatExploitationAuto.citationsNonLocalisees);
+          }
         }
       }
 
