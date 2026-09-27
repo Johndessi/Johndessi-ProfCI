@@ -1105,6 +1105,12 @@ const REGEX_FORMULE_APPEL = /^(cher|ch[èe]re|chers|ch[èe]res|bonjour|salut|cou
 // "D'après les experts, ..." sans ':' n'est PAS ce motif) -- reconnaissance
 // par nature formelle, jamais par position/longueur de bloc.
 const REGEX_LIGNE_SOURCE_ATTRIBUTION = /^\s*(source|extrait de|tir[ée] de)\s*:/i;
+// Rappel de situation d'apprentissage éventuellement recopié à la fin du
+// texte support (universel, jamais réservé à la lettre) -- même logique
+// que la source d'attribution : motif explicite ("Situation
+// d'apprentissage :"), jamais une occurrence du mot ailleurs dans une
+// phrase du corps.
+const REGEX_LIGNE_SITUATION_APPRENTISSAGE = /^\s*situation\s+d['’]apprentissage\s*:/i;
 
 // Non exhaustif : formules de clôture les plus courantes dans une lettre
 // personnelle niveau collège -- une formule absente de cette liste reste
@@ -1155,30 +1161,76 @@ function detecterLignesParatexte(lignes, estLettre) {
     break;
   }
 
-  if (!estLettre) return exclues;
-
-  // 2) Lettre personnelle uniquement : en-tête date/lieu puis formule
-  //    d'appel, juste après le bloc précédent.
-  while (i < lignes.length) {
-    const l = lignes[i].trim();
-    if (!l) { i++; continue; }
-    if (REGEX_DATE_LIEU_ENTETE.test(l)) { exclues[i] = true; i++; continue; }
+  // 1bis) Universel, en toute fin de texte : ligne de source/attribution ou
+  // rappel de situation d'apprentissage ajoutés APRÈS le corps -- balayés
+  // AVANT la détection de clôture de lettre (étape 3), pour qu'elle
+  // retrouve la vraie fin du corps (signature) au lieu de buter sur ce
+  // paratexte final. Bug réel corrigé (27/09, fiche Fôhoundi) : un
+  // paratexte final non reconnu empêchait le balayage arrière d'atteindre
+  // la formule de clôture/signature, qui restait alors numérotée.
+  let j0 = lignes.length - 1;
+  while (j0 >= 0 && !lignes[j0].trim()) j0--;
+  while (j0 >= 0) {
+    const l = lignes[j0].trim();
+    if (!l) { j0--; continue; }
+    if (REGEX_LIGNE_SOURCE_ATTRIBUTION.test(l) || REGEX_LIGNE_SITUATION_APPRENTISSAGE.test(l)) {
+      exclues[j0] = true;
+      j0--;
+      continue;
+    }
     break;
   }
-  while (i < lignes.length) {
-    const l = lignes[i].trim();
-    if (!l) { i++; continue; }
-    if (REGEX_FORMULE_APPEL.test(l)) exclues[i] = true;
-    break; // une seule ligne d'appel -- qu'elle matche ou non, on s'arrête là
+
+  if (!estLettre) return exclues;
+
+  // 2) Lettre personnelle uniquement : bloc d'ouverture (identité de
+  // l'auteur, classe, établissement, adresse, date...) puis formule
+  // d'appel. Le contenu du bloc d'identité est imprévisible par nature (nom
+  // d'élève, nom d'établissement) -- jamais reconnaissable par un motif qui
+  // lui soit propre. On cherche donc EN AVANT, dans une fenêtre bornée, la
+  // formule d'appel elle-même : dès qu'elle est trouvée, tout ce qui la
+  // précède depuis le titre/chapeau est exclu en bloc, quel que soit son
+  // contenu exact -- par définition, dans une lettre personnelle, rien de
+  // significatif du corps n'apparaît avant la formule d'appel. Bug réel
+  // corrigé (27/09, fiche Fôhoundi) : l'ancienne version ne testait qu'UNE
+  // ligne juste après le titre (la date) puis UNE seule ligne suivante
+  // (l'appel) -- un bloc d'identité intercalé avant la date décalait tout,
+  // et la formule d'appel, plus loin, n'était alors jamais atteinte.
+  const FENETRE_BLOC_OUVERTURE_LETTRE = 8;
+  let indexAppel = -1;
+  for (let k = i; k < Math.min(lignes.length, i + FENETRE_BLOC_OUVERTURE_LETTRE); k++) {
+    const lk = lignes[k].trim();
+    if (lk && REGEX_FORMULE_APPEL.test(lk)) { indexAppel = k; break; }
+  }
+  if (indexAppel !== -1) {
+    for (let k = i; k <= indexAppel; k++) exclues[k] = true;
+    i = indexAppel + 1;
+  } else {
+    // Repli : formule d'appel non reconnue dans la fenêtre -- ancienne
+    // détection ligne à ligne (date/lieu seule puis appel juste après),
+    // jamais un bloc entier deviné sans ancre reconnue.
+    while (i < lignes.length) {
+      const l = lignes[i].trim();
+      if (!l) { i++; continue; }
+      if (REGEX_DATE_LIEU_ENTETE.test(l)) { exclues[i] = true; i++; continue; }
+      break;
+    }
+    while (i < lignes.length) {
+      const l = lignes[i].trim();
+      if (!l) { i++; continue; }
+      if (REGEX_FORMULE_APPEL.test(l)) exclues[i] = true;
+      break; // une seule ligne d'appel -- qu'elle matche ou non, on s'arrête là
+    }
   }
 
   // 3) Lettre personnelle uniquement, en fin de texte : formule(s) de
   //    clôture + signature finale. La signature (nom seul, sans mot-clé)
   //    n'est exclue QUE si la ligne non vide juste avant contient déjà un
   //    mot-clé de clôture reconnu -- jamais une simple ligne courte isolée,
-  //    qui pourrait être une vraie fin de récit.
-  let j = lignes.length - 1;
-  while (j >= 0 && !lignes[j].trim()) j--;
+  //    qui pourrait être une vraie fin de récit. Part de j0 (déjà avancé
+  //    au-delà du paratexte final de l'étape 1bis), pas de la toute
+  //    dernière ligne physique.
+  let j = j0;
   if (j >= 0 && !ligneContientMotClotureLettre(lignes[j])) {
     const mots = lignes[j].trim().split(/\s+/);
     if (mots.length <= 4 && !/[.!?]$/.test(lignes[j].trim())) {
