@@ -1048,6 +1048,284 @@ function texteSupportVersHtml(texte) {
     .join('\n');
 }
 
+// --- Numérotation de lignes du texte support pour Lecture méthodique (27/09) ---
+//
+// Décision de conception explicite : la numérotation est calculée
+// INTÉGRALEMENT côté serveur, jamais par le modèle -- un modèle compte mal
+// les lignes d'un bloc de texte, et un numéro de ligne FAUX serait pire
+// qu'aucune référence (il pointerait l'enseignant vers le mauvais passage
+// avec une fausse confiance). Format retenu dans toute l'app : "L<n>" collé
+// après la citation (ex. « je » L2), jamais "ligne 2".
+//
+// Deux cas, jamais mélangés :
+// 1) Texte déjà numéroté par l'enseignant (fichier numérique avec ses
+//    propres numéros) : on réutilise ces numéros tels quels, jamais
+//    réécrits ni dupliqués -- tout ce qui précède la première ligne numérotée
+//    est automatiquement exclu (l'enseignant a lui-même fixé la frontière).
+// 2) Texte non numéroté : l'app numérote 1, 2, 3... le corps du texte,
+//    en excluant les éléments de paratexte reconnaissables PAR LEUR NATURE
+//    FORMELLE (jamais par une longueur de bloc -- un en-tête de lettre +
+//    formule d'appel peut dépasser 5 lignes, un récit ou un portrait n'ont
+//    généralement aucun de ces éléments). Non exhaustif (même principe que
+//    personnageNommeRisquePresent) : un cas non couvert reste simplement
+//    numéroté, jamais l'inverse -- on ne retire une ligne du corps que sur un
+//    signal formel clair, jamais "au cas où".
+
+const SEUIL_PROPORTION_LIGNES_DEJA_NUMEROTEES = 0.7;
+const SEUIL_MIN_LIGNES_DEJA_NUMEROTEES = 3;
+const REGEX_LIGNE_DEJA_NUMEROTEE = /^\s*(\d{1,3})\s*[.):\-–—]?\s+\S/;
+
+function texteSupportEstDejaNumerote(lignes) {
+  const nonVides = lignes.filter((l) => l.trim());
+  if (nonVides.length < SEUIL_MIN_LIGNES_DEJA_NUMEROTEES) return false;
+  const numerotees = nonVides.filter((l) => REGEX_LIGNE_DEJA_NUMEROTEE.test(l));
+  return numerotees.length / nonVides.length >= SEUIL_PROPORTION_LIGNES_DEJA_NUMEROTEES;
+}
+
+// Filtres structurels de paratexte -- uniquement pour le cas NON numéroté.
+// Détection par nature formelle (motif reconnaissable), jamais par position
+// ou longueur de bloc.
+const REGEX_TITRE_NUMERO_TEXTE = /^(texte|document|lettre|extrait)\s*n[°ºo]?\s*\d+\s*[:.\-]?\s*$/i;
+const REGEX_DATE_LIEU_ENTETE = /^[A-ZÀ-Ý][^,]{1,40},\s*le\s+\d{1,2}(er)?\s+[a-zà-ÿ]+\s+\d{4}\s*\.?$/i;
+const REGEX_FORMULE_APPEL = /^(cher|ch[èe]re|chers|ch[èe]res|bonjour|salut|coucou)\s+[a-zà-ÿ][a-zà-ÿ\-']*\s*[,:]?\s*$/i;
+
+// Non exhaustif : formules de clôture les plus courantes dans une lettre
+// personnelle niveau collège -- une formule absente de cette liste reste
+// numérotée (jamais un risque de couper une vraie fin de texte).
+const MOTS_CLES_CLOTURE_LETTRE = [
+  "bien à toi", "bien à vous", "je t'embrasse", "je vous embrasse", "amitiés",
+  "cordialement", "bien cordialement", "à bientôt", "je compte sur toi",
+  "gros bisous", "avec mon affection", "avec toute mon affection",
+  "salutations distinguées", "veuillez agréer", "meilleurs souvenirs"
+];
+
+function ligneEstChapeauEntreParentheses(ligne) {
+  const t = ligne.trim();
+  return t.length > 1 && t.startsWith('(') && t.endsWith(')');
+}
+
+function ligneContientMotClotureLettre(ligne) {
+  const n = normaliserTexte(ligne);
+  return MOTS_CLES_CLOTURE_LETTRE.some((mot) => n.includes(normaliserTexte(mot)));
+}
+
+// Retourne un tableau de booléens (même longueur que `lignes`) : true = ligne
+// à exclure de la numérotation (paratexte). `estLettre` conditionne les
+// filtres spécifiques à la lettre personnelle (en-tête date/lieu, formule
+// d'appel, formule de clôture + signature) -- jamais appliqués à un autre
+// type de texte (récit, portrait, poème...), qui n'ont pas ces éléments.
+function detecterLignesParatexte(lignes, estLettre) {
+  const exclues = new Array(lignes.length).fill(false);
+
+  // 1) Universel, en tout début de texte uniquement : titre/numéro de texte,
+  //    chapeau entre parenthèses.
+  let i = 0;
+  while (i < lignes.length && !lignes[i].trim()) i++;
+  while (i < lignes.length) {
+    const l = lignes[i].trim();
+    if (!l) { i++; continue; }
+    if (REGEX_TITRE_NUMERO_TEXTE.test(l) || ligneEstChapeauEntreParentheses(l)) {
+      exclues[i] = true;
+      i++;
+      continue;
+    }
+    break;
+  }
+
+  if (!estLettre) return exclues;
+
+  // 2) Lettre personnelle uniquement : en-tête date/lieu puis formule
+  //    d'appel, juste après le bloc précédent.
+  while (i < lignes.length) {
+    const l = lignes[i].trim();
+    if (!l) { i++; continue; }
+    if (REGEX_DATE_LIEU_ENTETE.test(l)) { exclues[i] = true; i++; continue; }
+    break;
+  }
+  while (i < lignes.length) {
+    const l = lignes[i].trim();
+    if (!l) { i++; continue; }
+    if (REGEX_FORMULE_APPEL.test(l)) exclues[i] = true;
+    break; // une seule ligne d'appel -- qu'elle matche ou non, on s'arrête là
+  }
+
+  // 3) Lettre personnelle uniquement, en fin de texte : formule(s) de
+  //    clôture + signature finale. La signature (nom seul, sans mot-clé)
+  //    n'est exclue QUE si la ligne non vide juste avant contient déjà un
+  //    mot-clé de clôture reconnu -- jamais une simple ligne courte isolée,
+  //    qui pourrait être une vraie fin de récit.
+  let j = lignes.length - 1;
+  while (j >= 0 && !lignes[j].trim()) j--;
+  if (j >= 0 && !ligneContientMotClotureLettre(lignes[j])) {
+    const mots = lignes[j].trim().split(/\s+/);
+    if (mots.length <= 4 && !/[.!?]$/.test(lignes[j].trim())) {
+      let k = j - 1;
+      while (k >= 0 && !lignes[k].trim()) k--;
+      if (k >= 0 && ligneContientMotClotureLettre(lignes[k])) {
+        exclues[j] = true;
+        j = k;
+      }
+    }
+  }
+  while (j >= 0) {
+    const l = lignes[j].trim();
+    if (!l) { j--; continue; }
+    if (ligneContientMotClotureLettre(l)) { exclues[j] = true; j--; continue; }
+    break;
+  }
+
+  return exclues;
+}
+
+// Construit, à partir du texte support brut, la structure de référence pour
+// toute la fonctionnalité : un tableau parallèle aux lignes physiques du
+// texte, chacune portant son numéro de ligne (null si paratexte/ligne vide,
+// jamais numérotée). `estLettre` : cf. detecterLignesParatexte, ignoré si le
+// texte est déjà numéroté (l'enseignant a alors lui-même fixé la frontière).
+function construireLignesNumerotees(texteSupport, estLettre) {
+  const lignes = (texteSupport || '').toString().replace(/\r\n/g, '\n').split('\n');
+  const dejaNumerote = texteSupportEstDejaNumerote(lignes);
+
+  if (dejaNumerote) {
+    const lignesNumerotees = lignes.map((ligne) => {
+      const m = REGEX_LIGNE_DEJA_NUMEROTEE.exec(ligne);
+      return { texteAffiche: ligne, texteRecherche: ligne.trim(), numero: m ? parseInt(m[1], 10) : null };
+    });
+    return { lignesNumerotees, dejaNumerote: true };
+  }
+
+  const exclues = detecterLignesParatexte(lignes, !!estLettre);
+  let compteur = 0;
+  const lignesNumerotees = lignes.map((ligne, idx) => {
+    const vide = !ligne.trim();
+    let numero = null;
+    if (!vide && !exclues[idx]) {
+      compteur++;
+      numero = compteur;
+    }
+    return { texteAffiche: ligne, texteRecherche: ligne.trim(), numero };
+  });
+  return { lignesNumerotees, dejaNumerote: false };
+}
+
+function normaliserPourRechercheCitation(texte) {
+  return (texte || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// Cherche la citation dans les lignes numérotées (comparaison insensible à
+// la casse/aux accents/aux espaces). Retourne le numéro de la PREMIÈRE ligne
+// qui la contient, ou null si aucune -- jamais un numéro approché ou deviné.
+function trouverNumeroLigneCitation(citation, lignesNumerotees) {
+  const cible = normaliserPourRechercheCitation(citation);
+  if (!cible || !lignesNumerotees) return null;
+  for (const l of lignesNumerotees) {
+    if (l.numero === null) continue;
+    if (normaliserPourRechercheCitation(l.texteRecherche).includes(cible)) return l.numero;
+  }
+  return null;
+}
+
+// Repère chaque citation entre guillemets français ou droits dans `texte` et
+// lui ajoute sa référence de ligne ("L<n>") juste après le guillemet
+// fermant. N'invente JAMAIS un numéro : une citation non localisée reste
+// inchangée et son texte est renvoyé dans `nonLocalisees` pour avertissement
+// explicite à l'enseignant.
+const REGEX_CITATION_GUILLEMETS = /(«\s*[^»]+?\s*»|"[^"]+?")/g;
+
+function ajouterReferencesLigneCitations(texte, lignesNumerotees) {
+  if (!texte || !lignesNumerotees || !lignesNumerotees.length) return { texte, nonLocalisees: [] };
+  const nonLocalisees = [];
+  const resultat = texte.replace(REGEX_CITATION_GUILLEMETS, (match) => {
+    const interieur = match.replace(/^[«"]\s*/, '').replace(/\s*[»"]$/, '');
+    const numero = trouverNumeroLigneCitation(interieur, lignesNumerotees);
+    if (numero === null) {
+      nonLocalisees.push(interieur);
+      return match;
+    }
+    return `${match} L${numero}`;
+  });
+  return { texte: resultat, nonLocalisees };
+}
+
+// Rendu HTML numéroté du texte support (cas NON déjà numéroté uniquement --
+// le cas déjà numéroté s'affiche via texteSupportVersHtml, inchangé, pour ne
+// jamais dupliquer/réécrire la numérotation propre de l'enseignant). Une
+// ligne de paratexte (numero===null) s'affiche sans préfixe, visuellement
+// distincte, pour que l'enseignant voie immédiatement ce qui a été exclu.
+function texteSupportVersHtmlNumerote(lignesNumerotees) {
+  const blocs = [];
+  let blocCourant = [];
+  lignesNumerotees.forEach((l) => {
+    if (!l.texteAffiche.trim()) {
+      if (blocCourant.length) { blocs.push(blocCourant); blocCourant = []; }
+      return;
+    }
+    blocCourant.push(l);
+  });
+  if (blocCourant.length) blocs.push(blocCourant);
+
+  return blocs.map((bloc) => {
+    const lignesHtml = bloc.map((l) => {
+      const texte = echapperHtml(l.texteAffiche.trim());
+      const prefixe = l.numero !== null
+        ? `<span style="display:inline-block;min-width:1.8em;color:#666;font-size:0.85em;">${l.numero}</span>`
+        : '';
+      return `${prefixe}${texte}`;
+    }).join('<br>');
+    return `<p>${lignesHtml}</p>`;
+  }).join('\n');
+}
+
+// Post-traitement du HTML déjà généré, pour la Lecture méthodique second
+// cycle (lycée) UNIQUEMENT : contrairement au collège (citations capturées
+// via jetons, cf. resoudreCompletionsEntrees), le modèle y écrit lui-même le
+// tableau HTML complet de chaque axe -- il faut donc repérer après coup la
+// colonne "Repérage"/"Indices textuels" par son EN-TÊTE (jamais par une
+// position fixe : rien ne garantit que le modèle respecte l'ordre demandé),
+// puis ajouter la référence de ligne à chaque citation qu'elle contient.
+// Remplacements appliqués par position absolue (jamais par recherche de
+// sous-chaîne globale, qui pourrait toucher une cellule au contenu
+// identique ailleurs dans le document).
+function ajouterReferencesLigneTableauxAxesLycee(contenuHTML, lignesNumerotees) {
+  if (!contenuHTML || !lignesNumerotees || !lignesNumerotees.length) return { html: contenuHTML, nonLocalisees: [] };
+  const nonLocalisees = [];
+  const regexTable = /<table\b[^>]*>[\s\S]*?<\/table>/gi;
+  const html = contenuHTML.replace(regexTable, (tableHTML) => {
+    const lignesMatch = [...tableHTML.matchAll(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi)];
+    if (lignesMatch.length < 2) return tableHTML;
+    const enTetes = [...lignesMatch[0][0].matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi)].map((m) => m[1].replace(/<[^>]+>/g, '').trim());
+    const indexRepérage = enTetes.findIndex((e) => /rep[ée]rage|indices\s+textuels/i.test(e));
+    if (indexRepérage === -1) return tableHTML;
+
+    const remplacements = [];
+    lignesMatch.slice(1).forEach((ligneMatch) => {
+      const ligneHTML = ligneMatch[0];
+      const cellulesMatch = [...ligneHTML.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)];
+      const cellule = cellulesMatch[indexRepérage];
+      if (!cellule) return;
+      const { texte: contenuModifie, nonLocalisees: nl } = ajouterReferencesLigneCitations(cellule[1], lignesNumerotees);
+      nonLocalisees.push(...nl);
+      if (contenuModifie === cellule[1]) return;
+      const debutTd = cellule.index;
+      const debutContenu = ligneHTML.indexOf('>', debutTd) + 1;
+      remplacements.push({
+        debut: ligneMatch.index + debutContenu,
+        fin: ligneMatch.index + debutContenu + cellule[1].length,
+        texte: contenuModifie
+      });
+    });
+
+    if (!remplacements.length) return tableHTML;
+    remplacements.sort((a, b) => b.debut - a.debut);
+    let resultat = tableHTML;
+    remplacements.forEach((r) => {
+      resultat = resultat.slice(0, r.debut) + r.texte + resultat.slice(r.fin);
+    });
+    return resultat;
+  });
+  return { html, nonLocalisees: [...new Set(nonLocalisees)] };
+}
+
 function compterMots(texte) {
   return (texte || '').trim().split(/\s+/).filter(Boolean).length;
 }
@@ -1369,7 +1647,12 @@ function injecterMarqueurUneFois(html, marqueur, contenu) {
 // complet à imprimer, avec son propre marqueur.
 function injecterTexteSupport(contenuHTML, texteSupport, options = {}) {
   if (!texteSupport) return contenuHTML;
-  const texteHtml = texteSupportVersHtml(texteSupport);
+  // Lecture méthodique numérotée (27/09) : cas NON déjà numéroté uniquement
+  // -- le cas déjà numéroté garde le rendu standard (le texte de
+  // l'enseignant affiche déjà ses propres numéros, jamais réécrits).
+  const texteHtml = (options.lignesNumerotees && !options.dejaNumerote)
+    ? texteSupportVersHtmlNumerote(options.lignesNumerotees)
+    : texteSupportVersHtml(texteSupport);
   if (!texteHtml) return contenuHTML;
 
   const marqueur = options.marqueur || '{{TEXTE_SUPPORT}}';
@@ -2685,7 +2968,7 @@ ${cell(tracesEcrites)}
 // librement : le slot est marqué `bloque: true` et un message de blocage
 // explicite est renvoyé -- jamais un repli silencieux vers une invention
 // libre par le modèle.
-function determinerSlotsAxe(numero, titre, entrees, niveau, referentiel) {
+function determinerSlotsAxe(numero, titre, entrees, niveau, referentiel, lignesNumerotees, citationsNonLocaliseesAccu) {
   const avertissements = [];
   let entreesRetenues = entrees;
   if (entrees.length > 2) {
@@ -2705,8 +2988,13 @@ function determinerSlotsAxe(numero, titre, entrees, niveau, referentiel) {
   entreesRetenues.forEach((e, i) => {
     const slot = i + 1;
     if (e.structure) {
-      const html = `  <tr><td style="border:1px solid #000;padding:6px;">${e.entree}</td><td style="border:1px solid #000;padding:6px;">${e.indices}</td><td style="border:1px solid #000;padding:6px;">${e.analyse}</td><td style="border:1px solid #000;padding:6px;">${e.interpretation}</td></tr>`;
-      slots.push({ slot, html, indicesConnues: e.indices, brut: null, tache: null });
+      // Référence de ligne (27/09) : ajoutée ici, sur la citation fournie
+      // TELLE QUELLE par l'enseignant -- jamais une réécriture de son
+      // contenu, seulement l'ajout de "L<n>" après chaque citation localisée.
+      const { texte: indicesAvecReferences, nonLocalisees } = ajouterReferencesLigneCitations(e.indices, lignesNumerotees);
+      if (citationsNonLocaliseesAccu && nonLocalisees.length) citationsNonLocaliseesAccu.push(...nonLocalisees);
+      const html = `  <tr><td style="border:1px solid #000;padding:6px;">${e.entree}</td><td style="border:1px solid #000;padding:6px;">${indicesAvecReferences}</td><td style="border:1px solid #000;padding:6px;">${e.analyse}</td><td style="border:1px solid #000;padding:6px;">${e.interpretation}</td></tr>`;
+      slots.push({ slot, html, indicesConnues: indicesAvecReferences, brut: null, tache: null });
       return;
     }
     const champs = e.champsPartiels || {};
@@ -2971,7 +3259,7 @@ function construireAxesAInventerHTML(niveau, referentiel) {
   return { bloque: false, messageBlocage: null, axesHTML, tachesCompletion, entreeReservee };
 }
 
-function construireDeroulementPlanEnseignantHTML(segments, niveau, referentiel) {
+function construireDeroulementPlanEnseignantHTML(segments, niveau, referentiel, lignesNumerotees) {
   const { axes, situationEvaluation } = parserAxesDepuisVerification(segments.verification);
 
   // Détermine et rend chaque tableau d'axe -- règle B (2 entrées par axe,
@@ -2986,10 +3274,11 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau, referentiel) 
   let avertissementsEntrees = [];
   let entreeReservee = null;
   let messageBlocage = null;
+  const citationsNonLocalisees = [];
   const axesHTML = axes.length
     ? axes.map((a) => {
         if (messageBlocage) return '';
-        const { slots, avertissements, bloque, messageBlocage: messageBlocageAxe } = determinerSlotsAxe(a.numero, a.titre, a.entrees, niveau, referentiel);
+        const { slots, avertissements, bloque, messageBlocage: messageBlocageAxe } = determinerSlotsAxe(a.numero, a.titre, a.entrees, niveau, referentiel, lignesNumerotees, citationsNonLocalisees);
         if (bloque) { messageBlocage = messageBlocageAxe; return ''; }
         avertissementsEntrees = avertissementsEntrees.concat(avertissements);
 
@@ -3103,6 +3392,11 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau, referentiel) 
     // déterminer + colonnes manquantes) -- cf. construireConsigneCompletionEntrees
     // et extraireCompletionsEntrees/resoudreCompletionsEntrees plus bas.
     tachesCompletion,
+    // Citations entièrement fournies par l'enseignant (jamais passées par un
+    // jeton) dont la référence de ligne n'a pas pu être localisée
+    // automatiquement dans le texte support numéroté -- cf.
+    // ajouterReferencesLigneCitations, appelé dans determinerSlotsAxe.
+    citationsNonLocalisees,
     bloque: false,
     messageBlocage: null
   };
@@ -3188,7 +3482,7 @@ COMPLÉTION AUTOMATIQUE D'ENTRÉES DU TABLEAU DE VÉRIFICATION (exception étroi
 ${consignesEntrees}
 Place chaque élément, et UNIQUEMENT lui, entre ses 2 marqueurs dédiés, N'IMPORTE OÙ dans ta réponse (par exemple juste avant {{AXES_PLAN_ENSEIGNANT}}) -- ces marqueurs et leur contenu seront extraits puis retirés du document final, ils ne doivent apparaître nulle part ailleurs. N'écris PAS toi-même les lignes du tableau d'axes concernées : elles sont déjà construites, seuls ces éléments précis sont attendus de toi, un élément par marqueur, jamais une énumération libre ni un tableau complet.`;
 }
-function construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentiel) {
+function construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentiel, lignesNumerotees) {
   const niveau = niveauLectureMethodique(classe);
   const resultatParsing = parserPlanEnseignant(planCours);
 
@@ -3236,7 +3530,7 @@ ${habiletesLectureMethodique(niveau)}`;
     };
   }
 
-  const resultatDeroulement = construireDeroulementPlanEnseignantHTML(resultatParsing.segments, niveau, referentiel);
+  const resultatDeroulement = construireDeroulementPlanEnseignantHTML(resultatParsing.segments, niveau, referentiel, lignesNumerotees);
   if (resultatDeroulement.bloque) {
     return {
       instructions: '',
@@ -3250,7 +3544,7 @@ ${habiletesLectureMethodique(niveau)}`;
       messageBlocage: resultatDeroulement.messageBlocage
     };
   }
-  const { lignesHTML, axesHTML, avertissementsEntrees, champsPresentationARecomposer, presentationVerbatimFallbackHTML, evaluationDetectee, tachesCompletion } =
+  const { lignesHTML, axesHTML, avertissementsEntrees, champsPresentationARecomposer, presentationVerbatimFallbackHTML, evaluationDetectee, tachesCompletion, citationsNonLocalisees } =
     resultatDeroulement;
 
   // Exception étroite accordée pour la ligne I UNIQUEMENT (à partir de la 4e,
@@ -3292,7 +3586,16 @@ N'invente, ne recopie, ne reformule et ne réordonne RIEN du contenu du plan toi
     injectionEvaluation: null,
     // Option B : avertissement explicite si un axe n'a pas exactement 2
     // entrées -- jamais un échec silencieux, jamais un contenu tronqué/complété.
-    avertissement: avertissementsEntrees.length ? avertissementsEntrees.join(' ') : null,
+    // Complété (27/09) par les citations, entièrement fournies par
+    // l'enseignant, dont la référence de ligne n'a pas pu être localisée
+    // automatiquement (cf. ajouterReferencesLigneCitations) -- jamais un
+    // numéro de ligne deviné à la place.
+    avertissement: [
+      avertissementsEntrees.length ? avertissementsEntrees.join(' ') : '',
+      citationsNonLocalisees && citationsNonLocalisees.length
+        ? `Référence de ligne non trouvée automatiquement pour ${citationsNonLocalisees.length > 1 ? 'les citations' : 'la citation'} : ${citationsNonLocalisees.map((c) => `« ${c} »`).join(', ')} -- vérifiez/ajoutez la référence de ligne manuellement.`
+        : ''
+    ].filter(Boolean).join(' ') || null,
     planCoursPourPromptFinal: null,
     presentationARecomposer: !!champsPresentationARecomposer,
     presentationVerbatimFallbackHTML,
@@ -6742,6 +7045,16 @@ function limiterGenerationParIp(req, res, next) {
     // référentiel du type de texte demandé (conformité structurelle exigée).
     let modeAutoLM = false;
     let referentielTypeTexteLM = null;
+    // Numérotation de lignes du texte support pour Lecture méthodique (27/09,
+    // cf. construireLignesNumerotees) -- calculée dès que le texte support et
+    // le type de texte sont connus (collège classique, collège Étude de
+    // l'œuvre intégrale, ou lycée), réutilisée à la fois pour l'ajout de
+    // référence de ligne aux citations ET pour l'affichage numéroté du texte
+    // support (cf. injecterTexteSupport). null si non applicable (pas de
+    // texte support, ou séance différente de Lecture méthodique).
+    let lignesNumereesLM = null;
+    let dejaNumeroteLM = false;
+    const citationsNonLocaliseesLM = [];
     // Résumé (08/08) : démarche dédiée, distincte du squelette générique EE
     // (cf. construireInstructionsResume) -- utilisé plus bas pour le
     // userMessage (texte support/évaluation à générer) et dans
@@ -6810,7 +7123,15 @@ function limiterGenerationParIp(req, res, next) {
           // intégrale n°1", cf. leconAfficheeOI), pas un texte libre où deviner
           // un genre, contrairement à la Lecture méthodique classique.
           const referentielOI = trouverReferentielTypeTexte(theme || '', classe);
-          const resultatPlanFourniOI = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentielOI);
+          // Numérotation de lignes (27/09) : cf. commentaire équivalent pour
+          // la Lecture méthodique classique.
+          if (texteSupport) {
+            const estLettreOI = referentielOI && referentielOI.typeTexte === 'lettre personnelle';
+            const resultatNumerotationOI = construireLignesNumerotees(texteSupport, estLettreOI);
+            lignesNumereesLM = resultatNumerotationOI.lignesNumerotees;
+            dejaNumeroteLM = resultatNumerotationOI.dejaNumerote;
+          }
+          const resultatPlanFourniOI = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentielOI, lignesNumereesLM);
           if (resultatPlanFourniOI.bloque) {
             return envoyerBlocageSSE(res, resultatPlanFourniOI.messageBlocage, heartbeat);
           }
@@ -6957,6 +7278,19 @@ function limiterGenerationParIp(req, res, next) {
           planCours, texteSupport,
           intituleOfficielSeance: seanceCatalogueOI && seanceCatalogueOI.intitule
         });
+        // Numérotation de lignes (27/09, cf. construireLignesNumerotees) :
+        // lycée n'a pas de référentiel de type de texte (pas de mode
+        // automatique ici) -- estLettre=false systématiquement, la lettre
+        // personnelle n'apparaît pas dans le catalogue lycée (narrative/
+        // poétique/théâtrale). Sans texteSupport (optionnel ici), rien à
+        // numéroter : les citations restent alors sans référence de ligne,
+        // le plan de l'enseignant étant la seule source, jamais numérotée
+        // elle-même.
+        if (texteSupport) {
+          const resultatNumerotationLycee = construireLignesNumerotees(texteSupport, false);
+          lignesNumereesLM = resultatNumerotationLycee.lignesNumerotees;
+          dejaNumeroteLM = resultatNumerotationLycee.dejaNumerote;
+        }
       }
     } else if (niveau !== 'primaire') {
       // Contrairement à Leçon/Séance, le champ Activité n'était jamais
@@ -7045,8 +7379,18 @@ function limiterGenerationParIp(req, res, next) {
         // d'architecture du 07/08, cf. construireMessageBlocageTypeTexteNonCouvert)
         // -- jamais un repli silencieux vers une invention libre.
         referentielTypeTexteLM = trouverReferentielTypeTexte(texteCibleReferentiel, classe);
+        // Numérotation de lignes (27/09) : calculée dès que le texte support
+        // existe -- estLettre conditionne les filtres de paratexte propres à
+        // la lettre personnelle (cf. detecterLignesParatexte), jamais
+        // appliqués à un autre type de texte.
+        if (texteSupport) {
+          const estLettreLM = referentielTypeTexteLM && referentielTypeTexteLM.typeTexte === 'lettre personnelle';
+          const resultatNumerotation = construireLignesNumerotees(texteSupport, estLettreLM);
+          lignesNumereesLM = resultatNumerotation.lignesNumerotees;
+          dejaNumeroteLM = resultatNumerotation.dejaNumerote;
+        }
         if (planCoursEstSubstantiel(planCours)) {
-          const resultatPlanFourni = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentielTypeTexteLM);
+          const resultatPlanFourni = construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentielTypeTexteLM, lignesNumereesLM);
           if (resultatPlanFourni.bloque) {
             return envoyerBlocageSSE(res, resultatPlanFourni.messageBlocage, heartbeat);
           }
@@ -7524,6 +7868,19 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           if (/r[ée]ponses?\s+attendues?|corrig[ée]|correction\s+collective/i.test(contenuHTML)) {
             res.write(`data: ${JSON.stringify({ avertissement: "La fiche générée semble contenir un corrigé ou des réponses-modèles pour l'Évaluation, alors que ce n'est jamais autorisé pour une Lecture méthodique en mode plan fourni (le modèle a pu compléter une citation tronquée du plan par du texte inventé). NE PAS UTILISER cette fiche telle quelle : vérifiez le contenu de l'Évaluation et de toute citation, ou régénérez la fiche." })}\n\n`);
           }
+          // Référence de ligne (27/09) : post-traitement du HTML fini --
+          // lycée n'a pas de mécanisme de jeton (contrairement au collège),
+          // le modèle écrit lui-même le tableau complet de chaque axe --
+          // cf. ajouterReferencesLigneTableauxAxesLycee. Jamais de numéro
+          // inventé : une citation non localisée est signalée, pas complétée.
+          if (lignesNumereesLM) {
+            const resultatReferencesLycee = ajouterReferencesLigneTableauxAxesLycee(contenuHTML, lignesNumereesLM);
+            contenuHTML = resultatReferencesLycee.html;
+            if (resultatReferencesLycee.nonLocalisees.length) {
+              const listeCitationsLycee = resultatReferencesLycee.nonLocalisees.map((c) => `« ${c} »`).join(', ');
+              res.write(`data: ${JSON.stringify({ avertissement: `Référence de ligne non trouvée automatiquement pour ${resultatReferencesLycee.nonLocalisees.length > 1 ? 'les citations suivantes' : 'la citation suivante'} : ${listeCitationsLycee} -- vérifiez/ajoutez la référence de ligne manuellement.` })}\n\n`);
+            }
+          }
         }
         if (typeSeanceOI === 'introduction' || typeSeanceOI === 'conclusion') {
           // Filet déterministe (25/09) -- cf. commentaire sur
@@ -7599,6 +7956,22 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       if (planFourniInjection && planFourniInjection.tachesCompletion && planFourniInjection.tachesCompletion.length) {
         const { contenuHTML: contenuNettoyeCompletion, valeurs } = extraireCompletionsEntrees(contenuHTML, planFourniInjection.tachesCompletion);
         contenuHTML = contenuNettoyeCompletion;
+        // Référence de ligne (27/09) : ajoutée ici sur les indices/citations
+        // générés par le modèle (Mode 1 automatique ET entrées partiellement
+        // complétées en Mode 2 -- toutes deux passent par ce mécanisme de
+        // jeton), AVANT résolution dans les tableaux -- jamais un numéro
+        // inventé, une citation non localisée est simplement laissée telle
+        // quelle et signalée plus bas.
+        if (lignesNumereesLM) {
+          planFourniInjection.tachesCompletion.forEach((t) => {
+            if (!t.champsAGenerer.includes('indices')) return;
+            const cle = `${t.id}_indices`;
+            if (!valeurs[cle]) return;
+            const { texte, nonLocalisees } = ajouterReferencesLigneCitations(valeurs[cle], lignesNumereesLM);
+            valeurs[cle] = texte;
+            if (nonLocalisees.length) citationsNonLocaliseesLM.push(...nonLocalisees);
+          });
+        }
         const resDeroulement = resoudreCompletionsEntrees(planFourniInjection.injectionDeroulement, planFourniInjection.tachesCompletion, valeurs);
         const resAxes = resoudreCompletionsEntrees(planFourniInjection.injectionAxes, planFourniInjection.tachesCompletion, valeurs);
         // Mode 1 uniquement (injectionEvaluation non-null) : le jeton
@@ -7612,6 +7985,10 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         for (const avertissementCompletion of resDeroulement.avertissements.concat(resAxes.avertissements, resEvaluation.avertissements)) {
           res.write(`data: ${JSON.stringify({ avertissement: avertissementCompletion })}\n\n`);
         }
+      }
+      if (citationsNonLocaliseesLM.length) {
+        const listeCitations = [...new Set(citationsNonLocaliseesLM)].map((c) => `« ${c} »`).join(', ');
+        res.write(`data: ${JSON.stringify({ avertissement: `Référence de ligne non trouvée automatiquement pour ${citationsNonLocaliseesLM.length > 1 ? 'les citations suivantes' : 'la citation suivante'} : ${listeCitations} -- vérifiez/ajoutez la référence de ligne manuellement.` })}\n\n`);
       }
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
       contenuHTML = injecterDeroulementExploitationPlanEnseignant(contenuHTML, planFourniExploitationInjection);
@@ -7962,7 +8339,9 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       // le placement actuel (en place, à l'endroit du marqueur) fonctionne.
       contenuHTML = injecterTexteSupport(contenuHTML, texteSupport, {
         unePage: estFicheExpressionEcrite,
-        placementFinDocument: modeResume
+        placementFinDocument: modeResume,
+        lignesNumerotees: lignesNumereesLM,
+        dejaNumerote: dejaNumeroteLM
       });
       // Filet structurel Exploitation de texte, ANCRÉ ICI et seulement ici
       // (16/09, déplacé depuis plus haut dans la route -- cf. commentaire à
