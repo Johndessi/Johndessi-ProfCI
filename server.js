@@ -1096,7 +1096,13 @@ const MOTS_CLES_CLOTURE_LETTRE = [
   "bien à toi", "bien à vous", "je t'embrasse", "je vous embrasse", "amitiés",
   "cordialement", "bien cordialement", "à bientôt", "je compte sur toi",
   "gros bisous", "avec mon affection", "avec toute mon affection",
-  "salutations distinguées", "veuillez agréer", "meilleurs souvenirs"
+  "salutations distinguées", "veuillez agréer", "meilleurs souvenirs",
+  // Formules relationnelles précédant directement la signature (ex. "Ton
+  // ami," / "Fôhoundi") : jouent le même rôle de marqueur de clôture que les
+  // formules de sentiment ci-dessus.
+  "ton ami", "ton amie", "ta fille", "ton fils", "ta sœur", "ton frère",
+  "ta cousine", "ton cousin", "ton camarade", "ta camarade", "ta copine",
+  "ton copain"
 ];
 
 function ligneEstChapeauEntreParentheses(ligne) {
