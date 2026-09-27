@@ -1148,10 +1148,25 @@ function ligneContientMotClotureLettre(ligne) {
 }
 
 // Retourne un tableau de booléens (même longueur que `lignes`) : true = ligne
-// à exclure de la numérotation (paratexte). `estLettre` conditionne les
-// filtres spécifiques à la lettre personnelle (en-tête date/lieu, formule
-// d'appel, formule de clôture + signature) -- jamais appliqués à un autre
-// type de texte (récit, portrait, poème...), qui n'ont pas ces éléments.
+// à exclure de la numérotation (paratexte).
+//
+// `estLettre` -- PARAMÈTRE CONSERVÉ MAIS IGNORÉ ICI (28/09, bug réel confirmé
+// en test, fiche Ahoundjué 6e) : il venait de estLettreLM, lui-même calculé
+// via referentielTypeTexteLM.typeTexte === 'lettre personnelle' -- une
+// correspondance FLOUE par sous-chaîne (trouverReferentielTypeTexte) contre
+// un intitulé de leçon/thème libre, catalogue qui n'a AUCUN alias déclaré
+// pour "lettre personnelle" (contrairement à "texte descriptif (objet)",
+// corrigé pour le même défaut le 08/08 -- jamais corrigé ici). Si
+// l'intitulé réel de l'enseignant ne contient pas exactement "lettre
+// personnelle", estLettreLM valait silencieusement false, et TOUTES les
+// exclusions de l'étape 2/3 ci-dessous (bloc d'ouverture, formule d'appel,
+// clôture, signature) étaient sautées sans avertissement -- alors même que
+// le texte EST une lettre personnelle. Un signal externe et flou n'a
+// jamais eu sa place dans une détection qui se veut "par nature formelle,
+// jamais par position/longueur" : les étapes 2/3 ci-dessous n'excluent déjà
+// QUE sur preuve structurelle trouvée dans le texte lui-même (une vraie
+// formule d'appel/de clôture reconnue) -- les rendre inconditionnelles
+// élimine cette dépendance fragile sans rien perdre en rigueur.
 function detecterLignesParatexte(lignes, estLettre) {
   const exclues = new Array(lignes.length).fill(false);
 
@@ -1190,9 +1205,13 @@ function detecterLignesParatexte(lignes, estLettre) {
     break;
   }
 
-  if (!estLettre) return exclues;
+  // 2) et 3) ci-dessous : plus jamais conditionnées par estLettre (cf.
+  // commentaire de tête de fonction) -- purement évidentielles, comme le
+  // reste de cette fonction : une formule d'appel/de clôture non trouvée
+  // n'exclut simplement rien, sans avoir besoin d'un signal externe pour le
+  // savoir à l'avance.
 
-  // 2) Lettre personnelle uniquement : bloc d'ouverture (identité de
+  // 2) Bloc d'ouverture (identité de
   // l'auteur, classe, établissement, adresse, date...) puis formule
   // d'appel. Le contenu du bloc d'identité est imprévisible par nature (nom
   // d'élève, nom d'établissement) -- jamais reconnaissable par un motif qui
@@ -1232,7 +1251,7 @@ function detecterLignesParatexte(lignes, estLettre) {
     }
   }
 
-  // 3) Lettre personnelle uniquement, en fin de texte : formule(s) de
+  // 3) En fin de texte : formule(s) de
   //    clôture + signature finale. La signature (nom seul, sans mot-clé)
   //    n'est exclue QUE si la ligne non vide juste avant contient déjà un
   //    mot-clé de clôture reconnu -- jamais une simple ligne courte isolée,
