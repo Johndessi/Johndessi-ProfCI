@@ -1085,7 +1085,15 @@ function texteSupportEstDejaNumerote(lignes) {
 // Filtres structurels de paratexte -- uniquement pour le cas NON numéroté.
 // Détection par nature formelle (motif reconnaissable), jamais par position
 // ou longueur de bloc.
-const REGEX_TITRE_NUMERO_TEXTE = /^(texte|document|lettre|extrait)\s*n[°ºo]?\s*\d+\s*[:.\-]?\s*$/i;
+// Le préfixe "n°/no/n" est FACULTATIF -- "Texte 1" (sans "n°") est une
+// formulation au moins aussi courante que "Texte n°1" chez les enseignants.
+// Bug réel trouvé en test (27/09, fiche 6e Fôhoundi) : le "n" était
+// obligatoire dans une version antérieure, donc "Texte 1" ne matchait
+// jamais -- la ligne de titre n'était alors pas exclue, ce qui arrêtait
+// aussitôt le balayage du bloc d'ouverture (cf. detecterLignesParatexte)
+// et empêchait TOUTES les exclusions suivantes (chapeau, en-tête,
+// formule d'appel, clôture) de s'appliquer, même quand elles auraient dû.
+const REGEX_TITRE_NUMERO_TEXTE = /^(texte|document|lettre|extrait)\s*(n[°ºo]?)?\s*\d+\s*[:.\-]?\s*$/i;
 const REGEX_DATE_LIEU_ENTETE = /^[A-ZÀ-Ý][^,]{1,40},\s*le\s+\d{1,2}(er)?\s+[a-zà-ÿ]+\s+\d{4}\s*\.?$/i;
 const REGEX_FORMULE_APPEL = /^(cher|ch[èe]re|chers|ch[èe]res|bonjour|salut|coucou)\s+[a-zà-ÿ][a-zà-ÿ\-']*\s*[,:]?\s*$/i;
 // Ligne de source/attribution isolée (universel, jamais réservé à la lettre) :
@@ -1283,11 +1291,16 @@ function ajouterReferencesLigneCitations(texteBrut, lignesNumerotees, options = 
     citationTrouvee = true;
     const interieur = citation.replace(/^[«"]\s*/, '').replace(/\s*[»"]$/, '');
     const numero = trouverNumeroLigneCitation(interieur, lignesNumerotees);
+    // Uniformise TOUJOURS en guillemets français, quel que soit le style
+    // d'origine (« » ou " ") -- constaté en test réel (27/09) : le modèle
+    // mélange les deux styles selon les cellules d'une même fiche. Seul
+    // point de génération des citations+référence, réutilisé par toutes
+    // les séances -- une seule normalisation ici couvre tout l'app.
     if (numero === null) {
       nonLocalisees.push(interieur);
-      return citation;
+      return `« ${interieur} »`;
     }
-    return `${citation} L${numero}`;
+    return `« ${interieur} » L${numero}`;
   });
   if (citationTrouvee) return { texte: resultat, nonLocalisees };
   // Filet "citation sans guillemets" (cf. ci-dessous) désactivé en mode
