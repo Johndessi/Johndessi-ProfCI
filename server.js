@@ -1251,7 +1251,9 @@ const REGEX_CITATION_GUILLEMETS = /(«\s*[^»]+?\s*»|"[^"]+?")(?:\s*\(\s*(?:l\.
 function ajouterReferencesLigneCitations(texte, lignesNumerotees) {
   if (!texte || !lignesNumerotees || !lignesNumerotees.length) return { texte, nonLocalisees: [] };
   const nonLocalisees = [];
+  let citationTrouvee = false;
   const resultat = texte.replace(REGEX_CITATION_GUILLEMETS, (match, citation) => {
+    citationTrouvee = true;
     const interieur = citation.replace(/^[«"]\s*/, '').replace(/\s*[»"]$/, '');
     const numero = trouverNumeroLigneCitation(interieur, lignesNumerotees);
     if (numero === null) {
@@ -1260,7 +1262,27 @@ function ajouterReferencesLigneCitations(texte, lignesNumerotees) {
     }
     return `${citation} L${numero}`;
   });
-  return { texte: resultat, nonLocalisees };
+  if (citationTrouvee) return { texte: resultat, nonLocalisees };
+
+  // Filet (27/09) : constaté en test réel -- malgré la consigne explicite
+  // ("entre guillemets"), le modèle peut écrire l'indice textuel SANS
+  // guillemets ("Je t'écris" au lieu de « Je t'écris »). Plutôt que de ne
+  // rien faire silencieusement, on tente de localiser le texte ENTIER de
+  // l'entrée comme une citation unique -- si trouvé sur une seule ligne, la
+  // référence est ajoutée en fin de texte ; sinon, signalé comme non
+  // localisé (jamais un numéro deviné, même dans ce cas de repli). Borné à
+  // un texte court (≤120 caractères) : au-delà, ce n'est manifestement plus
+  // une citation isolée mais un commentaire/une analyse (ex. le contenu
+  // entier d'une cellule "Repérage" lycée), qu'il serait absurde de chercher
+  // comme une seule citation verbatim.
+  const texteTrim = texte.trim();
+  if (texteTrim.length > 120) return { texte, nonLocalisees };
+  const numeroSansGuillemets = trouverNumeroLigneCitation(texteTrim, lignesNumerotees);
+  if (numeroSansGuillemets === null) {
+    nonLocalisees.push(texteTrim);
+    return { texte, nonLocalisees };
+  }
+  return { texte: `${texte} L${numeroSansGuillemets}`, nonLocalisees };
 }
 
 // Rendu HTML numéroté du texte support (cas NON déjà numéroté uniquement --
