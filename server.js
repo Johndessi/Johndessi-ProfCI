@@ -2649,7 +2649,7 @@ function construireInstructionsLectureMethodique(referentiel, classe) {
   // sa propre ligne ÉVALUATION (cf. instructions ci-dessous et
   // injecterDeroulementPlanEnseignant).
   const injectionEvaluation = entreeReservee
-    ? construireConsigneEvaluationReservee(entreeReservee.indicesTexteOuJeton)
+    ? construireConsigneEvaluationReservee(entreeReservee)
     : null;
 
   const instructions = `
@@ -3226,30 +3226,57 @@ const JETON_PRESENTATION_RECOMPOSEE = '@@PRESENTATION_RECOMPOSEE@@';
 
 // Construit la consigne d'évaluation à partir de l'entrée réservée (TOUJOURS
 // Axe 2/Entrée 2, jamais une autre -- règle D, cf. skill section 6, confirmé
-// dans le corpus Lect_meth_7_Le_spect_Koteba). Ne révèle QUE les indices
-// textuels (citations, le "repérage") -- jamais le nom, l'analyse ni
-// l'interprétation, que l'élève doit retrouver SEUL. Repli explicite (jamais
-// silencieux) si le contenu fourni par l'enseignant pour cette entrée n'est
-// pas structuré (aucune citation sûre à réutiliser).
+// dans le corpus Lect_meth_7_Le_spect_Koteba). La partie VISIBLE PAR L'ÉLÈVE
+// ne révèle QUE les indices textuels (citations, le "repérage") -- jamais le
+// nom, l'analyse ni l'interprétation, que l'élève doit retrouver SEUL.
+// Repli explicite (jamais silencieux) si le contenu fourni par l'enseignant
+// pour cette entrée n'est pas structuré (aucune citation sûre à réutiliser).
+//
+// Corrigé enseignant (27/09, correctif structurel) : le nom de l'entrée
+// (toujours connu à l'avance, cf. nomFixe) et les jetons d'analyse/
+// interprétation existaient déjà -- le modèle les génère bel et bien (mêmes
+// champsAGenerer que les 3 autres entrées) -- mais n'étaient jusqu'ici jamais
+// placés nulle part dans le document : la valeur extraite était calculée
+// puis silencieusement jetée (contrairement aux 3 premières entrées, qui
+// affichent directement leur analyse/interprétation dans le tableau).
+// nomEntree/analyseJeton/interpretationJeton exposent maintenant ce qui est
+// disponible, pour que construireConsigneEvaluationReservee puisse produire
+// un corrigé complet -- absent (null) uniquement quand rien n'est
+// disponible de façon fiable (repli sur contenu non structuré ci-dessous).
 function construireEntreeReserveeEvaluation(numero, titre, niveau, slotReserve) {
   if (slotReserve.indicesConnues !== null) {
-    return { indicesTexteOuJeton: slotReserve.indicesConnues, tache: null, avertissement: null };
+    return { indicesTexteOuJeton: slotReserve.indicesConnues, nomEntree: null, analyseJeton: null, interpretationJeton: null, tache: null, avertissement: null };
   }
   if (slotReserve.tache) {
-    return { indicesTexteOuJeton: `@@${slotReserve.tache.id}_IND@@`, tache: slotReserve.tache, avertissement: null };
+    const t = slotReserve.tache;
+    return {
+      indicesTexteOuJeton: `@@${t.id}_IND@@`,
+      nomEntree: t.nomFixe,
+      analyseJeton: `@@${t.id}_ANA@@`,
+      interpretationJeton: `@@${t.id}_INT@@`,
+      tache: t,
+      avertissement: null
+    };
   }
   const t = { id: `A${numero}E${slotReserve.slot}RES`, nomFixe: null, champsAGenerer: ['indices'], axeNumero: numero, axeTitre: titre, niveau };
   const brut = slotReserve.brut || '';
   const brutTronque = brut.length > 100 ? brut.slice(0, 100) + '...' : brut;
   return {
     indicesTexteOuJeton: `@@${t.id}_IND@@`,
+    nomEntree: null,
+    analyseJeton: null,
+    interpretationJeton: null,
     tache: t,
     avertissement: `Axe ${numero} (« ${titre} »), entrée réservée à l'évaluation : le contenu fourni ("${brutTronque}") n'a pas pu être reconnu comme une entrée structurée -- un repérage a été généré automatiquement à la place pour l'évaluation. Vérifiez si ce contenu doit être réintégré ailleurs dans le plan.`
   };
 }
 
-function construireConsigneEvaluationReservee(indicesTexteOuJeton) {
-  return `<p>Le professeur propose aux élèves de retrouver seuls, sur le même texte support, la dernière entrée de vérification (non travaillée en classe). Il leur soumet le repérage suivant : ${indicesTexteOuJeton}</p><p>Consignes : 1) Nomme et justifie l'emploi de ce procédé. 2) Interprète-le : quel effet produit-il ? 3) Détermine l'entrée correspondante.</p>`;
+function construireConsigneEvaluationReservee(entreeReservee) {
+  const { indicesTexteOuJeton, nomEntree, analyseJeton, interpretationJeton } = entreeReservee;
+  const corrige = (nomEntree && analyseJeton && interpretationJeton)
+    ? `<p><strong>Corrigé (pour l'enseignant -- à ne pas communiquer aux élèves avant l'exercice) :</strong> Entrée : ${nomEntree}. Analyse : ${analyseJeton}. Interprétation : ${interpretationJeton}</p>`
+    : '';
+  return `<p>Le professeur propose aux élèves de retrouver seuls, sur le même texte support, la dernière entrée de vérification (non travaillée en classe). Il leur soumet le repérage suivant : ${indicesTexteOuJeton}</p><p>Consignes : 1) Nomme et justifie l'emploi de ce procédé. 2) Interprète-le : quel effet produit-il ? 3) Détermine l'entrée correspondante.</p>${corrige}`;
 }
 
 // Mode automatique (Mode 1, titre seul, sans plan enseignant) -- amène ce
@@ -3356,7 +3383,7 @@ function construireDeroulementPlanEnseignantHTML(segments, niveau, referentiel, 
   // jamais à sa place (aucun contenu de l'enseignant n'est perdu).
   const consigneEnseignant = segments.evaluation || situationEvaluation || '';
   const evaluationEffective = [
-    entreeReservee ? construireConsigneEvaluationReservee(entreeReservee.indicesTexteOuJeton) : '',
+    entreeReservee ? construireConsigneEvaluationReservee(entreeReservee) : '',
     consigneEnseignant ? texteSupportVersHtml(consigneEnseignant) : ''
   ].filter(Boolean).join('\n');
 
