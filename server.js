@@ -8242,15 +8242,26 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // jeton), AVANT résolution dans les tableaux -- jamais un numéro
         // inventé, une citation non localisée est simplement laissée telle
         // quelle et signalée plus bas.
+        // Garde-fou (28/09) : une exception ici, avant la résolution des
+        // marqueurs {{...}} juste en dessous (resoudreCompletionsEntrees),
+        // laisserait TOUS les marqueurs {{TEXTE_SUPPORT}}/{{AXES_PLAN_ENSEIGNANT}}/
+        // {{DEROULEMENT_PLAN_ENSEIGNANT}} et les jetons {{ID_IND}} internes non
+        // résolus dans le document final -- jamais un plantage silencieux de
+        // cette seule augmentation ne doit dégrader tout le document.
         if (lignesNumereesLM) {
-          planFourniInjection.tachesCompletion.forEach((t) => {
-            if (!t.champsAGenerer.includes('indices')) return;
-            const cle = `${t.id}_indices`;
-            if (!valeurs[cle]) return;
-            const { texte, nonLocalisees } = ajouterReferencesLigneCitations(valeurs[cle], lignesNumereesLM);
-            valeurs[cle] = texte;
-            if (nonLocalisees.length) citationsNonLocaliseesLM.push(...nonLocalisees);
-          });
+          try {
+            planFourniInjection.tachesCompletion.forEach((t) => {
+              if (!t.champsAGenerer.includes('indices')) return;
+              const cle = `${t.id}_indices`;
+              if (!valeurs[cle]) return;
+              const { texte, nonLocalisees } = ajouterReferencesLigneCitations(valeurs[cle], lignesNumereesLM);
+              valeurs[cle] = texte;
+              if (nonLocalisees.length) citationsNonLocaliseesLM.push(...nonLocalisees);
+            });
+          } catch (erreurReferencesLigne) {
+            console.error('❌ Erreur ajout référence de ligne (complétion entrées):', erreurReferencesLigne.message);
+            res.write(`data: ${JSON.stringify({ avertissement: "La référence de ligne n'a pas pu être calculée pour certaines citations générées automatiquement -- vérifiez/ajoutez-les manuellement." })}\n\n`);
+          }
         }
         const resDeroulement = resoudreCompletionsEntrees(planFourniInjection.injectionDeroulement, planFourniInjection.tachesCompletion, valeurs);
         const resAxes = resoudreCompletionsEntrees(planFourniInjection.injectionAxes, planFourniInjection.tachesCompletion, valeurs);
