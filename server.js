@@ -1234,21 +1234,31 @@ function trouverNumeroLigneCitation(citation, lignesNumerotees) {
 // Repère chaque citation entre guillemets français ou droits dans `texte` et
 // lui ajoute sa référence de ligne ("L<n>") juste après le guillemet
 // fermant. N'invente JAMAIS un numéro : une citation non localisée reste
-// inchangée et son texte est renvoyé dans `nonLocalisees` pour avertissement
-// explicite à l'enseignant.
-const REGEX_CITATION_GUILLEMETS = /(«\s*[^»]+?\s*»|"[^"]+?")/g;
+// SANS référence -- jamais un numéro deviné -- et son texte est renvoyé dans
+// `nonLocalisees` pour avertissement explicite à l'enseignant.
+//
+// Constaté en test réel (27/09) : malgré aucune consigne en ce sens, le
+// modèle peut ajouter LUI-MÊME une référence approximative juste après la
+// citation ("(l. 3)", "(ligne 4)", "(v. 2)"...) -- un numéro qu'il ne compte
+// pas plus fiablement qu'ailleurs (cf. justification en tête de section).
+// Une référence non vérifiée par le modèle est retirée SYSTÉMATIQUEMENT,
+// qu'on parvienne ou non à la remplacer par la nôtre -- jamais conservée à
+// titre indicatif, jamais affichée à côté de la référence calculée (qui
+// peut la contredire, cf. « Je t'écris cette lettre » L1 (l. 3) observé en
+// test réel avant ce correctif).
+const REGEX_CITATION_GUILLEMETS = /(«\s*[^»]+?\s*»|"[^"]+?")(?:\s*\(\s*(?:l\.?|ligne|v\.?|vers)\s*\d+\s*\))?/gi;
 
 function ajouterReferencesLigneCitations(texte, lignesNumerotees) {
   if (!texte || !lignesNumerotees || !lignesNumerotees.length) return { texte, nonLocalisees: [] };
   const nonLocalisees = [];
-  const resultat = texte.replace(REGEX_CITATION_GUILLEMETS, (match) => {
-    const interieur = match.replace(/^[«"]\s*/, '').replace(/\s*[»"]$/, '');
+  const resultat = texte.replace(REGEX_CITATION_GUILLEMETS, (match, citation) => {
+    const interieur = citation.replace(/^[«"]\s*/, '').replace(/\s*[»"]$/, '');
     const numero = trouverNumeroLigneCitation(interieur, lignesNumerotees);
     if (numero === null) {
       nonLocalisees.push(interieur);
-      return match;
+      return citation;
     }
-    return `${match} L${numero}`;
+    return `${citation} L${numero}`;
   });
   return { texte: resultat, nonLocalisees };
 }
@@ -3485,6 +3495,7 @@ function construireConsigneCompletionEntrees(taches) {
   return `
 
 COMPLÉTION AUTOMATIQUE D'ENTRÉES DU TABLEAU DE VÉRIFICATION (exception étroite à la règle "jamais inventer" ci-dessus, limitée STRICTEMENT à ce qui suit) : l'enseignant n'a pas détaillé certaines entrées de son plan. Pour CHACUNE listées ci-dessous, génère UNIQUEMENT à partir du texte support fourni (jamais d'autre source, jamais de connaissance générale sur le genre, jamais de fait inventé) le contenu demandé. ${rolesTexte}${consigneNiveauLangage}
+POUR LES INDICES TEXTUELS/RELEVÉS UNIQUEMENT : n'ajoute JAMAIS toi-même une référence de ligne, de vers ou de paragraphe à une citation (interdits : "(l. 3)", "(ligne 4)", "(v. 2)", "(vers 5)"...) -- tu ne comptes pas les lignes de façon fiable, cette référence est ajoutée automatiquement par l'application à partir du texte support réel. Écris uniquement la citation elle-même, entre guillemets, jamais suivie d'un numéro de ton cru.
 ${consignesEntrees}
 Place chaque élément, et UNIQUEMENT lui, entre ses 2 marqueurs dédiés, N'IMPORTE OÙ dans ta réponse (par exemple juste avant {{AXES_PLAN_ENSEIGNANT}}) -- ces marqueurs et leur contenu seront extraits puis retirés du document final, ils ne doivent apparaître nulle part ailleurs. N'écris PAS toi-même les lignes du tableau d'axes concernées : elles sont déjà construites, seuls ces éléments précis sont attendus de toi, un élément par marqueur, jamais une énumération libre ni un tableau complet.`;
 }
@@ -6156,7 +6167,7 @@ I. PRÉSENTATION DU TEXTE : en Activités de l'enseignant/des élèves, question
 II. HYPOTHÈSE GÉNÉRALE -- en Traces écrites : reprends l'hypothèse de lecture EXACTEMENT comme rédigée par l'enseignant, sans reformulation ni ajout.
 
 III. VÉRIFICATION DE L'HYPOTHÈSE -- en Traces écrites de cette ligne III, le libellé des axes fournis par l'enseignant (ex. "Axe 1 : ... / Axe 2 : ...", parfois plus de 2 axes -- reproduis exactement le nombre d'axes que l'enseignant a fournis, jamais un nombre fixe imposé). JUSTE APRÈS le tableau DÉROULEMENT complet (donc après son </table>, jamais à l'intérieur d'une cellule), pour CHAQUE axe fourni par l'enseignant, construis un tableau séparé à 4 colonnes intitulées EXACTEMENT « Entrée | Repérage | Analyse | Interprétation » (jamais "Indices textuels" : c'est la terminologie du collège, pas celle du second cycle) -- une ligne par entrée fournie par l'enseignant pour cet axe (2 à 4 entrées par axe selon ce que l'enseignant a fourni, jamais un nombre imposé, jamais une entrée de ton cru : les noms d'entrées comme "Structure du texte", "Le lexique", "Les figures de style"... sont LIBREMENT choisis par l'enseignant selon le texte, pas une liste fixe).
-   RÈGLE ABSOLUE ANTI-INVENTION : toute citation placée dans la colonne « Repérage » doit être recopiée MOT POUR MOT ${sourceRepérage} -- jamais reformulée, jamais complétée, jamais inventée. Si l'enseignant n'a fourni ni entrée ni citation exacte pour un point de son plan, écris "à compléter par l'enseignant" dans la case correspondante plutôt que d'inventer un contenu absent.
+   RÈGLE ABSOLUE ANTI-INVENTION : toute citation placée dans la colonne « Repérage » doit être recopiée MOT POUR MOT ${sourceRepérage} -- jamais reformulée, jamais complétée, jamais inventée. Si l'enseignant n'a fourni ni entrée ni citation exacte pour un point de son plan, écris "à compléter par l'enseignant" dans la case correspondante plutôt que d'inventer un contenu absent. N'ajoute JAMAIS toi-même, après une citation de cette colonne, une référence de ligne ou de vers (interdits : "(l. 3)", "(ligne 4)", "(v. 2)") -- tu ne comptes pas les lignes de façon fiable ; l'application ajoute cette référence automatiquement à partir du texte support réel. Écris uniquement la citation entre guillemets, jamais suivie d'un numéro de ton cru.
    N'AJOUTE NI NE RETIRE aucun axe, aucune entrée, aucune analyse ou interprétation par rapport à ce que l'enseignant a rédigé -- ta seule tâche ici est la mise en forme et la correction orthographique/grammaticale, jamais l'ajout d'une catégorie d'analyse de ton cru.
    CETTE INTERDICTION NE SE LIMITE PAS À LA COLONNE « REPÉRAGE » : elle couvre TOUT le texte libre que tu rédiges toi-même pour cette ligne III (les questions/réponses en Activités de l'enseignant/des élèves qui amènent la découverte des axes, tout commentaire ou reformulation en Traces écrites). Dans ce texte libre, n'affirme et ne sous-entends JAMAIS un fait, un détail, une citation ou une interprétation sur le contenu du texte étudié qui ne figure pas déjà, mot pour mot, dans le plan de l'enseignant (axes, entrées, repérages, analyses, interprétations fournis) -- questionne uniquement sur ce que le plan contient déjà, jamais sur un élément du texte que tu crois connaître par ailleurs, même à titre d'exemple ou de reformulation "évidente".
 
