@@ -1247,12 +1247,30 @@ function trouverNumeroLigneCitation(citation, lignesNumerotees) {
 // peut la contredire, cf. « Je t'écris cette lettre » L1 (l. 3) observé en
 // test réel avant ce correctif).
 const REGEX_CITATION_GUILLEMETS = /(«\s*[^»]+?\s*»|"[^"]+?")(?:\s*\(\s*(?:l\.?|ligne|v\.?|vers)\s*\d+\s*\))?/gi;
+// Variante guillemets français UNIQUEMENT (jamais les guillemets droits) --
+// requise pour tout balayage de HTML brut plutôt que d'un champ isolé (ex.
+// Résumé de texte, cf. plus bas) : le HTML contient des attributs entre
+// guillemets droits (style="...") qui seraient sinon pris à tort pour des
+// citations, produisant un flot de faux avertissements "non localisée".
+const REGEX_CITATION_GUILLEMETS_SEULS = /(«\s*[^»]+?\s*»)(?:\s*\(\s*(?:l\.?|ligne|v\.?|vers)\s*\d+\s*\))?/gi;
 
-function ajouterReferencesLigneCitations(texte, lignesNumerotees) {
+// Constaté en test réel (Résumé de texte, 27/09) : certaines consignes
+// demandaient EXPLICITEMENT au modèle de citer une PLAGE de lignes de son
+// cru ("L1-L3") -- corrigé dans les prompts concernés, mais retiré ici aussi
+// en filet, où que la plage apparaisse dans le texte (pas seulement collée à
+// une citation) : "L1-L3", "(lignes 4 à 6)", "l. 2-5"... Une plage a TOUJOURS
+// un second nombre (tiret ou "à") -- jamais confondue avec notre propre
+// référence "L2" (nombre unique, jamais retirée par ce filet).
+const REGEX_PLAGE_LIGNES_MODELE = /\s*\(?\s*(?:l\.?|lignes?|v\.?|vers)\s*\d+\s*(?:-|à)\s*(?:l\.?\s*)?\d+\s*\)?/gi;
+
+function ajouterReferencesLigneCitations(texteBrut, lignesNumerotees, options = {}) {
+  const guillemetsSeuls = !!options.guillemetsSeuls;
+  const texte = (texteBrut || '').replace(REGEX_PLAGE_LIGNES_MODELE, '');
   if (!texte || !lignesNumerotees || !lignesNumerotees.length) return { texte, nonLocalisees: [] };
   const nonLocalisees = [];
   let citationTrouvee = false;
-  const resultat = texte.replace(REGEX_CITATION_GUILLEMETS, (match, citation) => {
+  const regex = guillemetsSeuls ? REGEX_CITATION_GUILLEMETS_SEULS : REGEX_CITATION_GUILLEMETS;
+  const resultat = texte.replace(regex, (match, citation) => {
     citationTrouvee = true;
     const interieur = citation.replace(/^[«"]\s*/, '').replace(/\s*[»"]$/, '');
     const numero = trouverNumeroLigneCitation(interieur, lignesNumerotees);
@@ -1263,6 +1281,12 @@ function ajouterReferencesLigneCitations(texte, lignesNumerotees) {
     return `${citation} L${numero}`;
   });
   if (citationTrouvee) return { texte: resultat, nonLocalisees };
+  // Filet "citation sans guillemets" (cf. ci-dessous) désactivé en mode
+  // guillemetsSeuls (balayage de HTML brut) : un fragment HTML court sans
+  // guillemets n'a aucune raison d'être traité comme une citation candidate
+  // -- seul un champ isolé, connu pour être une entrée de citation dédiée
+  // (Lecture méthodique/Exploitation de texte), justifie ce repli.
+  if (guillemetsSeuls) return { texte, nonLocalisees };
 
   // Filet (27/09) : constaté en test réel -- malgré la consigne explicite
   // ("entre guillemets"), le modèle peut écrire l'indice textuel SANS
@@ -1351,6 +1375,44 @@ function ajouterReferencesLigneTableauxAxesLycee(contenuHTML, lignesNumerotees) 
         fin: ligneMatch.index + debutContenu + cellule[1].length,
         texte: contenuModifie
       });
+    });
+
+    if (!remplacements.length) return tableHTML;
+    remplacements.sort((a, b) => b.debut - a.debut);
+    let resultat = tableHTML;
+    remplacements.forEach((r) => {
+      resultat = resultat.slice(0, r.debut) + r.texte + resultat.slice(r.fin);
+    });
+    return resultat;
+  });
+  return { html, nonLocalisees: [...new Set(nonLocalisees)] };
+}
+
+// Variante générique de la fonction précédente (27/09) : pour les activités
+// où le modèle cite le texte support dans du texte libre SANS colonne dédiée
+// à repérer (ex. Résumé de texte, étape "Découpage en paragraphes", écrite
+// dans une cellule ordinaire du tableau 5 colonnes) -- balaie TOUTES les
+// cellules <td> du tableau DÉROULEMENT (repéré par son en-tête "Moments
+// didactiques", jamais par position), plutôt qu'une seule colonne nommée.
+// Guillemets français UNIQUEMENT (jamais les guillemets droits, qui
+// délimitent les attributs HTML alentour -- cf. REGEX_CITATION_GUILLEMETS_SEULS).
+function ajouterReferencesLigneTableauDeveloppement(contenuHTML, lignesNumerotees) {
+  if (!contenuHTML || !lignesNumerotees || !lignesNumerotees.length) return { html: contenuHTML, nonLocalisees: [] };
+  const nonLocalisees = [];
+  const regexTable = /<table\b[^>]*>[\s\S]*?<\/table>/gi;
+  const html = contenuHTML.replace(regexTable, (tableHTML) => {
+    if (!/Moments didactiques/i.test(tableHTML)) return tableHTML;
+    const cellulesMatch = [...tableHTML.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)];
+    if (!cellulesMatch.length) return tableHTML;
+
+    const remplacements = [];
+    cellulesMatch.forEach((cellule) => {
+      const { texte: contenuModifie, nonLocalisees: nl } = ajouterReferencesLigneCitations(cellule[1], lignesNumerotees, { guillemetsSeuls: true });
+      nonLocalisees.push(...nl);
+      if (contenuModifie === cellule[1]) return;
+      const debutTd = cellule.index;
+      const debutContenu = tableHTML.indexOf('>', debutTd) + 1;
+      remplacements.push({ debut: debutContenu, fin: debutContenu + cellule[1].length, texte: contenuModifie });
     });
 
     if (!remplacements.length) return tableHTML;
@@ -3983,7 +4045,7 @@ I. DÉFINITION — définis le résumé de texte (l'exercice lui-même : réduir
 II. ANALYSE DU TEXTE-SUPPORT ET ÉTAPES DU RÉSUMÉ :
    1. Identification du thème du texte.
    2. Identification de ${type === 'argumentatif' ? 'la thèse défendue par l\'auteur' : 'idée principale/l\'information essentielle du texte'}.
-   3. Découpage du texte en paragraphes : pour CHAQUE paragraphe, cite les lignes concernées (ex. "L1-L3") et une citation EXACTE du texte support (jamais inventée), puis sélectionne l'idée essentielle correspondante.
+   3. Découpage du texte en paragraphes : pour CHAQUE paragraphe, une citation EXACTE du texte support entre guillemets français « » (jamais inventée, jamais entre guillemets simples), puis sélectionne l'idée essentielle correspondante. N'indique JAMAIS toi-même un numéro de ligne ou une plage de lignes (interdits : "L1-L3", "(l. 2)", "lignes 4 à 6") : tu ne comptes pas les lignes de façon fiable -- l'application ajoute automatiquement, après chaque citation, sa référence de ligne réelle calculée sur le texte support exact.
 
 III. OUTILS DE LA LANGUE — pour résumer un ${donnees.typeSourceLabel}, les outils appropriés sont IMPOSÉS par le référentiel ci-dessous (reprends EXACTEMENT ces catégories, ni plus ni moins) :
 ${outilsTexte}
@@ -8243,6 +8305,33 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         const contientArtefactSuspect = (texte) => /\{\{[A-Z_]+\}\}|<table|<tr[\s>]|<td[\s>]/i.test(texte || '');
         if (contientArtefactSuspect(texteSupport)) {
           avertissementsResume.push("Le texte support extrait contient des éléments qui ne devraient pas s'y trouver (marqueur ou balise de tableau) -- l'extraction a probablement capturé du contenu en trop, ce qui fausserait le calibrage. Vérifiez le texte support imprimé et régénérez si besoin.");
+        }
+
+        // Référence de ligne (27/09, Point 5) : le texte support est
+        // maintenant définitif (tous les filets ci-dessus appliqués) --
+        // calculée ici, jamais par le modèle (l'ancienne consigne lui
+        // demandant de citer lui-même "L1-L3" a été retirée du prompt, cf.
+        // construireInstructionsResume). Résumé n'a pas de notion de lettre
+        // personnelle (texte informatif/argumentatif uniquement) : estLettre
+        // toujours faux. Balayage du tableau DÉROULEMENT entier (pas de
+        // colonne "Repérage" dédiée ici, contrairement à la Lecture
+        // méthodique) via ajouterReferencesLigneTableauDeveloppement, AVANT
+        // l'injection du texte support réel (encore un marqueur littéral à
+        // ce stade) pour ne jamais toucher son propre contenu.
+        if (texteSupport) {
+          const resultatNumerotationResume = construireLignesNumerotees(texteSupport, false);
+          lignesNumereesLM = resultatNumerotationResume.lignesNumerotees;
+          dejaNumeroteLM = resultatNumerotationResume.dejaNumerote;
+          const resultatReferencesResume = ajouterReferencesLigneTableauDeveloppement(contenuHTML, lignesNumereesLM);
+          contenuHTML = resultatReferencesResume.html;
+          if (resultatReferencesResume.nonLocalisees.length) {
+            // Émis directement ici (plutôt que via citationsNonLocaliseesLM,
+            // déjà vérifié et vidé plus haut dans la route à ce stade pour la
+            // Lecture méthodique/Exploitation de texte -- un ajout tardif n'y
+            // serait jamais lu) : même message, même format.
+            const listeCitationsResume = [...new Set(resultatReferencesResume.nonLocalisees)].map((c) => `« ${c} »`).join(', ');
+            avertissementsResume.push(`Référence de ligne non trouvée automatiquement pour ${resultatReferencesResume.nonLocalisees.length > 1 ? 'les citations suivantes' : 'la citation suivante'} : ${listeCitationsResume} -- vérifiez/ajoutez la référence de ligne manuellement.`);
+          }
         }
 
         // Le texte de l'Évaluation vient soit d'un texte NOUVEAU rédigé par le
