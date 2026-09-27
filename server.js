@@ -1088,6 +1088,15 @@ function texteSupportEstDejaNumerote(lignes) {
 const REGEX_TITRE_NUMERO_TEXTE = /^(texte|document|lettre|extrait)\s*n[°ºo]?\s*\d+\s*[:.\-]?\s*$/i;
 const REGEX_DATE_LIEU_ENTETE = /^[A-ZÀ-Ý][^,]{1,40},\s*le\s+\d{1,2}(er)?\s+[a-zà-ÿ]+\s+\d{4}\s*\.?$/i;
 const REGEX_FORMULE_APPEL = /^(cher|ch[èe]re|chers|ch[èe]res|bonjour|salut|coucou)\s+[a-zà-ÿ][a-zà-ÿ\-']*\s*[,:]?\s*$/i;
+// Ligne de source/attribution isolée (universel, jamais réservé à la lettre) :
+// constaté en test réel (Résumé de texte 4e, 27/09) -- une ligne "Source :
+// Manuel de français 4e, ..." placée juste après le titre était numérotée
+// comme corps du texte, décalant toute la numérotation. Ancré sur un
+// marqueur bibliographique explicite suivi immédiatement de ':' -- jamais
+// une simple occurrence du mot ailleurs dans une phrase du corps (ex.
+// "D'après les experts, ..." sans ':' n'est PAS ce motif) -- reconnaissance
+// par nature formelle, jamais par position/longueur de bloc.
+const REGEX_LIGNE_SOURCE_ATTRIBUTION = /^\s*(source|extrait de|tir[ée] de)\s*:/i;
 
 // Non exhaustif : formules de clôture les plus courantes dans une lettre
 // personnelle niveau collège -- une formule absente de cette liste reste
@@ -1130,7 +1139,7 @@ function detecterLignesParatexte(lignes, estLettre) {
   while (i < lignes.length) {
     const l = lignes[i].trim();
     if (!l) { i++; continue; }
-    if (REGEX_TITRE_NUMERO_TEXTE.test(l) || ligneEstChapeauEntreParentheses(l)) {
+    if (REGEX_TITRE_NUMERO_TEXTE.test(l) || ligneEstChapeauEntreParentheses(l) || REGEX_LIGNE_SOURCE_ATTRIBUTION.test(l)) {
       exclues[i] = true;
       i++;
       continue;
@@ -1388,12 +1397,24 @@ function ajouterReferencesLigneTableauxAxesLycee(contenuHTML, lignesNumerotees) 
   return { html, nonLocalisees: [...new Set(nonLocalisees)] };
 }
 
-// Variante générique de la fonction précédente (27/09) : pour les activités
-// où le modèle cite le texte support dans du texte libre SANS colonne dédiée
-// à repérer (ex. Résumé de texte, étape "Découpage en paragraphes", écrite
-// dans une cellule ordinaire du tableau 5 colonnes) -- balaie TOUTES les
-// cellules <td> du tableau DÉROULEMENT (repéré par son en-tête "Moments
-// didactiques", jamais par position), plutôt qu'une seule colonne nommée.
+// Variante de la fonction précédente pour les activités où le modèle cite le
+// texte support dans du texte libre SANS colonne "Repérage" dédiée (ex.
+// Résumé de texte, étape "Découpage en paragraphes"). MÊME technique que
+// ci-dessus (repérage de la colonne par en-tête, jamais par position) --
+// mais colonne cible "Traces écrites" plutôt que "Repérage/Indices textuels".
+//
+// Corrigé suite à un test réel (Résumé de texte 4e, 27/09) : une première
+// version balayait TOUTES les cellules <td> du tableau (y compris "Activités
+// de l'enseignant"/"Activités des élèves", qui n'ont aucune colonne dédiée
+// aux citations et contiennent surtout du dialogue pédagogique entre
+// guillemets -- questions, réponses attendues, propositions d'élèves). Cela
+// produisait un avertissement "non localisée" pour chaque réplique du
+// dialogue, noyant les vraies citations sous des dizaines de faux positifs.
+// Seule la colonne "Traces écrites" (ce que l'élève conserve par écrit,
+// notamment le découpage en paragraphes cités) porte réellement des
+// citations du texte support -- restreindre le balayage à cette colonne
+// élimine le bruit sans introduire de nouvelle heuristique de détection de
+// paratexte (celle-ci reste inchangée).
 // Guillemets français UNIQUEMENT (jamais les guillemets droits, qui
 // délimitent les attributs HTML alentour -- cf. REGEX_CITATION_GUILLEMETS_SEULS).
 function ajouterReferencesLigneTableauDeveloppement(contenuHTML, lignesNumerotees) {
@@ -1401,18 +1422,28 @@ function ajouterReferencesLigneTableauDeveloppement(contenuHTML, lignesNumerotee
   const nonLocalisees = [];
   const regexTable = /<table\b[^>]*>[\s\S]*?<\/table>/gi;
   const html = contenuHTML.replace(regexTable, (tableHTML) => {
-    if (!/Moments didactiques/i.test(tableHTML)) return tableHTML;
-    const cellulesMatch = [...tableHTML.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)];
-    if (!cellulesMatch.length) return tableHTML;
+    const lignesMatch = [...tableHTML.matchAll(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi)];
+    if (lignesMatch.length < 2) return tableHTML;
+    const enTetes = [...lignesMatch[0][0].matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi)].map((m) => m[1].replace(/<[^>]+>/g, '').trim());
+    const indexTraces = enTetes.findIndex((e) => /traces?\s+[ée]crites?/i.test(e));
+    if (indexTraces === -1) return tableHTML;
 
     const remplacements = [];
-    cellulesMatch.forEach((cellule) => {
+    lignesMatch.slice(1).forEach((ligneMatch) => {
+      const ligneHTML = ligneMatch[0];
+      const cellulesMatch = [...ligneHTML.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)];
+      const cellule = cellulesMatch[indexTraces];
+      if (!cellule) return;
       const { texte: contenuModifie, nonLocalisees: nl } = ajouterReferencesLigneCitations(cellule[1], lignesNumerotees, { guillemetsSeuls: true });
       nonLocalisees.push(...nl);
       if (contenuModifie === cellule[1]) return;
       const debutTd = cellule.index;
-      const debutContenu = tableHTML.indexOf('>', debutTd) + 1;
-      remplacements.push({ debut: debutContenu, fin: debutContenu + cellule[1].length, texte: contenuModifie });
+      const debutContenu = ligneHTML.indexOf('>', debutTd) + 1;
+      remplacements.push({
+        debut: ligneMatch.index + debutContenu,
+        fin: ligneMatch.index + debutContenu + cellule[1].length,
+        texte: contenuModifie
+      });
     });
 
     if (!remplacements.length) return tableHTML;
