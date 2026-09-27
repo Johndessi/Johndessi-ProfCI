@@ -1917,12 +1917,34 @@ function injecterTexteSupport(contenuHTML, texteSupport, options = {}) {
   } else {
     // Le modèle a oublié le marqueur : insère une section dédiée juste avant le
     // tableau de déroulement (qui contient les questions), donc en fin de fiche
-    // mais avant la partie questions.
-    const section = `<div class="texte-support"><h3>${titreRepli}</h3>${texteAInserer}</div>\n`;
+    // mais avant la partie questions. La copie pour photocopie (si nécessaire)
+    // est construite ICI MÊME, directement accolée à cette section -- JAMAIS
+    // via le marqueur {{TEXTE_SUPPORT_COPIE}} générique plus bas (bug réel
+    // confirmé en test, fiche Ahoundjué 28/09) : quand {{TEXTE_SUPPORT}} est
+    // absent, le modèle peut malgré tout avoir laissé {{TEXTE_SUPPORT_COPIE}}
+    // n'importe où ailleurs dans sa réponse (les deux marqueurs sont présentés
+    // comme une paire dans ses instructions -- un modèle peut en oublier un
+    // sans oublier l'autre). Le traiter comme un marqueur normal aurait
+    // inséré une DEUXIÈME copie complète, intégralement numérotée, à un
+    // endroit totalement indépendant du premier -- avec tout ce que le
+    // modèle a écrit entre les deux (ex. la situation d'apprentissage) qui
+    // se retrouve visuellement coincé entre les deux copies.
+    const copieHtmlRepli = (!options.unePage && texteSupportDoitEtreDuplique(texteSupport))
+      ? `<div class="texte-support-copie" style="font-size:8px;line-height:1.3;border-top:1px dashed #999;margin-top:10px;padding-top:6px;">
+  <strong>Copie pour photocopie (2<sup>e</sup> exemplaire) :</strong>
+  ${texteHtml}
+</div>`
+      : '';
+    const section = `<div class="texte-support"><h3>${titreRepli}</h3>${texteAInserer}${copieHtmlRepli}</div>\n`;
     const derniereTable = contenuHTML.lastIndexOf('<table');
     resultat = derniereTable !== -1
       ? contenuHTML.slice(0, derniereTable) + section + contenuHTML.slice(derniereTable)
       : contenuHTML + section;
+    // Un {{TEXTE_SUPPORT_COPIE}} resté ailleurs dans la réponse du modèle
+    // (jamais utilisé ci-dessus) est simplement retiré, sans jamais y
+    // insérer de second contenu -- la décision de dupliquer vient d'être
+    // prise ci-dessus, une seule fois, au bon endroit.
+    resultat = resultat.split(marqueurCopie).join('');
   }
 
   if (options.unePage) {
