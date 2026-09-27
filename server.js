@@ -257,7 +257,16 @@ function collectRuns($, el, fmt = {}) {
   let runs = [];
   $(el).contents().each((_, child) => {
     if (child.type === 'text') {
-      const text = (child.data || '').replace(/\s+/g, ' ');
+      // Bug réel confirmé (test réel, texte "BP 145 Sikensi<TAB>Sikensi, le
+      // 15 juillet 2026.") : \s+ englobe la tabulation, qui était donc
+      // écrasée en un simple espace, perdant la mise en page du texte
+      // support recopié tel quel depuis un document numérique de
+      // l'enseignant. Les tabulations réelles ne sont PAS de l'indentation
+      // HTML source à ignorer -- la librairie docx les interprète nativement
+      // comme de vrais taquets de tabulation dans un TextRun (cf. sa propre
+      // doc : `new TextRun("Text\twith\ttabs")`). On ne collapse donc plus
+      // que les espaces/retours à la ligne, jamais les tabulations.
+      const text = (child.data || '').replace(/[ \n\r\f\v]+/g, ' ');
       if (text.trim() !== '' || text === ' ') {
         runs.push(new TextRun({ text, bold: fmt.bold, italics: fmt.italics, color: fmt.color, size: fmt.size }));
       }
