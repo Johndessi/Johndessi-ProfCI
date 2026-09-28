@@ -555,6 +555,17 @@ const FicheSchema = new mongoose.Schema({
   // /api/debug/dernieres-generations. À retirer une fois l'investigation
   // terminée (cf. TODO déposé avec ce champ).
   contenuBrutModele : { type: String, default: '' },
+  // Diagnostic temporaire (28/09, même investigation) : copie du texte
+  // support TEL QUE SAISI par l'enseignant (avant tout traitement). Absent
+  // jusqu'ici de ce schéma -- seule la réponse du modèle était captée, alors
+  // que la numérotation/exclusion de paratexte s'applique à CE texte-ci
+  // (construireLignesNumerotees(texteSupport, ...)), jamais à la réponse du
+  // modèle. Sans lui, impossible de confirmer sur preuve la présence de
+  // lignes vides entre les champs d'en-tête d'une lettre réelle (hypothèse
+  // de bug non vérifiable autrement que par inférence sur le rendu final,
+  // qui masque les lignes vides). À retirer avec contenuBrutModele une fois
+  // l'investigation terminée.
+  texteSupportBrut : { type: String, default: '' },
   createdAt    : { type: Date, default: Date.now }
 });
 
@@ -1236,9 +1247,12 @@ function detecterLignesParatexte(lignes, estLettre) {
   // et la formule d'appel, plus loin, n'était alors jamais atteinte.
   const FENETRE_BLOC_OUVERTURE_LETTRE = 8;
   let indexAppel = -1;
-  for (let k = i; k < Math.min(lignes.length, i + FENETRE_BLOC_OUVERTURE_LETTRE); k++) {
+  let nonBlancsExamines = 0;
+  for (let k = i; k < lignes.length && nonBlancsExamines < FENETRE_BLOC_OUVERTURE_LETTRE; k++) {
     const lk = lignes[k].trim();
-    if (lk && REGEX_FORMULE_APPEL.test(lk)) { indexAppel = k; break; }
+    if (!lk) continue; // ligne vide entre deux champs d'en-tête : ne consomme pas le budget de la fenêtre
+    nonBlancsExamines++;
+    if (REGEX_FORMULE_APPEL.test(lk)) { indexAppel = k; break; }
   }
   if (indexAppel !== -1) {
     for (let k = i; k <= indexAppel; k++) exclues[k] = true;
@@ -8743,6 +8757,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         approche: approcheNormalisee,
         contenu: contenuHTML,
         contenuBrutModele: contenuBrutPourDebug,
+        texteSupportBrut: texteSupport,
         origineGeneration: origineGenerationNormalisee
       });
       const payloadDone = { done: true, ficheId: fiche._id, contenuFinal: contenuHTML };
@@ -8822,7 +8837,7 @@ app.get('/api/admin/debug/dernieres-generations', (req, res, next) => {
     const fiches = await Fiche.find(filtre)
       .sort({ createdAt: -1 })
       .limit(n)
-      .select('_id classe lecon seance createdAt contenuBrutModele contenu');
+      .select('_id classe lecon seance createdAt contenuBrutModele texteSupportBrut contenu');
     res.json(fiches);
   } catch (e) {
     res.status(500).json({ error: e.message });
