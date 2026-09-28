@@ -4594,7 +4594,11 @@ function forcerDeveloppementExploitationAutoSiAbsent(contenuHTML, tableCompletHT
   });
 
   $cible.append(tableCompletHTML);
-  return $.html($cible);
+  // Bug réel confirmé (29/09) : cf. commentaire sur preparerHtmlPourPdf --
+  // ne jamais restreindre la sérialisation FINALE à .fiche-cours ($cible
+  // reste utilisé ci-dessus pour cibler où chercher/ajouter, seule la
+  // sérialisation de sortie doit couvrir tout le document.
+  return $.html($('body').length ? $('body') : $.root());
 }
 
 // Filet déterministe complémentaire (09/09) : même après le filet ci-dessus
@@ -4670,8 +4674,9 @@ function supprimerResidusLectureMethodiqueHorsDeroulement(contenuHTML) {
   });
 
   if (!modifie) return contenuHTML;
-  const $racine = $('.fiche-cours').first();
-  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+  // Bug réel confirmé (29/09) : cf. commentaire sur preparerHtmlPourPdf --
+  // ne jamais restreindre la sérialisation à .fiche-cours.
+  return $.html($('body').length ? $('body') : $.root());
 }
 
 // Filet STRUCTUREL (16/09, réécrit une 1ère fois le même jour) : constaté
@@ -4758,8 +4763,9 @@ function nettoyerFuiteApresTexteSupportExploitation(contenuHTML, texteSupportFin
   }
 
   if (!modifie) return contenuHTML;
-  const $racineFinale = $('.fiche-cours').first();
-  return $racineFinale.length ? $.html($racineFinale) : $.html($('body').length ? $('body') : $.root());
+  // Bug réel confirmé (29/09) : cf. commentaire sur preparerHtmlPourPdf --
+  // ne jamais restreindre la sérialisation à .fiche-cours.
+  return $.html($('body').length ? $('body') : $.root());
 }
 
 // Filet déterministe UNIVERSEL (12/09) : la cellule Traces écrites de la
