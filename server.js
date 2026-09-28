@@ -1252,12 +1252,27 @@ function detecterLignesParatexte(lignes, estLettre) {
   // paratexte final. Bug réel corrigé (27/09, fiche Fôhoundi) : un
   // paratexte final non reconnu empêchait le balayage arrière d'atteindre
   // la formule de clôture/signature, qui restait alors numérotée.
+  //
+  // Bug réel confirmé (28/09, même fiche, JSON de production
+  // 6aba1ce4cf14d9ad3b78f0be) : la toute dernière ligne non vide du texte
+  // support était "  d'analyser et d'interpréter les indices textuels afin
+  // de construire son sens." -- un fragment résiduel (collé/retapé en trop
+  // par l'enseignant, doublon partiel de la fin de la phrase de situation
+  // d'apprentissage juste avant). Ne correspondant à aucun motif reconnu,
+  // il arrêtait ce balayage arrière AVANT même d'atteindre la vraie ligne de
+  // situation d'apprentissage, qui restait alors numérotée avec la source et
+  // la signature derrière elle. Un fragment de ce type est reconnaissable
+  // PAR NATURE, jamais par position : une phrase/paragraphe réel commence
+  // toujours par une majuscule (ou un chiffre, une parenthèse, un
+  // guillemet) -- jamais par une minuscule, signe qu'il s'agit d'une suite
+  // de phrase tronquée, jamais d'un vrai début de paragraphe.
+  const REGEX_LIGNE_FRAGMENT_INACHEVE = /^[a-zà-ÿ]/;
   let j0 = lignes.length - 1;
   while (j0 >= 0 && !lignes[j0].trim()) j0--;
   while (j0 >= 0) {
     const l = lignes[j0].trim();
     if (!l) { j0--; continue; }
-    if (REGEX_LIGNE_SOURCE_ATTRIBUTION.test(l) || REGEX_LIGNE_SITUATION_APPRENTISSAGE.test(l)) {
+    if (REGEX_LIGNE_SOURCE_ATTRIBUTION.test(l) || REGEX_LIGNE_SITUATION_APPRENTISSAGE.test(l) || REGEX_LIGNE_FRAGMENT_INACHEVE.test(l)) {
       exclues[j0] = true;
       j0--;
       continue;
