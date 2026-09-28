@@ -149,8 +149,18 @@ function preparerHtmlPourPdf(contenuHTML) {
       $table.empty().append($thead).append($tbody);
     }
   });
-  const $racine = $('.fiche-cours').first();
-  return $racine.length ? $.html($racine) : contenuHTML;
+  // Bug réel confirmé (29/09, investigation tableau Axe1/Axe2 absent) :
+  // sérialiser SEULEMENT $racine (.fiche-cours) perd silencieusement tout
+  // contenu placé par le modèle EN DEHORS de cette div (ex. jetons de
+  // complétion {{...}} laissés après sa balise fermante, autorisé par la
+  // consigne "N'IMPORTE OÙ dans ta réponse") -- vérifié empiriquement :
+  // cheerio.load('<div class="fiche-cours">...</div>\n{{JETON}}') puis
+  // $.html($('.fiche-cours').first()) fait disparaître {{JETON}}. Le
+  // nettoyage du préambule hors .fiche-cours est déjà fait en amont
+  // (nettoyerPreambuleHallucine) : cette restriction supplémentaire ici
+  // était redondante, jamais nécessaire, et c'est elle qui casse le
+  // pipeline. Toujours sérialiser le document entier désormais.
+  return $.html($('body').length ? $('body') : $.root());
 }
 
 async function genererPdfDepuisHtml(contenuHTML, landscape) {
@@ -1852,8 +1862,11 @@ function separerTableauxImbriques(contenuHTML) {
     }
   });
 
-  const $racine = $('.fiche-cours').first();
-  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+  // Bug réel confirmé (29/09) : cf. commentaire équivalent sur
+  // preparerHtmlPourPdf -- ne jamais restreindre la sérialisation à
+  // .fiche-cours, sous peine de perdre silencieusement tout contenu placé
+  // par le modèle en dehors (jetons de complétion notamment).
+  return $.html($('body').length ? $('body') : $.root());
 }
 
 // Filet de sécurité serveur pour Exploitation de texte : même si le prompt
