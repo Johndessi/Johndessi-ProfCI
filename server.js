@@ -566,6 +566,14 @@ const FicheSchema = new mongoose.Schema({
   // qui masque les lignes vides). À retirer avec contenuBrutModele une fois
   // l'investigation terminée.
   texteSupportBrut : { type: String, default: '' },
+  // Diagnostic temporaire (29/09, investigation tableau Axe1/Axe2 absent du
+  // document final malgré marqueur {{AXES_PLAN_ENSEIGNANT}} présent dans la
+  // réponse brute du modèle -- confirmé sur 4/25 fiches réelles, 16%, cf.
+  // échantillon du 29/09). Capture l'état interne du pipeline de résolution
+  // des tableaux d'axes (Lecture méthodique Mode 1/Mode 2) à chaque étape
+  // clé, pour identifier PRÉCISÉMENT où le contenu se perd -- jamais deviné.
+  // À retirer une fois l'investigation terminée.
+  debugPipelineAxes : { type: String, default: '' },
   createdAt    : { type: Date, default: Date.now }
 });
 
@@ -7966,6 +7974,10 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       // pouvoir tracer exactement ce que le modèle a réellement écrit sur un
       // échec réel, sans dépendre de l'enseignant pour le transmettre.
       const contenuBrutPourDebug = contenuHTML;
+      // Diagnostic temporaire (29/09, cf. commentaire sur
+      // FicheSchema.debugPipelineAxes) : capture l'état du pipeline de
+      // résolution du tableau d'axes à chaque étape clé.
+      const debugPipelineAxesData = {};
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
       contenuHTML = nettoyerPreambuleHallucine(contenuHTML);
       contenuHTML = injecterActiviteEntete(contenuHTML, activiteAffichee);
@@ -8132,9 +8144,15 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       // ne vivant que dans UN SEUL des 2 blocs (déroulement OU axes, jamais
       // les deux), résoudre séparément chaque bloc ne double jamais un
       // avertissement.
+      debugPipelineAxesData.planFourniInjectionPresent = !!planFourniInjection;
+      debugPipelineAxesData.tachesCompletionAvant = planFourniInjection ? (planFourniInjection.tachesCompletion || []).map((t) => ({ id: t.id, champsAGenerer: t.champsAGenerer, axeNumero: t.axeNumero, nomFixe: t.nomFixe })) : null;
+      debugPipelineAxesData.injectionAxesAvant = planFourniInjection ? planFourniInjection.injectionAxes : null;
+      debugPipelineAxesData.marqueurAxesDansContenuAvantExtraction = contenuHTML.includes('{{AXES_PLAN_ENSEIGNANT}}');
       if (planFourniInjection && planFourniInjection.tachesCompletion && planFourniInjection.tachesCompletion.length) {
         const { contenuHTML: contenuNettoyeCompletion, valeurs } = extraireCompletionsEntrees(contenuHTML, planFourniInjection.tachesCompletion);
         contenuHTML = contenuNettoyeCompletion;
+        debugPipelineAxesData.valeursExtraites = valeurs;
+        debugPipelineAxesData.marqueurAxesDansContenuApresExtraction = contenuHTML.includes('{{AXES_PLAN_ENSEIGNANT}}');
         // Référence de ligne (27/09) : ajoutée ici sur les indices/citations
         // générés par le modèle (Mode 1 automatique ET entrées partiellement
         // complétées en Mode 2 -- toutes deux passent par ce mécanisme de
@@ -8164,6 +8182,8 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         }
         const resDeroulement = resoudreCompletionsEntrees(planFourniInjection.injectionDeroulement, planFourniInjection.tachesCompletion, valeurs);
         const resAxes = resoudreCompletionsEntrees(planFourniInjection.injectionAxes, planFourniInjection.tachesCompletion, valeurs);
+        debugPipelineAxesData.injectionAxesApres = resAxes.html;
+        debugPipelineAxesData.avertissementsAxes = resAxes.avertissements;
         // Mode 1 uniquement (injectionEvaluation non-null) : le jeton
         // @@A2E2_IND@@ de l'entrée réservée vit dans CE bloc-là (jamais dans
         // injectionDeroulement/injectionAxes en Mode 1) -- résolu séparément
@@ -8180,7 +8200,11 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         const listeCitations = [...new Set(citationsNonLocaliseesLM)].map((c) => `« ${c} »`).join(', ');
         res.write(`data: ${JSON.stringify({ avertissement: `Référence de ligne non trouvée automatiquement pour ${citationsNonLocaliseesLM.length > 1 ? 'les citations suivantes' : 'la citation suivante'} : ${listeCitations} -- vérifiez/ajoutez la référence de ligne manuellement.` })}\n\n`);
       }
+      debugPipelineAxesData.marqueurAxesDansContenuAvantInjection = contenuHTML.includes('{{AXES_PLAN_ENSEIGNANT}}');
+      debugPipelineAxesData.injectionAxesJusteAvantInjection = planFourniInjection ? planFourniInjection.injectionAxes : null;
       contenuHTML = injecterDeroulementPlanEnseignant(contenuHTML, planFourniInjection);
+      debugPipelineAxesData.marqueurAxesDansContenuApresInjection = contenuHTML.includes('{{AXES_PLAN_ENSEIGNANT}}');
+      debugPipelineAxesData.tableAxesPresenteApresInjection = contenuHTML.includes('colspan="4"') && contenuHTML.includes('Indices textuels');
       contenuHTML = injecterDeroulementExploitationPlanEnseignant(contenuHTML, planFourniExploitationInjection);
       // Mode 1 déterministe d'Exploitation de texte, v3 (15/09) : le tableau
       // DÉROULEMENT COMPLET (en-tête + PRÉSENTATION + I/II/III/EVAL) a déjà
@@ -8586,6 +8610,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenu: contenuHTML,
         contenuBrutModele: contenuBrutPourDebug,
         texteSupportBrut: texteSupport,
+        debugPipelineAxes: JSON.stringify(debugPipelineAxesData),
         origineGeneration: origineGenerationNormalisee
       });
       const payloadDone = { done: true, ficheId: fiche._id, contenuFinal: contenuHTML };
@@ -8665,7 +8690,7 @@ app.get('/api/admin/debug/dernieres-generations', (req, res, next) => {
     const fiches = await Fiche.find(filtre)
       .sort({ createdAt: -1 })
       .limit(n)
-      .select('_id classe lecon seance createdAt contenuBrutModele texteSupportBrut contenu');
+      .select('_id classe lecon seance createdAt contenuBrutModele texteSupportBrut debugPipelineAxes contenu');
     res.json(fiches);
   } catch (e) {
     res.status(500).json({ error: e.message });
