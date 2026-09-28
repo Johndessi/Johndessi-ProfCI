@@ -1134,13 +1134,31 @@ const REGEX_FORMULE_APPEL = /^(cher|ch[èe]re|chers|ch[èe]res|bonjour|salut|cou
 // une simple occurrence du mot ailleurs dans une phrase du corps (ex.
 // "D'après les experts, ..." sans ':' n'est PAS ce motif) -- reconnaissance
 // par nature formelle, jamais par position/longueur de bloc.
-const REGEX_LIGNE_SOURCE_ATTRIBUTION = /^\s*(source|extrait de|tir[ée] de)\s*:/i;
+// Élargi (28/09, bug réel confirmé, fiche Fôhoundi 6e) : le libellé "Source
+// :"/"Extrait de :" explicite ne couvre pas toutes les formulations
+// réellement produites -- "La lettre de Fôhoundi extraite du livre de
+// français 6e, JD éditions" (sans ':', sujet en tête de phrase) restait donc
+// numérotée comme corps. Ajout d'un second motif ancré sur le verbe
+// "extrait(e)" suivi d'un complément de provenance ("du livre", "du manuel",
+// "de la revue"...) -- toujours une construction grammaticale de citation
+// bibliographique, jamais une tournure plausible dans une phrase de récit
+// ordinaire, donc toujours par nature, jamais par position/longueur.
+const REGEX_LIGNE_SOURCE_ATTRIBUTION = /^\s*(source|extrait de|tir[ée] de)\s*:|\bextraite?\s+(du|de\s+la|de\s+l['’]|des)\s+\S/i;
 // Rappel de situation d'apprentissage éventuellement recopié à la fin du
 // texte support (universel, jamais réservé à la lettre) -- même logique
 // que la source d'attribution : motif explicite ("Situation
 // d'apprentissage :"), jamais une occurrence du mot ailleurs dans une
 // phrase du corps.
-const REGEX_LIGNE_SITUATION_APPRENTISSAGE = /^\s*situation\s+d['’]apprentissage\s*:/i;
+//
+// Élargi (28/09, même fiche) : l'enseignant peut recopier la situation
+// d'apprentissage sans le libellé "Situation d'apprentissage :", sous sa
+// forme rédigée standard DPFC ("À partir des attentes de lecture suscitées
+// par le chapeau..., les élèves de la 6e... décident d'en identifier les
+// particularités..."). Motif explicite lui aussi -- l'ouverture "À partir
+// des attentes de lecture" est la formule consacrée de ce rappel, jamais une
+// tournure de début de phrase plausible dans le corps d'un récit ou d'une
+// lettre.
+const REGEX_LIGNE_SITUATION_APPRENTISSAGE = /^\s*situation\s+d['’]apprentissage\s*:|^\s*[àa]\s+partir\s+des\s+attentes\s+de\s+lecture\b/i;
 
 // Non exhaustif : formules de clôture les plus courantes dans une lettre
 // personnelle niveau collège -- une formule absente de cette liste reste
@@ -1163,9 +1181,30 @@ function ligneEstChapeauEntreParentheses(ligne) {
   return t.length > 1 && t.startsWith('(') && t.endsWith(')');
 }
 
+// Bug réel confirmé (28/09, fiche Fôhoundi 6e, correction fournie directement
+// par l'enseignant sur le texte exact) : un simple `includes()` fait matcher
+// une formule de clôture même greffée au milieu d'une phrase du CORPS --
+// "Je compte sur toi, mon ami, et à bientôt." (dernière phrase du récit,
+// à numéroter) contient à la fois "je compte sur toi" et "à bientôt", tous
+// deux dans la liste, et était donc exclue à tort. Une vraie formule de
+// clôture (seule, ou fusionnée avec la signature -- "Ton ami Fôhoundi.")
+// est TOUJOURS en tête de ligne et n'est JAMAIS suivie d'une clause
+// supplémentaire coordonnée ("et...", "puis...") -- seul un nom court peut
+// suivre. Ce test remplace donc la simple sous-chaîne par : la formule
+// commence la ligne, ET ce qui suit est court (nom de signature plausible)
+// et sans conjonction de coordination introduisant une suite.
 function ligneContientMotClotureLettre(ligne) {
   const n = normaliserTexte(ligne);
-  return MOTS_CLES_CLOTURE_LETTRE.some((mot) => n.includes(normaliserTexte(mot)));
+  for (const mot of MOTS_CLES_CLOTURE_LETTRE) {
+    const motNorm = normaliserTexte(mot);
+    if (!n.startsWith(motNorm)) continue;
+    let reste = n.slice(motNorm.length).replace(/^[\s,:;.!?]+/, '').replace(/[\s,:;.!?]+$/, '');
+    if (!reste) return true;
+    const motsReste = reste.split(/\s+/).filter(Boolean);
+    if (motsReste.length <= 4 && !/\b(et|mais|puis|donc|ainsi|car)\b/.test(reste)) return true;
+    return false;
+  }
+  return false;
 }
 
 // Retourne un tableau de booléens (même longueur que `lignes`) : true = ligne
