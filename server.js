@@ -2749,7 +2749,7 @@ IV. BILAN GÉNÉRAL :
    - Confrontation EXPLICITE hypothèse/bilan, avec la formule EXACTE : « Notre hypothèse générale est donc vérifiée. »
    - Optionnel : une question d'ouverture ou d'avis personnel.
 
-ÉVALUATION (ligne distincte du tableau DÉROULEMENT, différente et SÉPARÉE du Bilan général — ne jamais fusionner les deux) : tu écris TOI-MÊME cette ligne (Moments didactiques/Stratégies/Activités de l'enseignant/Activités des élèves), EXACTEMENT comme les lignes I à IV -- SAUF sa colonne Traces écrites, qui repose sur la 2e entrée de l'Axe 2 (déjà décrite plus haut parmi les entrées à compléter -- jamais travaillée dans le tableau de l'Axe 2, qui n'affiche que sa 1ère entrée) et qui est, elle, déjà construite côté serveur : n'y rédige RIEN toi-même (ni relevé, ni consigne) -- place EXACTEMENT le marqueur {{EVALUATION_RESERVEE}} comme SEUL contenu de cette colonne Traces écrites, sur sa propre ligne, UNE SEULE FOIS dans tout le document -- il sera remplacé automatiquement par la consigne déjà rédigée pour cette entrée.`;
+ÉVALUATION (ligne distincte du tableau DÉROULEMENT, différente et SÉPARÉE du Bilan général — ne jamais fusionner les deux) : tu écris TOI-MÊME cette ligne (Moments didactiques/Stratégies/Activités de l'enseignant/Activités des élèves), EXACTEMENT comme les lignes I à IV -- SAUF sa colonne Traces écrites, qui repose sur la 2e entrée de l'Axe 2 (déjà décrite plus haut parmi les entrées à compléter -- jamais travaillée dans le tableau de l'Axe 2, qui n'affiche que sa 1ère entrée) et qui est, elle, déjà construite côté serveur : n'y rédige RIEN toi-même (ni relevé, ni consigne) -- place EXACTEMENT le marqueur {{EVALUATION_RESERVEE}} comme SEUL contenu de cette colonne Traces écrites, sur sa propre ligne, UNE SEULE FOIS dans tout le document -- il sera remplacé automatiquement par la consigne déjà rédigée pour cette entrée. RAPPEL : ce remplacement automatique ne fonctionne QUE si tu as bien rempli, ailleurs dans ta réponse, les 3 marqueurs {{...}} de cette 2e entrée de l'Axe 2 (indices/analyse/interprétation, décrits plus haut) -- vérifie avant de conclure ta réponse que ces 3 marqueurs sont bien présents, même si cette entrée n'apparaît dans aucun tableau visible.`;
 
   return {
     instructions,
@@ -3599,7 +3599,20 @@ function construireConsigneCompletionEntrees(taches) {
     // ci-dessus), donc plus de branche "nom à déterminer toi-même".
     const introductionNom = `entrée « ${t.nomFixe} » (nom fixé, ne le modifie pas) : `;
     const champsTexte = t.champsAGenerer.map((champ) => `${LIBELLES_CONSIGNE_CHAMP_COMPLETION[champ]} entre ${marqueur(champ)}`).join(' ; ');
-    return `   - Axe ${t.axeNumero}, ${introductionNom}${champsTexte}.`;
+    // Entrée réservée à l'ÉVALUATION (TOUJOURS Axe 2/Entrée 2, id "A2E2" ou
+    // "A2E2RES" -- cf. construireEntreeReserveeEvaluation, règle D) : bug réel
+    // confirmé (29/09, échantillon de 30 fiches réelles) -- cette entrée
+    // précise, n'apparaissant dans AUCUN tableau visible (contrairement aux 3
+    // autres entrées à compléter), est omise par le modèle dans ~7% des
+    // générations réelles alors que les entrées visibles ne le sont jamais
+    // (0/30 dans le même échantillon) -- signe que son caractère "invisible"
+    // la rend plus facile à oublier. Rendue explicitement saillante ici,
+    // seule différence avec les autres bullets.
+    const estEntreeReservee = /^A2E2(RES)?$/.test(t.id);
+    const alerteReservee = estEntreeReservee
+      ? ' ATTENTION : cette entrée n\'apparaît dans AUCUN tableau visible, mais elle est INDISPENSABLE à la section ÉVALUATION plus bas (corrigé enseignant) -- ne l\'oublie pas au prétexte qu\'elle ne semble alimenter aucun tableau affiché.'
+      : '';
+    return `   - Axe ${t.axeNumero}, ${introductionNom}${champsTexte}.${alerteReservee}`;
   }).join('\n');
 
   return `
