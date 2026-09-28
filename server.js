@@ -1112,258 +1112,27 @@ function texteSupportEstDejaNumerote(lignes) {
   return numerotees.length / nonVides.length >= SEUIL_PROPORTION_LIGNES_DEJA_NUMEROTEES;
 }
 
-// Filtres structurels de paratexte -- uniquement pour le cas NON numéroté.
-// Détection par nature formelle (motif reconnaissable), jamais par position
-// ou longueur de bloc.
-// Le préfixe "n°/no/n" est FACULTATIF -- "Texte 1" (sans "n°") est une
-// formulation au moins aussi courante que "Texte n°1" chez les enseignants.
-// Bug réel trouvé en test (27/09, fiche 6e Fôhoundi) : le "n" était
-// obligatoire dans une version antérieure, donc "Texte 1" ne matchait
-// jamais -- la ligne de titre n'était alors pas exclue, ce qui arrêtait
-// aussitôt le balayage du bloc d'ouverture (cf. detecterLignesParatexte)
-// et empêchait TOUTES les exclusions suivantes (chapeau, en-tête,
-// formule d'appel, clôture) de s'appliquer, même quand elles auraient dû.
-const REGEX_TITRE_NUMERO_TEXTE = /^(texte|document|lettre|extrait)\s*(n[°ºo]?)?\s*\d+\s*[:.\-]?\s*$/i;
-const REGEX_DATE_LIEU_ENTETE = /^[A-ZÀ-Ý][^,]{1,40},\s*le\s+\d{1,2}(er)?\s+[a-zà-ÿ]+\s+\d{4}\s*\.?$/i;
-const REGEX_FORMULE_APPEL = /^(cher|ch[èe]re|chers|ch[èe]res|bonjour|salut|coucou)\s+[a-zà-ÿ][a-zà-ÿ\-']*\s*[,:]?\s*$/i;
-// Ligne de source/attribution isolée (universel, jamais réservé à la lettre) :
-// constaté en test réel (Résumé de texte 4e, 27/09) -- une ligne "Source :
-// Manuel de français 4e, ..." placée juste après le titre était numérotée
-// comme corps du texte, décalant toute la numérotation. Ancré sur un
-// marqueur bibliographique explicite suivi immédiatement de ':' -- jamais
-// une simple occurrence du mot ailleurs dans une phrase du corps (ex.
-// "D'après les experts, ..." sans ':' n'est PAS ce motif) -- reconnaissance
-// par nature formelle, jamais par position/longueur de bloc.
-// Élargi (28/09, bug réel confirmé, fiche Fôhoundi 6e) : le libellé "Source
-// :"/"Extrait de :" explicite ne couvre pas toutes les formulations
-// réellement produites -- "La lettre de Fôhoundi extraite du livre de
-// français 6e, JD éditions" (sans ':', sujet en tête de phrase) restait donc
-// numérotée comme corps. Ajout d'un second motif ancré sur le verbe
-// "extrait(e)" suivi d'un complément de provenance ("du livre", "du manuel",
-// "de la revue"...) -- toujours une construction grammaticale de citation
-// bibliographique, jamais une tournure plausible dans une phrase de récit
-// ordinaire, donc toujours par nature, jamais par position/longueur.
-const REGEX_LIGNE_SOURCE_ATTRIBUTION = /^\s*(source|extrait de|tir[ée] de)\s*:|\bextraite?\s+(du|de\s+la|de\s+l['’]|des)\s+\S/i;
-// Rappel de situation d'apprentissage éventuellement recopié à la fin du
-// texte support (universel, jamais réservé à la lettre) -- même logique
-// que la source d'attribution : motif explicite ("Situation
-// d'apprentissage :"), jamais une occurrence du mot ailleurs dans une
-// phrase du corps.
-//
-// Élargi (28/09, même fiche) : l'enseignant peut recopier la situation
-// d'apprentissage sans le libellé "Situation d'apprentissage :", sous sa
-// forme rédigée standard DPFC ("À partir des attentes de lecture suscitées
-// par le chapeau..., les élèves de la 6e... décident d'en identifier les
-// particularités..."). Motif explicite lui aussi -- l'ouverture "À partir
-// des attentes de lecture" est la formule consacrée de ce rappel, jamais une
-// tournure de début de phrase plausible dans le corps d'un récit ou d'une
-// lettre.
-const REGEX_LIGNE_SITUATION_APPRENTISSAGE = /^\s*situation\s+d['’]apprentissage\s*:|^\s*[àa]\s+partir\s+des\s+attentes\s+de\s+lecture\b/i;
-
-// Non exhaustif : formules de clôture les plus courantes dans une lettre
-// personnelle niveau collège -- une formule absente de cette liste reste
-// numérotée (jamais un risque de couper une vraie fin de texte).
-const MOTS_CLES_CLOTURE_LETTRE = [
-  "bien à toi", "bien à vous", "je t'embrasse", "je vous embrasse", "amitiés",
-  "cordialement", "bien cordialement", "à bientôt", "je compte sur toi",
-  "gros bisous", "avec mon affection", "avec toute mon affection",
-  "salutations distinguées", "veuillez agréer", "meilleurs souvenirs",
-  // Formules relationnelles précédant directement la signature (ex. "Ton
-  // ami," / "Fôhoundi") : jouent le même rôle de marqueur de clôture que les
-  // formules de sentiment ci-dessus.
-  "ton ami", "ton amie", "ta fille", "ton fils", "ta sœur", "ton frère",
-  "ta cousine", "ton cousin", "ton camarade", "ta camarade", "ta copine",
-  "ton copain"
-];
-
-function ligneEstChapeauEntreParentheses(ligne) {
-  const t = ligne.trim();
-  return t.length > 1 && t.startsWith('(') && t.endsWith(')');
-}
-
-// Bug réel confirmé (28/09, fiche Fôhoundi 6e, correction fournie directement
-// par l'enseignant sur le texte exact) : un simple `includes()` fait matcher
-// une formule de clôture même greffée au milieu d'une phrase du CORPS --
-// "Je compte sur toi, mon ami, et à bientôt." (dernière phrase du récit,
-// à numéroter) contient à la fois "je compte sur toi" et "à bientôt", tous
-// deux dans la liste, et était donc exclue à tort. Une vraie formule de
-// clôture (seule, ou fusionnée avec la signature -- "Ton ami Fôhoundi.")
-// est TOUJOURS en tête de ligne et n'est JAMAIS suivie d'une clause
-// supplémentaire coordonnée ("et...", "puis...") -- seul un nom court peut
-// suivre. Ce test remplace donc la simple sous-chaîne par : la formule
-// commence la ligne, ET ce qui suit est court (nom de signature plausible)
-// et sans conjonction de coordination introduisant une suite.
-function ligneContientMotClotureLettre(ligne) {
-  const n = normaliserTexte(ligne);
-  for (const mot of MOTS_CLES_CLOTURE_LETTRE) {
-    const motNorm = normaliserTexte(mot);
-    if (!n.startsWith(motNorm)) continue;
-    let reste = n.slice(motNorm.length).replace(/^[\s,:;.!?]+/, '').replace(/[\s,:;.!?]+$/, '');
-    if (!reste) return true;
-    const motsReste = reste.split(/\s+/).filter(Boolean);
-    if (motsReste.length <= 4 && !/\b(et|mais|puis|donc|ainsi|car)\b/.test(reste)) return true;
-    return false;
-  }
-  return false;
-}
-
-// Retourne un tableau de booléens (même longueur que `lignes`) : true = ligne
-// à exclure de la numérotation (paratexte).
-//
-// `estLettre` -- PARAMÈTRE CONSERVÉ MAIS IGNORÉ ICI (28/09, bug réel confirmé
-// en test, fiche Ahoundjué 6e) : il venait de estLettreLM, lui-même calculé
-// via referentielTypeTexteLM.typeTexte === 'lettre personnelle' -- une
-// correspondance FLOUE par sous-chaîne (trouverReferentielTypeTexte) contre
-// un intitulé de leçon/thème libre, catalogue qui n'a AUCUN alias déclaré
-// pour "lettre personnelle" (contrairement à "texte descriptif (objet)",
-// corrigé pour le même défaut le 08/08 -- jamais corrigé ici). Si
-// l'intitulé réel de l'enseignant ne contient pas exactement "lettre
-// personnelle", estLettreLM valait silencieusement false, et TOUTES les
-// exclusions de l'étape 2/3 ci-dessous (bloc d'ouverture, formule d'appel,
-// clôture, signature) étaient sautées sans avertissement -- alors même que
-// le texte EST une lettre personnelle. Un signal externe et flou n'a
-// jamais eu sa place dans une détection qui se veut "par nature formelle,
-// jamais par position/longueur" : les étapes 2/3 ci-dessous n'excluent déjà
-// QUE sur preuve structurelle trouvée dans le texte lui-même (une vraie
-// formule d'appel/de clôture reconnue) -- les rendre inconditionnelles
-// élimine cette dépendance fragile sans rien perdre en rigueur.
-function detecterLignesParatexte(lignes, estLettre) {
-  const exclues = new Array(lignes.length).fill(false);
-
-  // 1) Universel, en tout début de texte uniquement : titre/numéro de texte,
-  //    chapeau entre parenthèses.
-  let i = 0;
-  while (i < lignes.length && !lignes[i].trim()) i++;
-  while (i < lignes.length) {
-    const l = lignes[i].trim();
-    if (!l) { i++; continue; }
-    if (REGEX_TITRE_NUMERO_TEXTE.test(l) || ligneEstChapeauEntreParentheses(l) || REGEX_LIGNE_SOURCE_ATTRIBUTION.test(l)) {
-      exclues[i] = true;
-      i++;
-      continue;
-    }
-    break;
-  }
-
-  // 1bis) Universel, en toute fin de texte : ligne de source/attribution ou
-  // rappel de situation d'apprentissage ajoutés APRÈS le corps -- balayés
-  // AVANT la détection de clôture de lettre (étape 3), pour qu'elle
-  // retrouve la vraie fin du corps (signature) au lieu de buter sur ce
-  // paratexte final. Bug réel corrigé (27/09, fiche Fôhoundi) : un
-  // paratexte final non reconnu empêchait le balayage arrière d'atteindre
-  // la formule de clôture/signature, qui restait alors numérotée.
-  //
-  // Bug réel confirmé (28/09, même fiche, JSON de production
-  // 6aba1ce4cf14d9ad3b78f0be) : la toute dernière ligne non vide du texte
-  // support était "  d'analyser et d'interpréter les indices textuels afin
-  // de construire son sens." -- un fragment résiduel (collé/retapé en trop
-  // par l'enseignant, doublon partiel de la fin de la phrase de situation
-  // d'apprentissage juste avant). Ne correspondant à aucun motif reconnu,
-  // il arrêtait ce balayage arrière AVANT même d'atteindre la vraie ligne de
-  // situation d'apprentissage, qui restait alors numérotée avec la source et
-  // la signature derrière elle. Un fragment de ce type est reconnaissable
-  // PAR NATURE, jamais par position : une phrase/paragraphe réel commence
-  // toujours par une majuscule (ou un chiffre, une parenthèse, un
-  // guillemet) -- jamais par une minuscule, signe qu'il s'agit d'une suite
-  // de phrase tronquée, jamais d'un vrai début de paragraphe.
-  const REGEX_LIGNE_FRAGMENT_INACHEVE = /^[a-zà-ÿ]/;
-  let j0 = lignes.length - 1;
-  while (j0 >= 0 && !lignes[j0].trim()) j0--;
-  while (j0 >= 0) {
-    const l = lignes[j0].trim();
-    if (!l) { j0--; continue; }
-    if (REGEX_LIGNE_SOURCE_ATTRIBUTION.test(l) || REGEX_LIGNE_SITUATION_APPRENTISSAGE.test(l) || REGEX_LIGNE_FRAGMENT_INACHEVE.test(l)) {
-      exclues[j0] = true;
-      j0--;
-      continue;
-    }
-    break;
-  }
-
-  // 2) et 3) ci-dessous : plus jamais conditionnées par estLettre (cf.
-  // commentaire de tête de fonction) -- purement évidentielles, comme le
-  // reste de cette fonction : une formule d'appel/de clôture non trouvée
-  // n'exclut simplement rien, sans avoir besoin d'un signal externe pour le
-  // savoir à l'avance.
-
-  // 2) Bloc d'ouverture (identité de
-  // l'auteur, classe, établissement, adresse, date...) puis formule
-  // d'appel. Le contenu du bloc d'identité est imprévisible par nature (nom
-  // d'élève, nom d'établissement) -- jamais reconnaissable par un motif qui
-  // lui soit propre. On cherche donc EN AVANT, dans une fenêtre bornée, la
-  // formule d'appel elle-même : dès qu'elle est trouvée, tout ce qui la
-  // précède depuis le titre/chapeau est exclu en bloc, quel que soit son
-  // contenu exact -- par définition, dans une lettre personnelle, rien de
-  // significatif du corps n'apparaît avant la formule d'appel. Bug réel
-  // corrigé (27/09, fiche Fôhoundi) : l'ancienne version ne testait qu'UNE
-  // ligne juste après le titre (la date) puis UNE seule ligne suivante
-  // (l'appel) -- un bloc d'identité intercalé avant la date décalait tout,
-  // et la formule d'appel, plus loin, n'était alors jamais atteinte.
-  const FENETRE_BLOC_OUVERTURE_LETTRE = 8;
-  let indexAppel = -1;
-  let nonBlancsExamines = 0;
-  for (let k = i; k < lignes.length && nonBlancsExamines < FENETRE_BLOC_OUVERTURE_LETTRE; k++) {
-    const lk = lignes[k].trim();
-    if (!lk) continue; // ligne vide entre deux champs d'en-tête : ne consomme pas le budget de la fenêtre
-    nonBlancsExamines++;
-    if (REGEX_FORMULE_APPEL.test(lk)) { indexAppel = k; break; }
-  }
-  if (indexAppel !== -1) {
-    for (let k = i; k <= indexAppel; k++) exclues[k] = true;
-    i = indexAppel + 1;
-  } else {
-    // Repli : formule d'appel non reconnue dans la fenêtre -- ancienne
-    // détection ligne à ligne (date/lieu seule puis appel juste après),
-    // jamais un bloc entier deviné sans ancre reconnue.
-    while (i < lignes.length) {
-      const l = lignes[i].trim();
-      if (!l) { i++; continue; }
-      if (REGEX_DATE_LIEU_ENTETE.test(l)) { exclues[i] = true; i++; continue; }
-      break;
-    }
-    while (i < lignes.length) {
-      const l = lignes[i].trim();
-      if (!l) { i++; continue; }
-      if (REGEX_FORMULE_APPEL.test(l)) exclues[i] = true;
-      break; // une seule ligne d'appel -- qu'elle matche ou non, on s'arrête là
-    }
-  }
-
-  // 3) En fin de texte : formule(s) de
-  //    clôture + signature finale. La signature (nom seul, sans mot-clé)
-  //    n'est exclue QUE si la ligne non vide juste avant contient déjà un
-  //    mot-clé de clôture reconnu -- jamais une simple ligne courte isolée,
-  //    qui pourrait être une vraie fin de récit. Part de j0 (déjà avancé
-  //    au-delà du paratexte final de l'étape 1bis), pas de la toute
-  //    dernière ligne physique.
-  let j = j0;
-  if (j >= 0 && !ligneContientMotClotureLettre(lignes[j])) {
-    const mots = lignes[j].trim().split(/\s+/);
-    if (mots.length <= 4 && !/[.!?]$/.test(lignes[j].trim())) {
-      let k = j - 1;
-      while (k >= 0 && !lignes[k].trim()) k--;
-      if (k >= 0 && ligneContientMotClotureLettre(lignes[k])) {
-        exclues[j] = true;
-        j = k;
-      }
-    }
-  }
-  while (j >= 0) {
-    const l = lignes[j].trim();
-    if (!l) { j--; continue; }
-    if (ligneContientMotClotureLettre(l)) { exclues[j] = true; j--; continue; }
-    break;
-  }
-
-  return exclues;
-}
+// Numérotation automatique par détection de paratexte : chantier abandonné
+// (29/09, décision explicite après plusieurs échecs en conditions réelles
+// sur Lecture méthodique 6e -- fiche Fôhoundi). Cause de fond : un numéro
+// de ligne correct suppose de savoir où le texte se coupe VISUELLEMENT dans
+// le document final (Word), une information que ni le texte brut ni cette
+// détection de paratexte ne peuvent donner -- seul un rendu réel du document
+// le pourrait, hors de portée ici. Toute la logique de détection de
+// paratexte (titre, chapeau, bloc d'ouverture de lettre, clôture/signature,
+// source, situation d'apprentissage, fragments résiduels) est donc
+// supprimée. Seul subsiste le cas où l'enseignant a LUI-MÊME numéroté son
+// texte support (cf. texteSupportEstDejaNumerote ci-dessus) : l'app
+// réutilise alors ses numéros tels quels, sans y toucher. Dans tous les
+// autres cas, le texte support est affiché tel quel, sans numéro ajouté par
+// l'app (construireLignesNumerotees ci-dessous, cas non-déjà-numéroté).
 
 // Construit, à partir du texte support brut, la structure de référence pour
-// toute la fonctionnalité : un tableau parallèle aux lignes physiques du
-// texte, chacune portant son numéro de ligne (null si paratexte/ligne vide,
-// jamais numérotée). `estLettre` : cf. detecterLignesParatexte, ignoré si le
-// texte est déjà numéroté (l'enseignant a alors lui-même fixé la frontière).
-function construireLignesNumerotees(texteSupport, estLettre) {
+// toute la fonctionnalité de citation : un tableau parallèle aux lignes
+// physiques du texte. Si l'enseignant a lui-même numéroté son texte, ses
+// numéros sont réutilisés tels quels. Sinon, aucun numéro n'est assigné
+// (numero: null partout) -- l'app n'invente plus de numérotation.
+function construireLignesNumerotees(texteSupport) {
   const lignes = (texteSupport || '').toString().replace(/\r\n/g, '\n').split('\n');
   const dejaNumerote = texteSupportEstDejaNumerote(lignes);
 
@@ -1375,17 +1144,9 @@ function construireLignesNumerotees(texteSupport, estLettre) {
     return { lignesNumerotees, dejaNumerote: true };
   }
 
-  const exclues = detecterLignesParatexte(lignes, !!estLettre);
-  let compteur = 0;
-  const lignesNumerotees = lignes.map((ligne, idx) => {
-    const vide = !ligne.trim();
-    let numero = null;
-    if (!vide && !exclues[idx]) {
-      compteur++;
-      numero = compteur;
-    }
-    return { texteAffiche: ligne, texteRecherche: ligne.trim(), numero };
-  });
+  const lignesNumerotees = lignes.map((ligne) => ({
+    texteAffiche: ligne, texteRecherche: ligne.trim(), numero: null
+  }));
   return { lignesNumerotees, dejaNumerote: false };
 }
 
@@ -1442,6 +1203,15 @@ function ajouterReferencesLigneCitations(texteBrut, lignesNumerotees, options = 
   const guillemetsSeuls = !!options.guillemetsSeuls;
   const texte = (texteBrut || '').replace(REGEX_PLAGE_LIGNES_MODELE, '');
   if (!texte || !lignesNumerotees || !lignesNumerotees.length) return { texte, nonLocalisees: [] };
+  // Chantier de numérotation automatique abandonné (29/09) : sans texte
+  // support déjà numéroté par l'enseignant, `lignesNumerotees` ne porte plus
+  // aucun numéro réel (numero===null partout, cf. construireLignesNumerotees).
+  // Dans ce cas, l'absence de référence de ligne n'est plus un ÉCHEC de
+  // localisation à signaler -- il n'y a simplement plus rien à localiser.
+  // `nonLocalisees` ne doit donc être alimenté QUE quand une vraie
+  // numérotation existe (déjà numérotée par l'enseignant) ; sinon on
+  // continue à uniformiser les guillemets, mais sans jamais avertir.
+  const aDesNumerosReels = lignesNumerotees.some((l) => l.numero !== null);
   const nonLocalisees = [];
   let citationTrouvee = false;
   const regex = guillemetsSeuls ? REGEX_CITATION_GUILLEMETS_SEULS : REGEX_CITATION_GUILLEMETS;
@@ -1455,7 +1225,7 @@ function ajouterReferencesLigneCitations(texteBrut, lignesNumerotees, options = 
     // point de génération des citations+référence, réutilisé par toutes
     // les séances -- une seule normalisation ici couvre tout l'app.
     if (numero === null) {
-      nonLocalisees.push(interieur);
+      if (aDesNumerosReels) nonLocalisees.push(interieur);
       return `« ${interieur} »`;
     }
     return `« ${interieur} » L${numero}`;
@@ -1483,7 +1253,7 @@ function ajouterReferencesLigneCitations(texteBrut, lignesNumerotees, options = 
   if (texteTrim.length > 120) return { texte, nonLocalisees };
   const numeroSansGuillemets = trouverNumeroLigneCitation(texteTrim, lignesNumerotees);
   if (numeroSansGuillemets === null) {
-    nonLocalisees.push(texteTrim);
+    if (aDesNumerosReels) nonLocalisees.push(texteTrim);
     // Bug réel confirmé (test réel, fiche Ahoundjué 6e, .docx généré) : ce
     // repli renvoyait le texte tel quel, SANS AUCUN guillemet -- puisque le
     // modèle n'en avait mis aucun, contrairement au cas normal (guillemets
@@ -4593,13 +4363,8 @@ EVALUATION : strategie="Travail individuel à l'écrit" ; enseignant="donne le s
     // mécanisme que la Lecture méthodique, réutilisé tel quel -- calculée ici
     // (jamais par le modèle) dès que texteSupportFinal est connu, y compris
     // en Mode "sans texte support" où ce texte n'existe qu'à partir de cette
-    // ligne (inventé par le modèle ci-dessus). estLettre : même référentiel
-    // de type de texte que la Lecture méthodique, uniquement pour détecter
-    // la lettre personnelle -- Exploitation de texte n'utilise ce référentiel
-    // pour AUCUNE autre raison (cf. commentaire à l'appel de cette fonction).
-    const referentielExploitation = trouverReferentielTypeTexte(lecon, classe);
-    const estLettreExploitation = referentielExploitation && referentielExploitation.typeTexte === 'lettre personnelle';
-    const { lignesNumerotees, dejaNumerote } = construireLignesNumerotees(texteSupportFinal, estLettreExploitation);
+    // ligne (inventé par le modèle ci-dessus).
+    const { lignesNumerotees, dejaNumerote } = construireLignesNumerotees(texteSupportFinal);
     const citationsNonLocalisees = [];
     const augmenterChamp = (champ) => {
       if (!champ) return;
@@ -7513,8 +7278,7 @@ function limiterGenerationParIp(req, res, next) {
           // Numérotation de lignes (27/09) : cf. commentaire équivalent pour
           // la Lecture méthodique classique.
           if (texteSupport) {
-            const estLettreOI = referentielOI && referentielOI.typeTexte === 'lettre personnelle';
-            const resultatNumerotationOI = construireLignesNumerotees(texteSupport, estLettreOI);
+            const resultatNumerotationOI = construireLignesNumerotees(texteSupport);
             lignesNumereesLM = resultatNumerotationOI.lignesNumerotees;
             dejaNumeroteLM = resultatNumerotationOI.dejaNumerote;
           }
@@ -7674,7 +7438,7 @@ function limiterGenerationParIp(req, res, next) {
         // le plan de l'enseignant étant la seule source, jamais numérotée
         // elle-même.
         if (texteSupport) {
-          const resultatNumerotationLycee = construireLignesNumerotees(texteSupport, false);
+          const resultatNumerotationLycee = construireLignesNumerotees(texteSupport);
           lignesNumereesLM = resultatNumerotationLycee.lignesNumerotees;
           dejaNumeroteLM = resultatNumerotationLycee.dejaNumerote;
         }
@@ -7767,12 +7531,9 @@ function limiterGenerationParIp(req, res, next) {
         // -- jamais un repli silencieux vers une invention libre.
         referentielTypeTexteLM = trouverReferentielTypeTexte(texteCibleReferentiel, classe);
         // Numérotation de lignes (27/09) : calculée dès que le texte support
-        // existe -- estLettre conditionne les filtres de paratexte propres à
-        // la lettre personnelle (cf. detecterLignesParatexte), jamais
-        // appliqués à un autre type de texte.
+        // existe (cf. construireLignesNumerotees).
         if (texteSupport) {
-          const estLettreLM = referentielTypeTexteLM && referentielTypeTexteLM.typeTexte === 'lettre personnelle';
-          const resultatNumerotation = construireLignesNumerotees(texteSupport, estLettreLM);
+          const resultatNumerotation = construireLignesNumerotees(texteSupport);
           lignesNumereesLM = resultatNumerotation.lignesNumerotees;
           dejaNumeroteLM = resultatNumerotation.dejaNumerote;
         }
@@ -8565,7 +8326,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // l'injection du texte support réel (encore un marqueur littéral à
         // ce stade) pour ne jamais toucher son propre contenu.
         if (texteSupport) {
-          const resultatNumerotationResume = construireLignesNumerotees(texteSupport, false);
+          const resultatNumerotationResume = construireLignesNumerotees(texteSupport);
           lignesNumereesLM = resultatNumerotationResume.lignesNumerotees;
           dejaNumeroteLM = resultatNumerotationResume.dejaNumerote;
           const resultatReferencesResume = ajouterReferencesLigneTableauDeveloppement(contenuHTML, lignesNumereesLM);
