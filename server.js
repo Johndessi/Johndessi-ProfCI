@@ -8682,8 +8682,15 @@ app.get('/api/admin/debug/dernieres-generations', (req, res, next) => {
   return verifierCleAdmin(req, res, next);
 }, async (req, res) => {
   try {
-    const { classe, lecon, limit } = req.query;
-    const filtre = { origineGeneration: 'enseignant' };
+    const { classe, lecon, limit, id } = req.query;
+    // `id` (29/09) : permet de retrouver UNE fiche précise quel que soit son
+    // origineGeneration -- nécessaire pour tracer une reproduction
+    // volontaire (session_debug) du bug de résolution du tableau d'axes,
+    // jamais visible dans le filtre par défaut (réservé aux vraies fiches
+    // enseignant). Toujours protégé par la même clé admin que le reste de
+    // cet endpoint -- aucun assouplissement de sécurité, juste un filtre
+    // différent sur la même collection.
+    const filtre = id ? { _id: id } : { origineGeneration: 'enseignant' };
     if (classe) filtre.classe = new RegExp(classe, 'i');
     if (lecon) filtre.lecon = new RegExp(lecon, 'i');
     const n = Math.min(parseInt(limit, 10) || 10, 30);
