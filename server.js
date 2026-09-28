@@ -1970,8 +1970,9 @@ function separerLignesDeroulementExploitation(contenuHTML) {
     $tr.replaceWith(nouvellesLignes);
   });
 
-  const $racine = $('.fiche-cours').first();
-  const html = $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+  // Bug réel confirmé (29/09) : cf. commentaire sur preparerHtmlPourPdf --
+  // ne jamais restreindre la sérialisation à .fiche-cours.
+  const html = $.html($('body').length ? $('body') : $.root());
   return { html, avertissements };
 }
 
@@ -4552,8 +4553,9 @@ function supprimerLignesExploitationAutoDupliquees(contenuHTML) {
     }
   }
 
-  const $racine = $('.fiche-cours').first();
-  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+  // Bug réel confirmé (29/09) : cf. commentaire sur preparerHtmlPourPdf --
+  // ne jamais restreindre la sérialisation à .fiche-cours.
+  return $.html($('body').length ? $('body') : $.root());
 }
 
 // Filet déterministe final (09/09, réécrit le 15/09 pour la v3) : constaté
