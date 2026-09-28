@@ -545,6 +545,16 @@ const FicheSchema = new mongoose.Schema({
   // suffisant pour filtrer/purger a posteriori les fiches de test qui
   // suivent cette convention.
   origineGeneration : { type: String, enum: ['enseignant', 'session_debug'], default: 'enseignant' },
+  // Diagnostic temporaire (28/09, investigation numérotation/duplication texte
+  // support) : copie de la réponse BRUTE du modèle, telle que reçue par le
+  // flux SSE, AVANT toute correction (fences ```html, préambule hallucine,
+  // résolution des marqueurs {{...}}, numérotation). Permet de tracer un
+  // échec réel signalé par l'enseignant sans dépendre de sa capacité à
+  // transmettre lui-même ce contenu (accès mobile uniquement, pas d'outils
+  // de développement réseau) -- consultable directement via
+  // /api/debug/dernieres-generations. À retirer une fois l'investigation
+  // terminée (cf. TODO déposé avec ce champ).
+  contenuBrutModele : { type: String, default: '' },
   createdAt    : { type: Date, default: Date.now }
 });
 
@@ -8108,6 +8118,12 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
 
     stream.on('finalMessage', async () => {
       clearInterval(heartbeat);
+      // Diagnostic temporaire (28/09, cf. commentaire sur FicheSchema.contenuBrutModele) :
+      // capturé ICI, avant la moindre correction -- fences markdown incluses,
+      // marqueurs {{...}} non résolus, jetons de complétion intacts -- pour
+      // pouvoir tracer exactement ce que le modèle a réellement écrit sur un
+      // échec réel, sans dépendre de l'enseignant pour le transmettre.
+      const contenuBrutPourDebug = contenuHTML;
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
       contenuHTML = nettoyerPreambuleHallucine(contenuHTML);
       contenuHTML = injecterActiviteEntete(contenuHTML, activiteAffichee);
@@ -8726,6 +8742,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         discipline, classe, lecon, seance, duree, niveau,
         approche: approcheNormalisee,
         contenu: contenuHTML,
+        contenuBrutModele: contenuBrutPourDebug,
         origineGeneration: origineGenerationNormalisee
       });
       const payloadDone = { done: true, ficheId: fiche._id, contenuFinal: contenuHTML };
@@ -8764,6 +8781,48 @@ app.get('/api/fiches/:enseignantId', async (req, res) => {
       { enseignantId: req.params.enseignantId },
       { contenu: 0 }
     ).sort({ createdAt: -1 }).limit(50);
+    res.json(fiches);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Diagnostic temporaire (28/09, investigation numérotation/duplication texte
+// support -- cf. FicheSchema.contenuBrutModele) : liste les générations
+// RÉELLES les plus récentes (origineGeneration: 'enseignant', exclut donc
+// systématiquement tous les appels de test/débogage marqués
+// 'session_debug') avec leur contenu brut modèle -- pour tracer un échec
+// réel signalé par l'enseignant sans dépendre de sa capacité à transmettre
+// lui-même ce contenu (accès mobile uniquement, pas d'outils de
+// développement réseau disponibles). PROTÉGÉ par verifierCleAdmin, comme
+// tous les autres endpoints /api/admin -- cette app sert potentiellement
+// plusieurs enseignants réels : un accès sans clé exposerait le contenu de
+// N'IMPORTE QUEL enseignant à quiconque découvrirait l'URL, jamais
+// acceptable même à titre temporaire. À retirer une fois l'investigation
+// terminée. Filtrable par classe/lecon en sous-chaîne pour cibler le cas
+// précis en cours d'investigation.
+//
+// Accepte la clé admin en paramètre d'URL (?key=...), en plus de l'en-tête
+// x-admin-key habituel (verifierCleAdmin, inchangé, toujours utilisé par les
+// autres endpoints /api/admin) : un navigateur mobile ne permet pas de
+// fixer un en-tête personnalisé sans outils de développement, seul un lien
+// tapé directement est accessible dans ce contexte. Même exigence de
+// sécurité (valeur secrète correcte requise), juste un mode de transport
+// supplémentaire pour CET endpoint précis.
+app.get('/api/admin/debug/dernieres-generations', (req, res, next) => {
+  if (process.env.ADMIN_SEED_KEY && req.query.key === process.env.ADMIN_SEED_KEY) return next();
+  return verifierCleAdmin(req, res, next);
+}, async (req, res) => {
+  try {
+    const { classe, lecon, limit } = req.query;
+    const filtre = { origineGeneration: 'enseignant' };
+    if (classe) filtre.classe = new RegExp(classe, 'i');
+    if (lecon) filtre.lecon = new RegExp(lecon, 'i');
+    const n = Math.min(parseInt(limit, 10) || 10, 30);
+    const fiches = await Fiche.find(filtre)
+      .sort({ createdAt: -1 })
+      .limit(n)
+      .select('_id classe lecon seance createdAt contenuBrutModele contenu');
     res.json(fiches);
   } catch (e) {
     res.status(500).json({ error: e.message });
