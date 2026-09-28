@@ -4812,8 +4812,9 @@ function nettoyerCellulePresentationRituelle(contenuHTML) {
   });
 
   if (!modifie) return contenuHTML;
-  const $racine = $('.fiche-cours').first();
-  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+  // Bug réel confirmé (29/09) : cf. commentaire sur preparerHtmlPourPdf --
+  // ne jamais restreindre la sérialisation à .fiche-cours.
+  return $.html($('body').length ? $('body') : $.root());
 }
 
 // Filet déterministe (12/09) : le squelette PRÉSENTATION de
@@ -4873,8 +4874,9 @@ function nettoyerPlaceholdersNonExecutes(contenuHTML) {
   });
 
   if (!modifie) return contenuHTML;
-  const $racine = $('.fiche-cours').first();
-  return $racine.length ? $.html($racine) : $.html($('body').length ? $('body') : $.root());
+  // Bug réel confirmé (29/09) : cf. commentaire sur preparerHtmlPourPdf --
+  // ne jamais restreindre la sérialisation à .fiche-cours.
+  return $.html($('body').length ? $('body') : $.root());
 }
 
 // --- Mode "plan fourni par l'enseignant" pour Exploitation de texte ---
