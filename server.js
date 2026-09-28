@@ -3637,12 +3637,19 @@ function construireConsigneCompletionEntrees(taches) {
     return `   - Axe ${t.axeNumero}, ${introductionNom}${champsTexte}.${alerteReservee}`;
   }).join('\n');
 
+  // Exemple concret pour la mise en garde de format ci-dessous -- pris sur
+  // la 1ère tâche/1er champ réels de CETTE requête (jamais un exemple
+  // générique déconnecté), pour que le modèle voie le format exact attendu
+  // sur SES PROPRES identifiants plutôt que sur un exemple abstrait.
+  const exempleId = `${tachesEntrees[0].id}_${ABREV_CHAMP_ENTREE[tachesEntrees[0].champsAGenerer[0]]}`;
+
   return `
 
 COMPLÉTION AUTOMATIQUE D'ENTRÉES DU TABLEAU DE VÉRIFICATION (exception étroite à la règle "jamais inventer" ci-dessus, limitée STRICTEMENT à ce qui suit) : l'enseignant n'a pas détaillé certaines entrées de son plan. Pour CHACUNE listées ci-dessous, génère UNIQUEMENT à partir du texte support fourni (jamais d'autre source, jamais de connaissance générale sur le genre, jamais de fait inventé) le contenu demandé. ${rolesTexte}${consigneNiveauLangage}
 POUR LES INDICES TEXTUELS/RELEVÉS UNIQUEMENT : n'ajoute JAMAIS toi-même une référence de ligne, de vers ou de paragraphe à une citation (interdits : "(l. 3)", "(ligne 4)", "(v. 2)", "(vers 5)"...) -- tu ne comptes pas les lignes de façon fiable, cette référence est ajoutée automatiquement par l'application à partir du texte support réel. Écris uniquement la citation elle-même, entre guillemets, jamais suivie d'un numéro de ton cru.
 ${consignesEntrees}
-Place chaque élément, et UNIQUEMENT lui, entre ses 2 marqueurs dédiés, N'IMPORTE OÙ dans ta réponse (par exemple juste avant {{AXES_PLAN_ENSEIGNANT}}) -- ces marqueurs et leur contenu seront extraits puis retirés du document final, ils ne doivent apparaître nulle part ailleurs. N'écris PAS toi-même les lignes du tableau d'axes concernées : elles sont déjà construites, seuls ces éléments précis sont attendus de toi, un élément par marqueur, jamais une énumération libre ni un tableau complet.`;
+Place chaque élément, et UNIQUEMENT lui, entre ses 2 marqueurs dédiés, N'IMPORTE OÙ dans ta réponse (par exemple juste avant {{AXES_PLAN_ENSEIGNANT}}) -- ces marqueurs et leur contenu seront extraits puis retirés du document final, ils ne doivent apparaître nulle part ailleurs. N'écris PAS toi-même les lignes du tableau d'axes concernées : elles sont déjà construites, seuls ces éléments précis sont attendus de toi, un élément par marqueur, jamais une énumération libre ni un tableau complet.
+FORMAT EXACT DES 2 MARQUEURS (bug réel constaté le 29/09, ne JAMAIS reproduire) : le marqueur d'OUVERTURE est {{${exempleId}}} tel quel, le marqueur de FERMETURE est {{FIN_${exempleId}}} (préfixe "FIN_" DEVANT l'identifiant) -- JAMAIS {{${exempleId}_DEBUT}}/{{${exempleId}_FIN}} ni aucune autre variante (suffixe "_DEBUT"/"_FIN", espace, casse différente...) : un format différent n'est reconnu par aucun mécanisme d'extraction, et tout le contenu que tu auras rédigé sera alors perdu, remplacé par une mention d'absence dans la fiche finale.`;
 }
 function construireInstructionsLectureMethodiqueAvecPlanEnseignant(classe, planCours, referentiel, lignesNumerotees) {
   const niveau = niveauLectureMethodique(classe);
