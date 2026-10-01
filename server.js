@@ -3161,6 +3161,36 @@ ${lignesHTML}
 </table>`;
 }
 
+// Bug réel confirmé (29/09, échantillon de 21 fiches réelles) : la colonne
+// Traces écrites de la ligne III (Vérification), censée contenir le libellé
+// des 2 axes ("Axe 1 : ... / Axe 2 : ..."), est vide ou quasi vide dans 52%
+// des générations (le modèle l'oublie ou la bâcle) -- sans aucun garde-fou,
+// contrairement aux entrées des tableaux d'axes (repli + avertissement).
+// Cette information est pourtant déjà connue avec certitude : ce sont les
+// MÊMES titres que ceux extraits via les marqueurs {{AXE1_TITRE}}/
+// {{AXE2_TITRE}} pour construire les 2 tableaux détaillés (cf.
+// construireTableauAxeHTML ci-dessus) -- jamais la peine de les redemander
+// en texte libre au modèle. Remplace TOUJOURS le contenu de cette cellule
+// par le libellé canonique (même si le modèle y avait déjà écrit quelque
+// chose) : élimine à la fois le risque de vide ET le risque d'un libellé
+// légèrement différent de celui réellement affiché dans les tableaux.
+// No-op silencieux si les titres ne sont pas encore connus (ex. Mode 2 où
+// cette ligne est déjà entièrement construite côté serveur autrement).
+function forcerLibelleAxesLigneIII(contenuHTML, titreAxe1, titreAxe2) {
+  if (!contenuHTML || !titreAxe1 || !titreAxe2 || !contenuHTML.includes('<tr')) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  $('tr').each((_, tr) => {
+    const $tds = $(tr).find('> td');
+    if ($tds.length !== 5) return;
+    if (!/^III\.?\s*V[ÉE]RIFICATION/i.test($tds.first().text().trim())) return;
+    $tds.last().html(`Axe 1 : ${echapperHtml(titreAxe1)}<br><br>Axe 2 : ${echapperHtml(titreAxe2)}`);
+    modifie = true;
+  });
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
 // Orchestre les 2 fonctions ci-dessus à partir des segments déjà découpés par
 // parserPlanEnseignant : construit les lignes I à IV (+ Évaluation) du
 // tableau déroulement, et les tableaux d'axes détectés dans la partie III.
@@ -4773,6 +4803,32 @@ function nettoyerFuiteApresTexteSupportExploitation(contenuHTML, texteSupportFin
   // Bug réel confirmé (29/09) : cf. commentaire sur preparerHtmlPourPdf --
   // ne jamais restreindre la sérialisation à .fiche-cours.
   return $.html($('body').length ? $('body') : $.root());
+}
+
+// Filet final déterministe, toutes activités (29/09, bug réel confirmé,
+// cf. commentaire à l'appel) : retire toute accolade double {{ }} encore
+// présente dans le document fini. Deux cas distincts, traités différemment :
+// 1) un marqueur orphelin au format pur identifiant (ex. {{AXE1_TITRE}},
+//    {{FIN_A2E2_IND}}) -- jamais un contenu réel, toujours un résidu de
+//    plomberie interne resté non résolu -- supprimé ENTIÈREMENT (le texte
+//    qu'il encadrait, lui, reste en place puisqu'il se trouve EN DEHORS de
+//    ces accolades-là).
+// 2) toute autre accolade double, qui enveloppe alors du texte réel écrit
+//    par le modèle (il s'est entouré lui-même, par erreur, en plus des
+//    marqueurs attendus) -- on retire UNIQUEMENT les accolades, JAMAIS le
+//    texte qu'elles contiennent (ne jamais perdre un contenu réel pour un
+//    défaut de formatage).
+// Avertissement explicite si quoi que ce soit a été retiré -- jamais un
+// nettoyage silencieux qui masquerait un défaut réel à l'enseignant.
+function nettoyerAccoladesResiduelles(contenuHTML) {
+  if (!contenuHTML || !contenuHTML.includes('{{')) return { html: contenuHTML, avertissement: null };
+  let modifie = false;
+  let resultat = contenuHTML.replace(/\{\{[A-Z0-9_]+\}\}/g, () => { modifie = true; return ''; });
+  resultat = resultat.replace(/\{\{([\s\S]*?)\}\}/g, (m, interieur) => { modifie = true; return interieur; });
+  const avertissement = modifie
+    ? "Des marqueurs internes ({{...}}) sont restés visibles dans la réponse du modèle et ont été retirés automatiquement -- vérifiez que le contenu environnant reste cohérent dans la fiche générée."
+    : null;
+  return { html: resultat, avertissement };
 }
 
 // Filet déterministe UNIVERSEL (12/09) : la cellule Traces écrites de la
@@ -8183,6 +8239,13 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenuHTML = contenuNettoyeCompletion;
         debugPipelineAxesData.valeursExtraites = valeurs;
         debugPipelineAxesData.marqueurAxesDansContenuApresExtraction = contenuHTML.includes('{{AXES_PLAN_ENSEIGNANT}}');
+        // Libellé des axes (ligne III, colonne Traces écrites) dérivé
+        // directement des titres déjà extraits -- cf. commentaire sur
+        // forcerLibelleAxesLigneIII. Les clés AXE1_titre/AXE2_titre
+        // correspondent aux tâches {id:'AXE1'/'AXE2', champsAGenerer:['titre']}
+        // (cf. construireAxesAInventerHTML) -- toujours présentes en Mode 1,
+        // absentes en Mode 2 (no-op silencieux dans ce cas, cf. la fonction).
+        contenuHTML = forcerLibelleAxesLigneIII(contenuHTML, valeurs['AXE1_titre'], valeurs['AXE2_titre']);
         // Référence de ligne (27/09) : ajoutée ici sur les indices/citations
         // générés par le modèle (Mode 1 automatique ET entrées partiellement
         // complétées en Mode 2 -- toutes deux passent par ce mécanisme de
@@ -8632,6 +8695,21 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           if (resultatPasse === contenuHTML) break;
           contenuHTML = resultatPasse;
         }
+      }
+      // Filet final, TOUTES activités confondues (29/09, bug réel confirmé,
+      // fiche réelle où les 12 cellules des 2 tableaux d'axes affichaient du
+      // texte entouré d'accolades brutes, ex. "{{« Je t'écris » L5}}") :
+      // le modèle entoure parfois SA PROPRE réponse d'une paire {{ }}
+      // supplémentaire, en plus des marqueurs {{ID}}...{{FIN_ID}} attendus --
+      // l'extraction capture alors tout, accolades internes comprises.
+      // Placé ICI, tout en fin de pipeline, APRÈS la résolution de tous les
+      // marqueurs légitimes (tous modes, toutes activités) : tout {{...}}
+      // encore présent à ce stade est par définition un résidu, jamais un
+      // marqueur en attente.
+      const { html: contenuSansAccolades, avertissement: avertissementAccolades } = nettoyerAccoladesResiduelles(contenuHTML);
+      contenuHTML = contenuSansAccolades;
+      if (avertissementAccolades) {
+        res.write(`data: ${JSON.stringify({ avertissement: avertissementAccolades })}\n\n`);
       }
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
