@@ -3191,6 +3191,36 @@ function forcerLibelleAxesLigneIII(contenuHTML, titreAxe1, titreAxe2) {
   return $.html($('body').length ? $('body') : $.root());
 }
 
+// Garde-fou pour la colonne Traces écrites de la ligne IV (Bilan général) --
+// avertissement UNIQUEMENT, jamais de correctif de contenu : contrairement
+// aux lignes III ou aux entrées d'axes, le bilan n'est pas dérivable avec
+// certitude d'une information déjà connue côté serveur -- l'inventer
+// reviendrait à halluciner le contenu pédagogique, jamais acceptable.
+// Seuil fixé à 100 caractères (texte brut, sans balises), déterminé sur
+// l'échantillon réel du 29/09 (21 fiches) : les 2 bilans manifestement
+// déficients mesuraient 43 et 64 caractères ("Notre hypothèse générale est
+// donc vérifiée." seul, ou une méta-description du type "Résumé synthétique
+// de l'étude menée..." sans aucun contenu réel) ; tous les autres, jugés
+// substantiels à la lecture, mesuraient 162 caractères ou plus -- écart net,
+// jamais un seuil arbitraire.
+function verifierBilanSubstantiel(contenuHTML) {
+  if (!contenuHTML || !contenuHTML.includes('<tr')) return null;
+  const SEUIL_BILAN_CARACTERES = 100;
+  const $ = cheerio.load(contenuHTML);
+  let avertissement = null;
+  $('tr').each((_, tr) => {
+    if (avertissement) return;
+    const $tds = $(tr).find('> td');
+    if ($tds.length !== 5) return;
+    if (!/^IV\.?\s*BILAN/i.test($tds.first().text().trim())) return;
+    const texte = $tds.last().text().trim();
+    if (texte.length < SEUIL_BILAN_CARACTERES) {
+      avertissement = `Le Bilan général (ligne IV) semble anormalement court ou peu développé ("${texte.slice(0, 80)}${texte.length > 80 ? '...' : ''}") -- vérifiez qu'il reprend bien les éléments des axes étudiés, pas seulement la formule de vérification de l'hypothèse. Régénérez si besoin.`;
+    }
+  });
+  return avertissement;
+}
+
 // Orchestre les 2 fonctions ci-dessus à partir des segments déjà découpés par
 // parserPlanEnseignant : construit les lignes I à IV (+ Évaluation) du
 // tableau déroulement, et les tableaux d'axes détectés dans la partie III.
@@ -8710,6 +8740,13 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       contenuHTML = contenuSansAccolades;
       if (avertissementAccolades) {
         res.write(`data: ${JSON.stringify({ avertissement: avertissementAccolades })}\n\n`);
+      }
+      // Garde-fou Bilan général (ligne IV) -- avertissement seul, cf.
+      // commentaire sur verifierBilanSubstantiel. No-op silencieux pour les
+      // activités sans ligne "IV. BILAN" (la recherche ne trouve alors rien).
+      const avertissementBilan = verifierBilanSubstantiel(contenuHTML);
+      if (avertissementBilan) {
+        res.write(`data: ${JSON.stringify({ avertissement: avertissementBilan })}\n\n`);
       }
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
