@@ -616,7 +616,7 @@ textarea { resize: vertical; min-height: 90px; }
           </div>
         </div>
 
-        <div id="oiPanneauLectureMethodique" style="display:none">
+        <div id="oiPanneauLectureMethodiqueOICollege" style="display:none">
           <p style="font-size:12px;color:var(--gris2);margin-bottom:10px">
             Utilise les champs "Plan de cours" et "Texte support" ci-dessous (les mêmes que pour une Lecture méthodique classique) : renseigne aussi le genre du passage (ex. "portrait", "texte descriptif") dans le champ Thème.
           </p>
@@ -1377,8 +1377,14 @@ async function genererFicheOeuvreIntegraleLycee() {
   const seance = trouverSeanceOeuvreLyceeSelectionnee();
   const numeroSequence = document.getElementById('oiSequenceLycee').value;
 
-  if (!titreOeuvre || !auteurOeuvre) { toast("❗ Titre de l'œuvre et auteur sont obligatoires"); return; }
   if (!numeroSequence || !seance) { toast('❗ Choisissez une séquence et une séance'); return; }
+  // Titre/auteur ne deviennent pertinents qu'à partir de la Séance 3
+  // (Introduction à l'étude de l'œuvre intégrale) -- avant (Culture
+  // littéraire, Séances 1-2), l'œuvre précise n'est pas encore le sujet de la
+  // séance (signalement enseignant du 03/10) ; le backend gère déjà un titre/
+  // auteur vide avec repli gracieux (cf. construireInstructionsCultureLitteraireLycee,
+  // rechercherInfosOeuvre).
+  if (Number(seance.numeroSeance) >= 3 && (!titreOeuvre || !auteurOeuvre)) { toast("❗ Titre de l'œuvre et auteur sont obligatoires à partir de la Séance 3"); return; }
   if (!TYPES_SEANCE_LYCEE_IMPLEMENTES.includes(seance.typeSeanceOeuvre)) {
     toast(`❗ Ce type de séance ("${seance.typeSeanceOeuvre || 'non défini'}") n'est pas encore disponible pour l'instant.`);
     return;
@@ -1580,7 +1586,7 @@ function changerTypeSeanceOI() {
     mettreAJourCompteurLM();
   }
   document.getElementById('oiPanneauLectureSuivie').style.display = type === 'lecture_suivie' ? 'block' : 'none';
-  document.getElementById('oiPanneauLectureMethodique').style.display = type === 'lecture_methodique' ? 'block' : 'none';
+  document.getElementById('oiPanneauLectureMethodiqueOICollege').style.display = type === 'lecture_methodique' ? 'block' : 'none';
 }
 
 function ajouterUniteSensOI() {
