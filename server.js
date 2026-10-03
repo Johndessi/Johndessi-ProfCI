@@ -7894,9 +7894,25 @@ function limiterGenerationParIp(req, res, next) {
       }
     }
 
+    // Bug réel (03/10, signalement enseignant) : pour l'Étude de l'œuvre
+    // intégrale, le frontend n'envoie jamais de champ "lecon" (cf.
+    // genererFicheOeuvreIntegraleLycee) -- `lecon` restait donc undefined
+    // pour CETTE activité, aussi bien à l'écriture (Fiche.create ci-dessous)
+    // qu'à la lecture (trouverFichesPrecedentes juste en dessous), où
+    // normaliserTexte(undefined) produit '' des deux côtés : la comparaison
+    // `!leconCible` rejetait alors SYSTÉMATIQUEMENT toute fiche précédente,
+    // même réellement existante -- jamais un problème de classe/discipline/
+    // enseignantId (déjà corrects), uniquement cette clé toujours vide.
+    // leconAfficheeOI (déjà calculé ci-dessus à partir de numeroSequence/
+    // titreOeuvre/auteurOeuvre, stable entre 2 séances d'une même séquence
+    // même quand titre/auteur sont encore vides en Séance 1-2) comble
+    // exactement ce rôle pour les 2 chemins Œuvre intégrale (collège ET
+    // lycée) ; `lecon` reste inchangé pour toute autre activité.
+    const leconEffectif = estOeuvreIntegrale ? leconAfficheeOI : lecon;
+
     const seanceNum = parseInt(seance, 10);
     if (Number.isFinite(seanceNum) && seanceNum > 1) {
-      const fichesPrecedentes = await trouverFichesPrecedentes({ enseignantId, discipline, classe, lecon, niveau, seance });
+      const fichesPrecedentes = await trouverFichesPrecedentes({ enseignantId, discipline, classe, lecon: leconEffectif, niveau, seance });
       if (fichesPrecedentes.length) {
         const resume = resumerSeancesPrecedentes(fichesPrecedentes);
         systemPrompt += `\n\nCONTENU RÉEL DES SÉANCES PRÉCÉDENTES DE CETTE LEÇON :\n${resume}\n\nBase le rappel de la PRÉSENTATION EXCLUSIVEMENT sur ce contenu réel ci-dessus (questions, réponses, traces écrites déjà vues), PAS sur une supposition.`;
@@ -8760,7 +8776,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       }
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
-        discipline, classe, lecon, seance, duree, niveau,
+        discipline, classe, lecon: leconEffectif, seance, duree, niveau,
         approche: approcheNormalisee,
         contenu: contenuHTML,
         contenuBrutModele: contenuBrutPourDebug,
