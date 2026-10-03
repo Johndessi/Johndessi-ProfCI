@@ -7235,8 +7235,14 @@ function limiterGenerationParIp(req, res, next) {
       if (!TYPES_SEANCE_LYCEE_IMPLEMENTES.includes(typeSeanceOI)) {
         return envoyerBlocageSSE(res, `Le type de séance "${typeSeanceOI || '(non renseigné)'}" n'est pas encore disponible pour le second cycle -- seuls Lecture dirigée, Culture littéraire, Exposé, Introduction et Conclusion sont implémentés pour l'instant.`, heartbeat);
       }
-      if (!(titreOeuvre || '').toString().trim() || !(auteurOeuvre || '').toString().trim()) {
-        return envoyerBlocageSSE(res, "Le titre et l'auteur de l'œuvre sont obligatoires pour générer une fiche de cette séquence.", heartbeat);
+      // Titre/auteur ne deviennent pertinents qu'à partir de la Séance 3
+      // (Introduction à l'étude de l'œuvre intégrale) -- avant (Culture
+      // littéraire, Séances 1-2), l'œuvre précise n'est pas encore le sujet
+      // de la séance (signalement enseignant du 03/10 : ce verrou serveur,
+      // indépendant du verrou frontend déjà assoupli le même jour, bloquait
+      // encore la génération à la Séance 1 malgré le correctif client).
+      if (seanceCatalogueOI && seanceCatalogueOI.numeroSeance >= 3 && (!(titreOeuvre || '').toString().trim() || !(auteurOeuvre || '').toString().trim())) {
+        return envoyerBlocageSSE(res, "Le titre et l'auteur de l'œuvre sont obligatoires pour générer une fiche de cette séquence à partir de la Séance 3.", heartbeat);
       }
 
       if (typeSeanceOI === 'lecture_dirigee') {
