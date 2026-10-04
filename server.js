@@ -7330,6 +7330,15 @@ function limiterGenerationParIp(req, res, next) {
     // d'Introduction/Conclusion à appliquer (narrative/theatrale vs
     // poetique, cf. construireInstructionsIntroductionOeuvreLycee).
     let genreOeuvreOI = null;
+    // titreLeconCatalogueOI (04/10, crash ReferenceError confirmé par les
+    // logs Render -- leconCatalogueOI is not defined) : même piège de
+    // portée que genreOeuvreOI/seanceCatalogueOI ci-dessus, décrit dans le
+    // commentaire juste au-dessus -- leconCatalogueOI.titreLecon est
+    // nécessaire plus bas, dans le second bloc "systemPrompt" (même
+    // condition, mais un bloc {} différent, donc une portée différente) --
+    // hissé ici selon le même pattern déjà établi, jamais leconCatalogueOI
+    // lui-même.
+    let titreLeconCatalogueOI = null;
     if (estOeuvreIntegrale && profilInfoOI) {
       const leconCatalogueOI = await resoudreSequenceOeuvreLycee(profilInfoOI.profil, numeroSequence);
       const messageBlocageOI = validerSeanceOeuvreLycee(leconCatalogueOI, seance, typeSeanceOI);
@@ -7338,6 +7347,7 @@ function limiterGenerationParIp(req, res, next) {
       }
       seanceCatalogueOI = leconCatalogueOI.seances.find((s) => s.numeroSeance === parseInt(seance, 10));
       genreOeuvreOI = (leconCatalogueOI.genreOeuvre || '').toString().trim() || null;
+      titreLeconCatalogueOI = (leconCatalogueOI.titreLecon || '').toString().trim() || null;
 
       if (!TYPES_SEANCE_LYCEE_IMPLEMENTES.includes(typeSeanceOI)) {
         return envoyerBlocageSSE(res, `Le type de séance "${typeSeanceOI || '(non renseigné)'}" n'est pas encore disponible pour le second cycle -- seuls Lecture dirigée, Culture littéraire, Exposé, Introduction et Conclusion sont implémentés pour l'instant.`, heartbeat);
@@ -7578,7 +7588,7 @@ function limiterGenerationParIp(req, res, next) {
       // collège où COMPETENCE_OEUVRE_INTEGRALE est une valeur connue et
       // vérifiée. Laissé à la résolution générale par défaut plutôt que
       // d'imposer une valeur non vérifiée.
-      leconAfficheeOI = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre, leconCatalogueOI && leconCatalogueOI.titreLecon);
+      leconAfficheeOI = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre, titreLeconCatalogueOI);
       activiteAffichee = ACTIVITE_OEUVRE_INTEGRALE;
       systemPrompt += `\n\nCHAMP ACTIVITÉ DE L'ENTÊTE : écris EXACTEMENT "${ACTIVITE_OEUVRE_INTEGRALE}" dans le champ Activité de l'entête -- jamais "Étude de l'œuvre intégrale" ni une autre formulation.`;
       // 21/09 (retour enseignant, cf. fiche_francais_2nde_3.docx) : laissé
