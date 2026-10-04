@@ -4865,6 +4865,47 @@ function nettoyerAccoladesResiduelles(contenuHTML) {
   return { html: resultat, avertissement };
 }
 
+// Filet mécanique UNIVERSEL (04/10, signalement enseignant -- Culture
+// littéraire 2nde, Séance 2) : pour une séance où le modèle rédige
+// lui-même le contenu HTML du Développement (biais de continuité de
+// génération déjà rencontré ailleurs dans ce fichier, ex.
+// structureRemplacementSeanceOeuvreLyceePresente), il duplique parfois un
+// <table> déjà placé dans le Développement (ex. "tableau comparatif des
+// sous-genres") en le réécrivant une seconde fois APRÈS la fermeture
+// complète du tableau Déroulement -- jamais une duplication voulue.
+// Repère le tableau Déroulement par sa propre en-tête ("Moments
+// didactiques", jamais par position fixe) puis supprime tout <table>
+// trouvé après lui, SAUF un tableau d'axes légitime de Lecture méthodique
+// (signature stable : colspan="4" + "Indices textuels", cf.
+// construireTableauAxeHTML) -- jamais de faux positif sur ce cas précis,
+// seul cas réel où du contenu légitime suit le Déroulement.
+function supprimerTableauDupliqueApresDeroulement(contenuHTML) {
+  if (!contenuHTML || !contenuHTML.includes('<table')) return { html: contenuHTML, avertissement: null };
+  const $ = cheerio.load(contenuHTML);
+  // Seuls les tableaux de NIVEAU SUPÉRIEUR (jamais nichés dans un autre
+  // tableau, ex. un tableau comparatif légitimement placé dans une cellule
+  // du Développement) sont candidats -- un tableau niché n'est jamais
+  // "après" le Déroulement, il est DEDANS (bug réel trouvé en test local :
+  // $('table') seul renvoie aussi les tableaux nichés, qui suivent leur
+  // parent dans l'ordre du document sans jamais lui être postérieurs).
+  const tables = $('table').not('table table').toArray();
+  const indexDeroulement = tables.findIndex((t) => /Moments didactiques/i.test($(t).find('th').first().text()));
+  if (indexDeroulement === -1) return { html: contenuHTML, avertissement: null };
+
+  let modifie = false;
+  for (let i = indexDeroulement + 1; i < tables.length; i++) {
+    const $table = $(tables[i]);
+    const estTableauAxes = $table.find('[colspan="4"]').length > 0 && /Indices textuels/i.test($table.text());
+    if (estTableauAxes) continue;
+    $table.remove();
+    modifie = true;
+  }
+
+  if (!modifie) return { html: contenuHTML, avertissement: null };
+  const avertissement = "Un tableau déjà présent dans le Développement a été détecté dupliqué après le tableau Déroulement et retiré automatiquement -- vérifiez que le contenu reste cohérent dans la fiche générée.";
+  return { html: $.html($('body').length ? $('body') : $.root()), avertissement };
+}
+
 // Filet déterministe UNIVERSEL (12/09) : la cellule Traces écrites de la
 // ligne PRÉSENTATION rituelle (RÈGLES ABSOLUES de construirePromptSecondaire)
 // ne doit contenir QUE Date/Activité/Leçon/Séance -- jamais un contenu déjà
@@ -6038,9 +6079,25 @@ const ACTIVITE_OEUVRE_INTEGRALE = 'Lecture';
 // numéro de séquence (1 ou 2) est le numéro de la leçon, la valeur inclut
 // le titre ET l'auteur, même convention "N : texte" que Leçon/Séance
 // ailleurs dans l'app (jamais le mot "Leçon" répété en toutes lettres).
-function construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre) {
+//
+// Bug réel (04/10, signalement enseignant) : titre/auteur sont désormais
+// optionnels aux Séances 1-2 du second cycle (cf. correctif du 03/10,
+// obligatoires seulement à partir de la Séance 3) -- avec les deux vides,
+// cette fonction produisait littéralement "1 : L'œuvre intégrale «  » de "
+// (guillemets vides, "de" sans complément) dans l'entête ET dans les Traces
+// écrites de la ligne III (cf. forcerLibelleAxesLigneIII pour la Lecture
+// méthodique -- même valeur de leconAfficheeOI réinjectée partout). Avec les
+// deux vides, retombe désormais sur titreLeconCatalogue (optionnel, cf.
+// leconCatalogueOI.titreLecon, ex. "Œuvre narrative" -- SEULE donnée fiable
+// disponible avant que l'enseignant ait choisi son livre) plutôt que de
+// construire une phrase autour de champs vides.
+function construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre, titreLeconCatalogue) {
   const titre = (titreOeuvre || '').toString().trim();
   const auteur = (auteurOeuvre || '').toString().trim();
+  if (!titre && !auteur) {
+    const titreCatalogue = (titreLeconCatalogue || '').toString().trim();
+    return `${numeroSequence} : ${titreCatalogue || 'Œuvre intégrale'}`;
+  }
   return `${numeroSequence} : L'œuvre intégrale « ${titre} » de ${auteur}`;
 }
 
@@ -6371,11 +6428,23 @@ CONTENU FOURNI PAR L'ENSEIGNANT (plan et/ou contenu déjà rédigé -- seule str
 
 CONSIGNE ABSOLUE -- ÉVALUATION DE CETTE SÉANCE : à ce stade de la séquence, les élèves n'ont PAS ENCORE lu l'œuvre « ${titre || '(titre non précisé)'} » (la Culture littéraire est leur tout premier contact avec elle, avant même le début de la lecture) -- l'évaluation ne doit donc JAMAIS supposer une lecture déjà faite, même partielle (interdits : "vous avez lu...", "dans le passage lu...", ou toute question qui présuppose une connaissance du contenu narratif de l'œuvre). Elle doit porter UNIQUEMENT sur les notions réellement enseignées dans CETTE séance précise${intituleOfficiel ? ` (rappel du périmètre officiel : "${intituleOfficiel}")` : ''} -- par un exercice d'application générique (ex. identifier ces notions sur un texte/extrait fourni ou bien connu, jamais sur l'intrigue de « ${titre || 'l\'œuvre'} » elle-même), jamais sur une notion qui relève d'une autre séance de la progression. Si l'œuvre est malgré tout mentionnée dans l'évaluation, ne t'appuie QUE sur son titre/auteur/genre déjà connus -- n'invente JAMAIS un personnage, un thème ou un événement de cette œuvre que tu ne connais pas avec certitude, même à titre d'exemple.`;
 
+  // Garde-fou anti-duplication (04/10, retour enseignant sur un tableau
+  // comparatif des sous-genres écrit une 1ère fois dans le Développement
+  // puis réécrit une 2e fois après la fermeture du tableau Déroulement) --
+  // complété par un filet mécanique côté serveur (cf.
+  // supprimerTableauDupliqueApresDeroulement), mais la consigne reste le
+  // 1er niveau de défense : moins cher et plus fiable que de compter sur le
+  // filet pour rattraper un défaut qu'une instruction claire évite dès la
+  // génération.
+  const garantiAntiDuplication = `
+
+CONSIGNE ABSOLUE -- UN SEUL TABLEAU, UNE SEULE FOIS : si tu inclus un tableau (ex. un tableau comparatif) dans le Développement, ne le réécris JAMAIS une seconde fois ailleurs dans ta réponse, même reformulé ou raccourci. Le tableau DÉROULEMENT (Présentation/Développement/Évaluation) est le DERNIER élément de ta réponse -- n'ajoute RIEN après sa fermeture (</table>), ni résumé, ni rappel, ni tableau déjà placé plus haut.`;
+
   return `
 
 INSTRUCTIONS SPÉCIFIQUES -- CULTURE LITTÉRAIRE (exposé magistral de l'enseignant sur le contexte historique/littéraire/biographique de l'œuvre) : contrairement à l'Introduction et à la Conclusion, cette séance CONSERVE INTÉGRALEMENT la structure générique du tableau Habiletés/Contenus et du déroulement Présentation/Développement/Évaluation -- ne la remplace par aucune autre structure, aucune section I/II/III.
 
-${consigneContenu}${consigneSituation}${garantiEvaluation}`;
+${consigneContenu}${consigneSituation}${garantiEvaluation}${garantiAntiDuplication}`;
 }
 
 // Lecture méthodique, SECOND CYCLE (23/09, corrigé le 25/09) : contrairement
@@ -7471,7 +7540,7 @@ function limiterGenerationParIp(req, res, next) {
       // collège où COMPETENCE_OEUVRE_INTEGRALE est une valeur connue et
       // vérifiée. Laissé à la résolution générale par défaut plutôt que
       // d'imposer une valeur non vérifiée.
-      leconAfficheeOI = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre);
+      leconAfficheeOI = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre, leconCatalogueOI && leconCatalogueOI.titreLecon);
       activiteAffichee = ACTIVITE_OEUVRE_INTEGRALE;
       systemPrompt += `\n\nCHAMP ACTIVITÉ DE L'ENTÊTE : écris EXACTEMENT "${ACTIVITE_OEUVRE_INTEGRALE}" dans le champ Activité de l'entête -- jamais "Étude de l'œuvre intégrale" ni une autre formulation.`;
       // 21/09 (retour enseignant, cf. fiche_francais_2nde_3.docx) : laissé
@@ -8766,6 +8835,11 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       contenuHTML = contenuSansAccolades;
       if (avertissementAccolades) {
         res.write(`data: ${JSON.stringify({ avertissement: avertissementAccolades })}\n\n`);
+      }
+      const { html: contenuSansTableauDuplique, avertissement: avertissementTableauDuplique } = supprimerTableauDupliqueApresDeroulement(contenuHTML);
+      contenuHTML = contenuSansTableauDuplique;
+      if (avertissementTableauDuplique) {
+        res.write(`data: ${JSON.stringify({ avertissement: avertissementTableauDuplique })}\n\n`);
       }
       // Garde-fou Bilan général (ligne IV) -- avertissement seul, cf.
       // commentaire sur verifierBilanSubstantiel. No-op silencieux pour les
