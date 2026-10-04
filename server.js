@@ -584,6 +584,13 @@ const FicheSchema = new mongoose.Schema({
   // clé, pour identifier PRÉCISÉMENT où le contenu se perd -- jamais deviné.
   // À retirer une fois l'investigation terminée.
   debugPipelineAxes : { type: String, default: '' },
+  // Clé stable de correspondance pour l'historique de l'Étude de l'œuvre
+  // intégrale (04/10) -- cf. commentaire sur trouverFichesPrecedentes :
+  // `lecon` (texte affiché) change de forme entre Séances 1-2 (titre/auteur
+  // vides) et Séance 3+ (renseignés), donc inutilisable pour retrouver une
+  // séance précédente à travers cette transition. Absent (undefined) pour
+  // toute activité hors Étude de l'œuvre intégrale.
+  numeroSequenceOeuvre : { type: String, default: undefined },
   createdAt    : { type: Date, default: Date.now }
 });
 
@@ -747,7 +754,19 @@ function regexExactInsensible(str) {
   return new RegExp('^' + echappe + '$', 'i');
 }
 
-async function trouverFichesPrecedentes({ enseignantId, discipline, classe, lecon, niveau, seance }) {
+// numeroSequenceOeuvre (04/10, signalement enseignant) : pour l'Étude de
+// l'œuvre intégrale, la correspondance ne peut PAS reposer sur `lecon`
+// (leconEffectif/leconAfficheeOI, cf. route) -- ce texte change légitimement
+// de forme entre les Séances 1-2 (titre/auteur encore vides, repli sur le
+// titre catalogue, ex. "1 : Œuvre narrative") et la Séance 3+ (titre/auteur
+// enfin saisis, ex. "1 : L'œuvre intégrale « Sous l'orage » de Seydou
+// Badian") -- deux chaînes sans aucun recouvrement textuel, que la
+// comparaison normaliserTexte()/includes() ci-dessous ne peut jamais
+// rapprocher. numeroSequenceOeuvre (le numéro de séquence lui-même, stable
+// du 1er au dernier jour de la séquence, quel que soit l'état de titre/
+// auteur) sert de clé de correspondance EXACTE à la place de `lecon` quand
+// il est fourni -- `lecon` reste la seule clé pour toute autre activité.
+async function trouverFichesPrecedentes({ enseignantId, discipline, classe, lecon, niveau, seance, numeroSequenceOeuvre }) {
   const seanceNum = parseInt(seance, 10);
   if (!enseignantId || !Number.isFinite(seanceNum) || seanceNum <= 1) return [];
 
@@ -758,14 +777,20 @@ async function trouverFichesPrecedentes({ enseignantId, discipline, classe, leco
     classe: regexExactInsensible(classe)
   }).sort({ createdAt: -1 }).limit(50);
 
-  const leconCible = normaliserTexte(lecon);
-  const correspondantes = candidates.filter((f) => {
-    const leconStockee = normaliserTexte(f.lecon);
-    if (!leconStockee || !leconCible) return false;
-    if (leconStockee === leconCible) return true;
-    // leçon "très proche" : l'une contient l'autre (variante courte/longue du même titre)
-    return leconCible.length > 3 && (leconStockee.includes(leconCible) || leconCible.includes(leconStockee));
-  });
+  let correspondantes;
+  if (numeroSequenceOeuvre) {
+    const sequenceCible = String(numeroSequenceOeuvre).trim();
+    correspondantes = candidates.filter((f) => f.numeroSequenceOeuvre && String(f.numeroSequenceOeuvre).trim() === sequenceCible);
+  } else {
+    const leconCible = normaliserTexte(lecon);
+    correspondantes = candidates.filter((f) => {
+      const leconStockee = normaliserTexte(f.lecon);
+      if (!leconStockee || !leconCible) return false;
+      if (leconStockee === leconCible) return true;
+      // leçon "très proche" : l'une contient l'autre (variante courte/longue du même titre)
+      return leconCible.length > 3 && (leconStockee.includes(leconCible) || leconCible.includes(leconStockee));
+    });
+  }
 
   return correspondantes
     .map((f) => ({ fiche: f, seanceNum: parseInt(f.seance, 10) }))
@@ -7981,7 +8006,7 @@ function limiterGenerationParIp(req, res, next) {
 
     const seanceNum = parseInt(seance, 10);
     if (Number.isFinite(seanceNum) && seanceNum > 1) {
-      const fichesPrecedentes = await trouverFichesPrecedentes({ enseignantId, discipline, classe, lecon: leconEffectif, niveau, seance });
+      const fichesPrecedentes = await trouverFichesPrecedentes({ enseignantId, discipline, classe, lecon: leconEffectif, niveau, seance, numeroSequenceOeuvre: estOeuvreIntegrale ? numeroSequence : undefined });
       if (fichesPrecedentes.length) {
         const resume = resumerSeancesPrecedentes(fichesPrecedentes);
         systemPrompt += `\n\nCONTENU RÉEL DES SÉANCES PRÉCÉDENTES DE CETTE LEÇON :\n${resume}\n\nBase le rappel de la PRÉSENTATION EXCLUSIVEMENT sur ce contenu réel ci-dessus (questions, réponses, traces écrites déjà vues), PAS sur une supposition.`;
@@ -8856,6 +8881,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenuBrutModele: contenuBrutPourDebug,
         texteSupportBrut: texteSupport,
         debugPipelineAxes: JSON.stringify(debugPipelineAxesData),
+        numeroSequenceOeuvre: estOeuvreIntegrale ? numeroSequence : undefined,
         origineGeneration: origineGenerationNormalisee
       });
       const payloadDone = { done: true, ficheId: fiche._id, contenuFinal: contenuHTML };
