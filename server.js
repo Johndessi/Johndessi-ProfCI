@@ -7140,6 +7140,25 @@ function limiterGenerationParIp(req, res, next) {
 
  app.post('/api/generer-fiche', limiterGenerationParIp, uploadTexteSupportFichier, async (req, res) => {
   console.log('📩 Requête reçue:', req.body.discipline, req.body.classe, req.body.lecon);
+  // Bug réel (04/10, crash Render confirmé par les logs -- ReferenceError:
+  // heartbeat is not defined, server.js:8904 avant ce correctif) : `let
+  // heartbeat` était déclaré À L'INTÉRIEUR du bloc try ci-dessous, alors que
+  // le catch englobant plus bas est un bloc FRÈRE du try, pas un enfant --
+  // un let déclaré dans un try n'est JAMAIS visible depuis son catch en
+  // JavaScript (scoping par bloc). Le commentaire ci-dessus décrivait déjà
+  // l'intention inverse ("le catch englobant plus bas doit pouvoir lire
+  // heartbeat") depuis le commit l'ayant introduit (15/09), mais le code ne
+  // l'a jamais fait -- bug dormant 3 semaines, jamais déclenché jusqu'à ce
+  // qu'une vraie exception atteigne enfin ce catch. Résultat : TOUTE
+  // exception survenant dans le try (quelle qu'elle soit) provoquait un
+  // second crash (ReferenceError) DANS le catch censé la gérer, qui
+  // arrêtait tout le process Node -- et empêchait même console.error
+  // d'afficher l'erreur d'origine (cf. plus bas), puisqu'il s'exécutait
+  // APRÈS la ligne qui plantait. Déclaré ici, avant le try, en `let ...
+  // = null` (jamais `const`) pour rester lisible et modifiable AVANT tout
+  // code pouvant lever -- partagé par le try ET son catch, cette fois
+  // réellement (fonction englobante commune aux deux).
+  let heartbeat = null;
   try {
     // Flux SSE établi et heartbeat démarré ICI, avant TOUT traitement --
     // correctif 502 du 15/09 (preuve : 3 échecs sur 10 essais réels en
@@ -7157,12 +7176,6 @@ function limiterGenerationParIp(req, res, next) {
     // -- jamais rappeler res.setHeader/flushHeaders (lèverait une exception,
     // les en-têtes étant déjà envoyés) -- et clearInterval(heartbeat) avant
     // tout res.end() pour ne jamais écrire sur une réponse déjà terminée.
-    // Déclaré en `let ... = null` (jamais `const`) et initialisé à null
-    // AVANT tout code pouvant lever : si res.setHeader/flushHeaders
-    // lui-même échouait, le catch englobant plus bas doit pouvoir lire
-    // `heartbeat` sans se heurter à la zone morte temporelle d'un `const`
-    // jamais atteint.
-    let heartbeat = null;
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -8897,12 +8910,19 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
     });
 
   } catch (e) {
+    // Correctif (04/10, cf. commentaire sur la déclaration de `heartbeat`
+    // avant le try) : console.error EN PREMIER, avant tout nettoyage --
+    // l'ordre inverse (nettoyage d'abord) a déjà fait disparaître l'erreur
+    // d'origine une fois (le nettoyage plantait lui-même avant d'atteindre
+    // cette ligne, cf. crash Render du 04/10) ; même sans ce risque précis
+    // ici désormais écarté, journaliser l'erreur réelle ne doit jamais
+    // dépendre du succès d'une étape de nettoyage qui la suit.
+    console.error('❌ ERREUR:', e.message);
     // heartbeat est désormais créé tout en haut du try -- toute exception
     // survenant après (la quasi-totalité de la route) doit l'arrêter ici,
     // sinon l'intervalle continuerait d'écrire sur une réponse déjà
     // terminée (res.end() ci-dessous) une fois par 10s indéfiniment.
     if (heartbeat) clearInterval(heartbeat);
-    console.error('❌ ERREUR:', e.message);
     if (!res.headersSent) {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
