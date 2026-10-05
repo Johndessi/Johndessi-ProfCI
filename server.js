@@ -2196,6 +2196,16 @@ function squeletteGeneriqueOeuvrePresent($) {
 function texteHorsTableauMajuscule($) {
   const $sansTableaux = cheerio.load($.html());
   $sansTableaux('table').remove();
+  // Chantier F.2 (lot 2) : bug réel découvert par ce lot -- .text() ne
+  // réinsère JAMAIS l'espace qu'un navigateur afficherait entre deux
+  // éléments de bloc frères (ex. <p>I- Présentation de l'auteur</p><p>1-
+  // Biographie...</p> redonne "...L'AUTEUR1- BIOGRAPHIE..." collé), ce qui
+  // cassait les \b des regex ETAPES_*_OEUVRE_LYCEE_* ci-dessous dès que la
+  // restructuration en paragraphes (restructurerTexteLibreEnParagraphes)
+  // sépare un titre de la phrase qui le suit sans balise entre les deux --
+  // un cas qui n'existait pas avant cette restructuration. Ajoute un espace
+  // explicite après chaque élément de bloc avant d'extraire le texte.
+  $sansTableaux('p, div, li, h1, h2, h3, h4, tr, br').each((_, el) => { $sansTableaux(el).append(' '); });
   return $sansTableaux.root().text().toUpperCase();
 }
 
@@ -5095,9 +5105,28 @@ const PATTERN_TITRE_SECTION_DOCX = /^\s*(?:[IVXLCDM]+[\-.)]|[0-9]+[\-.)])\s*\S/;
 // d'échantillons réels que le cas texte libre -- à confirmer en production).
 const LIBELLES_ENTETE_OI = ['Discipline', 'Date', 'Classe', 'Compétence', 'Activité', 'Durée', 'Leçon', 'Séance'];
 
+// Frontière de fin d'entête : un double espace suivi d'un marqueur de DÉBUT
+// DE CORPS (I-/II-/III-/1-/2-...) -- cf. RE_MARQUEUR_RUBRIQUE_OI plus bas,
+// même famille de marqueurs, dupliquée ici en dur (cette constante est
+// utilisée AVANT sa déclaration dans le fichier -- une fonction peut
+// référencer un const déclaré plus bas tant qu'elle n'est appelée qu'après
+// le chargement complet du module, ce qui est le cas ici, mais dupliquer la
+// valeur littérale reste plus lisible que de dépendre de cet ordre).
+const RE_FRONTIERE_CORPS_OI = /\s{2,}(?:[IVXLCDM]+-|[0-9]+-)/;
+
 function extraireChampsEnteteDepuisTexteLibre(texte) {
   const alternatives = LIBELLES_ENTETE_OI.join('|');
-  const motif = new RegExp(`(${alternatives})\\s*:\\s*([\\s\\S]*?)(?=\\s{2,}(?:${alternatives})\\s*:|$)`, 'g');
+  // Bug réel corrigé (chantier K, lot 2) : "\\s*:\\s*" consommait goulûment
+  // le double espace séparateur qui suit un champ VIDE (ex. "Date :  Classe
+  // :"), ne laissant plus rien pour l'ancre de la lookahead -- la valeur du
+  // champ vide "mangeait" alors tout le champ suivant. Retire le "\\s*"
+  // final après ":" (la capture, non gourmande, inclut cet espace puis est
+  // simplement .trim()ée au moment de l'affectation ci-dessous). Autre bug
+  // réel corrigé dans le même test : sans la frontière de corps ci-dessous,
+  // le dernier champ (Séance) engloutissait tout le texte restant -- y
+  // compris les parties I à III -- quand le modèle aplatit entête ET corps
+  // dans le MÊME bloc de texte, perdant alors tout le corps de la fiche.
+  const motif = new RegExp(`(${alternatives})\\s*:([\\s\\S]*?)(?=\\s{2,}(?:${alternatives})\\s*:|${RE_FRONTIERE_CORPS_OI.source}|$)`, 'g');
   const champs = {};
   let trouve = 0;
   let m;
@@ -5116,6 +5145,15 @@ function construireDivEnteteLibreDepuisChamps(champs) {
   return `<div class="entete-libre" style="display:grid;grid-template-columns:110px 1fr;column-gap:12px;row-gap:2px;margin-bottom:14px;">${lignes}</div>`;
 }
 
+// Retourne le texte qui suit la frontière de corps (RE_FRONTIERE_CORPS_OI),
+// ou '' si le bloc ne contenait QUE l'entête (aucun corps à préserver --
+// cas le plus simple, mais jamais supposé par défaut : perdre le corps
+// serait bien plus grave qu'une ligne vide superflue).
+function resteApresEntete(texte) {
+  const m = RE_FRONTIERE_CORPS_OI.exec(texte);
+  return m ? texte.slice(m.index).trim() : '';
+}
+
 function reconstruireEnteteLibreDepuisTexteLibre(contenuHTML) {
   if (!contenuHTML) return contenuHTML;
   const $ = cheerio.load(contenuHTML);
@@ -5131,17 +5169,20 @@ function reconstruireEnteteLibreDepuisTexteLibre(contenuHTML) {
   });
   if (!cible) {
     const texteDirect = racine.contents().filter((_, n) => n.type === 'text').map((_, n) => $(n).data()).get().join(' ');
-    if (extraireChampsEnteteDepuisTexteLibre(texteDirect)) {
-      const champs = extraireChampsEnteteDepuisTexteLibre(texteDirect);
+    const champsDirect = extraireChampsEnteteDepuisTexteLibre(texteDirect);
+    if (champsDirect) {
+      const reste = resteApresEntete(texteDirect);
       racine.contents().filter((_, n) => n.type === 'text').remove();
-      racine.prepend(construireDivEnteteLibreDepuisChamps(champs));
+      racine.prepend(construireDivEnteteLibreDepuisChamps(champsDirect) + (reste ? `<p>${echapperHtml(reste)}</p>` : ''));
       return $.html($('body').length ? $('body') : $.root());
     }
     return contenuHTML;
   }
 
-  const champs = extraireChampsEnteteDepuisTexteLibre(cible.text());
-  cible.replaceWith(construireDivEnteteLibreDepuisChamps(champs));
+  const texteCible = cible.text();
+  const champs = extraireChampsEnteteDepuisTexteLibre(texteCible);
+  const reste = resteApresEntete(texteCible);
+  cible.replaceWith(construireDivEnteteLibreDepuisChamps(champs) + (reste ? `<p>${echapperHtml(reste)}</p>` : ''));
   return $.html($('body').length ? $('body') : $.root());
 }
 
@@ -5152,10 +5193,19 @@ function reconstruireEnteteLibreDepuisTexteLibre(contenuHTML) {
 // tort un <br> partout (cf. commentaire ci-dessus) : cas RÉEL non couvert,
 // traité séparément ici plutôt qu'en modifiant la détection <br> existante.
 const RE_MARQUEUR_RUBRIQUE_OI = /^(?:[IVXLCDM]+-|[0-9]+-|Genre\s*:|Th[èe]me\s*:)/i;
-const RE_SEPARATEUR_RUBRIQUE_OI = / {2,}(?=(?:[IVXLCDM]+-|[0-9]+-|Genre\s*:|Th[èe]me\s*:))/i;
+// Découpage sur TOUT double espace (pas seulement avant un marqueur reconnu) :
+// un titre bref ("II- Présentation de l'œuvre") est directement suivi, dans
+// la forme réelle, par une phrase de prose SANS marqueur propre (ex. "Il
+// s'agit d'un roman..."), avant le prochain marqueur ("Genre :"/"Thème :")
+// -- restreindre le découpage aux seuls marqueurs reconnus (1re version de ce
+// correctif, jamais déployée telle quelle) laissait alors cette phrase
+// collée au titre qui la précède. RE_MARQUEUR_RUBRIQUE_OI sert UNIQUEMENT à
+// décider du style (titre gras/espacé ou paragraphe normal), jamais à
+// décider où découper.
+const RE_SEPARATEUR_RUBRIQUE_OI = / {2,}/;
 
 function decouperTexteRubriquesOI(texte) {
-  return (texte || '').split(new RegExp(RE_SEPARATEUR_RUBRIQUE_OI, 'gi')).map((s) => s.trim()).filter(Boolean);
+  return (texte || '').split(RE_SEPARATEUR_RUBRIQUE_OI).map((s) => s.trim()).filter(Boolean);
 }
 
 function construireParagraphesRubriquesOI(texte) {
@@ -6670,10 +6720,23 @@ RÈGLES :
 // consigneMiseEnForme/chantier A) dans la colonne Activités de l'enseignant
 // du Développement -- jamais dans les autres colonnes (Activités des
 // élèves, Traces écrites), qui ne sont pas des consignes à l'enseignant.
+// Radical du verbe (1er mot, privé de sa terminaison -er/-ir) -- la consigne
+// 3) autorise explicitement l'impératif OU l'infinitif ("Identifiez"/
+// "Identifier"), jamais un seul des deux : comparer le texte à la forme
+// infinitive seule (ex. "identifier") aurait laissé passer une imposante
+// proportion de FAUX positifs sur des consignes pourtant parfaitement
+// conformes à l'impératif ("Identifiez..."), confirmé par ce test même
+// (chantier K) avant cette correction. "traiter une situation" -> radical
+// "trait", qui matche aussi bien "Traitez la situation..." que "Traiter...".
+function radicalVerbeTaxonomique(verbeComplet) {
+  return verbeComplet.split(/\s+/)[0].replace(/(?:er|ir)$/i, '');
+}
+
 function calculerTauxConsignesSansVerbeTaxonomique(contenuHTML) {
   if (!contenuHTML) return { taux: 0, total: 0, nonConformes: [] };
   const $ = cheerio.load(contenuHTML);
-  const motifDebutVerbe = new RegExp(`^(?:${TOUS_VERBES_TAXONOMIQUES.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'i');
+  const radicaux = TOUS_VERBES_TAXONOMIQUES.map(radicalVerbeTaxonomique).map((r) => r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const motifDebutVerbe = new RegExp(`^(?:${radicaux.join('|')})`, 'i');
   const consignes = [];
   $('tr').each((_, tr) => {
     const $tr = $(tr);
