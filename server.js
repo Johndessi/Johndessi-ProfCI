@@ -6654,9 +6654,44 @@ ${listeParNiveau}
 
 RÈGLES :
 1) Tableau Habiletés : UN SEUL verbe par niveau, dans l'ordre N1 -> N2 -> N3 -> N4 (jamais un autre ordre, jamais deux verbes du même niveau, jamais un niveau absent si tu as une consigne de ce niveau ailleurs dans la fiche).
-2) Tout verbe utilisé dans une consigne du Développement doit aussi figurer dans le tableau Habiletés -- jamais un verbe qui n'y apparaît pas (ex. ne jamais utiliser "Synthétisez" dans une consigne si "synthétiser" n'est pas dans la liste ci-dessus ET dans Habiletés).
-3) Chaque consigne que tu rédiges pour l'enseignant (Développement ET Évaluation) doit COMMENCER par un verbe de cette liste, à l'impératif ou à l'infinitif selon le format déjà utilisé dans le reste de la fiche.
-4) ÉVALUATION -- exactement 3 consignes, dans cet ordre de complexité croissante : la 1re consigne utilise un verbe de niveau N1 ou N2, la 2e un verbe de niveau N3, la 3e un verbe de niveau N4 (traiter une situation). Ne teste JAMAIS une notion qui n'a pas été réellement développée dans cette séance précise, même si elle semble proche.`;
+2) Tout verbe utilisé dans une consigne du Développement doit aussi figurer dans le tableau Habiletés -- jamais un verbe qui n'y apparaît pas (ex. ne jamais utiliser "Synthétisez" dans une consigne si "synthétiser" n'est pas dans la liste ci-dessus ET dans Habiletés). RÉCIPROQUEMENT (chantier H.1, lot 2) : chaque verbe que tu places dans le tableau Habiletés doit être concrètement exercé par AU MOINS une consigne du Développement ou de l'Évaluation -- jamais un verbe du tableau qui reste sans consigne correspondante nulle part dans la fiche.
+3) CHAQUE consigne que tu rédiges pour l'enseignant, SANS AUCUNE EXCEPTION (toutes les consignes du Développement ET les 3 de l'Évaluation), doit COMMENCER par un verbe de cette liste, à l'impératif ou à l'infinitif selon le format déjà utilisé dans le reste de la fiche -- JAMAIS une question introduite par "Qu'est-ce que...", "Comment...", "Pourquoi..." ou toute autre tournure interrogative à la place d'une consigne à l'impératif/infinitif (reformule TOUJOURS en consigne d'action : jamais "Qu'est-ce qu'un roman ?" mais "Identifiez un roman à partir de ses caractéristiques.").
+4) ÉVALUATION -- exactement 3 consignes, dans cet ordre de complexité croissante : la 1re consigne utilise un verbe de niveau N1 ou N2, la 2e un verbe de niveau N3, la 3e un verbe de niveau N4 (traiter une situation). Ne teste JAMAIS une notion qui n'a pas été réellement développée dans cette séance précise, même si elle semble proche.
+5) (Chantier H.4, lot 2) Une consigne qui demande de comparer, distinguer ou différencier plusieurs éléments vient TOUJOURS APRÈS que ces éléments ont été présentés/définis individuellement plus haut dans le Développement -- jamais une comparaison portant sur une notion pas encore introduite à ce stade de la fiche.`;
+}
+
+// Chantier H.2 (lot 2) : contrôle déterministe -- la consigne 3) ci-dessus
+// n'est pas fiable à 100% (même limite que partout ailleurs dans ce fichier :
+// observé en pratique, 7 à 9 consignes sur 11-12 restent des questions
+// "Qu'est-ce que...", malgré la consigne). Calcule la proportion de
+// consignes du Développement qui NE commencent PAS par un verbe de
+// TOUS_VERBES_TAXONOMIQUES, pour piloter un avertissement fort. Repère les
+// consignes par leur tiret de liste ("- ...", format imposé par
+// consigneMiseEnForme/chantier A) dans la colonne Activités de l'enseignant
+// du Développement -- jamais dans les autres colonnes (Activités des
+// élèves, Traces écrites), qui ne sont pas des consignes à l'enseignant.
+function calculerTauxConsignesSansVerbeTaxonomique(contenuHTML) {
+  if (!contenuHTML) return { taux: 0, total: 0, nonConformes: [] };
+  const $ = cheerio.load(contenuHTML);
+  const motifDebutVerbe = new RegExp(`^(?:${TOUS_VERBES_TAXONOMIQUES.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'i');
+  const consignes = [];
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    const colonneEnseignant = $tr.children('td').eq(2);
+    if (!colonneEnseignant.length) return;
+    colonneEnseignant.find('p').each((_, p) => {
+      const texte = $(p).text().trim().replace(/^-\s*/, '');
+      if (texte) consignes.push(texte);
+    });
+  });
+  const nonConformes = consignes.filter((texte) => !motifDebutVerbe.test(texte));
+  return {
+    taux: consignes.length ? nonConformes.length / consignes.length : 0,
+    total: consignes.length,
+    nonConformes
+  };
 }
 
 // Libellé du champ Leçon (entête), calibré sur la fiche de référence
@@ -7012,7 +7047,13 @@ CONTENU FOURNI PAR L'ENSEIGNANT (plan et/ou contenu déjà rédigé -- seule str
   // faits sur l'œuvre, cf. priorité absolue anti-fabrication de l'enseignant.
   const garantiEvaluation = `
 
-CONSIGNE ABSOLUE -- ÉVALUATION DE CETTE SÉANCE : à ce stade de la séquence, les élèves n'ont PAS ENCORE lu l'œuvre « ${titre || '(titre non précisé)'} » (la Culture littéraire est leur tout premier contact avec elle, avant même le début de la lecture) -- l'évaluation ne doit donc JAMAIS supposer une lecture déjà faite, même partielle (interdits : "vous avez lu...", "dans le passage lu...", ou toute question qui présuppose une connaissance du contenu narratif de l'œuvre). Elle doit porter UNIQUEMENT sur les notions réellement enseignées dans CETTE séance précise${intituleOfficiel ? ` (rappel du périmètre officiel : "${intituleOfficiel}")` : ''} -- par un exercice d'application générique (ex. identifier ces notions sur un texte/extrait fourni ou bien connu, jamais sur l'intrigue de « ${titre || 'l\'œuvre'} » elle-même), jamais sur une notion qui relève d'une autre séance de la progression. Si l'œuvre est malgré tout mentionnée dans l'évaluation, ne t'appuie QUE sur son titre/auteur/genre déjà connus -- n'invente JAMAIS un personnage, un thème ou un événement de cette œuvre que tu ne connais pas avec certitude, même à titre d'exemple.`;
+CONSIGNE ABSOLUE -- ÉVALUATION DE CETTE SÉANCE : à ce stade de la séquence, les élèves n'ont PAS ENCORE lu l'œuvre « ${titre || '(titre non précisé)'} » (la Culture littéraire est leur tout premier contact avec elle, avant même le début de la lecture) -- l'évaluation ne doit donc JAMAIS supposer une lecture déjà faite, même partielle (interdits : "vous avez lu...", "dans le passage lu...", ou toute question qui présuppose une connaissance du contenu narratif de l'œuvre). Elle doit porter UNIQUEMENT sur les notions réellement enseignées dans CETTE séance précise${intituleOfficiel ? ` (rappel du périmètre officiel : "${intituleOfficiel}")` : ''} -- par un exercice d'application générique (ex. identifier ces notions sur un texte/extrait fourni ou bien connu, jamais sur l'intrigue de « ${titre || 'l\'œuvre'} » elle-même), jamais sur une notion qui relève d'une autre séance de la progression. Si l'œuvre est malgré tout mentionnée dans l'évaluation, ne t'appuie QUE sur son titre/auteur/genre déjà connus -- n'invente JAMAIS un personnage, un thème ou un événement de cette œuvre que tu ne connais pas avec certitude, même à titre d'exemple.
+
+CONSIGNE ABSOLUE -- SUPPORT MATÉRIEL DE L'ÉVALUATION (chantier I.1, lot 2) : si une consigne demande aux élèves de classer, comparer ou analyser des textes/extraits/résumés, ÉCRIS-LES INTÉGRALEMENT dans les Traces écrites de cette même fiche (avec leur corrigé juste après) -- JAMAIS une consigne qui renvoie à un support que l'enseignant devrait "distribuer" ou "fournir" séparément et qui n'existe nulle part dans la fiche. Les Traces écrites de l'Évaluation ne sont jamais vides dans ce cas : elles contiennent le support réellement utilisé par la consigne, mot pour mot, prêt à l'emploi.
+
+CONSIGNE ABSOLUE -- COHÉRENCE DE LA 3e CONSIGNE (N4, traiter une situation, chantier I.2 du lot 2) : cette consigne doit avoir UNE SEULE réponse défendable compte tenu des définitions données plus haut dans CETTE fiche (ex. si tu as défini les mémoires comme un récit de la vie réelle de leur auteur, la situation que tu inventes ne doit jamais raconter la vie d'une AUTRE personne que le narrateur -- sinon elle ne peut être classée "mémoires" selon ta propre définition, et la consigne n'a plus de réponse correcte unique). Elle ne doit citer AUCUN genre, sous-genre ou catégorie qui n'a pas été explicitement défini dans cette même séance (ex. jamais "roman autobiographique" si seuls "mémoires" et "autobiographie" ont été définis).
+
+CONSIGNE -- COHÉRENCE DES NOMS ET LIEUX (chantier I.4, lot 2) : tout nom propre (personnage, ville, lieu) que tu inventes pour un exemple ou une situation reste IDENTIQUE du début à la fin de cette même consigne et de cette même fiche -- ne change jamais un lieu ou un nom en cours de route (ex. un personnage qui commence son récit à Yamoussoukro ne doit pas se retrouver à Bouaké sans qu'un déplacement explicite ne soit mentionné).`;
 
   // Garde-fou anti-duplication (04/10, retour enseignant sur un tableau
   // comparatif des sous-genres écrit une 1ère fois dans le Développement
@@ -7044,7 +7085,9 @@ CONSIGNE DE MISE EN FORME (Traces écrites, Activités de l'enseignant/des élè
   // n'apparaît dans la fiche).
   const consigneSupportsDidactiques = `
 
-CONSIGNE -- SUPPORTS DIDACTIQUES : ne liste QUE des supports réellement présents ou utilisés ailleurs dans CETTE fiche précise (ex. n'écris "Tableau comparatif des sous-genres" que si un tel tableau figure réellement dans le Développement que tu as toi-même rédigé) -- jamais un support générique ou plausible qui n'apparaît pas concrètement dans ta propre réponse.`;
+CONSIGNE -- SUPPORTS DIDACTIQUES : ne liste QUE des supports réellement présents ou utilisés ailleurs dans CETTE fiche précise (ex. n'écris "Tableau comparatif des sous-genres" que si un tel tableau figure réellement dans le Développement que tu as toi-même rédigé) -- jamais un support générique ou plausible qui n'apparaît pas concrètement dans ta propre réponse.
+
+CONSIGNE -- COLONNE CONTENUS (chantier H.3, lot 2) : la colonne Contenus du tableau Habiletés/Contenus ne promet QUE ce que tu développes RÉELLEMENT dans le Développement -- si tu annonces "contexte historique et littéraire" ou "importance du genre pour l'interprétation", ces points doivent être effectivement traités dans le Développement, avec le même niveau de détail ; à l'inverse, ne développe jamais dans le Développement un point absent de cette colonne. Les deux doivent se correspondre exactement, dans les deux sens.`;
 
   // Chantier C.3/C.4 (05/10) : consignes de l'Évaluation adressées aux
   // élèves (jamais un méta-commentaire à l'enseignant du type "Proposez-leur
@@ -7060,11 +7103,25 @@ CONSIGNE -- FORMULATION DES CONSIGNES D'ÉVALUATION : chaque consigne d'Évaluat
 
 CONSIGNE -- REGISTRE UNIFORME : dans la colonne Activités de l'enseignant, rédige TOUTES les actions de l'enseignant à la 3e personne du singulier, forme descriptive (ex. "Fait l'appel des élèves.", "Pose la question...", "Distribue...", "Circule dans la classe.") -- JAMAIS à l'impératif de politesse ("Faites l'appel", "Posez la question") : cette forme descriptive doit être la SEULE utilisée, du début à la fin de la fiche, sans jamais mélanger les deux registres.`;
 
+  // Chantier J (lot 2) : exactitude factuelle des valeurs de tableau
+  // (J.1, ex. "les mémoires relèvent de la fiction" -- affirmation fausse --
+  // ou des valeurs de tableau qui se présentent comme un fait vérifiable là
+  // où elles décrivent seulement une convention d'exemple, ex. "Intrigue :
+  // Réelle"/"Dénouement : Authentique" employés comme si "réel"/"authentique"
+  // étaient eux-mêmes des catégories littéraires) ; situation d'apprentissage
+  // qui ne préjuge pas de l'axe/thème et sans remplissage vague (J.2) ;
+  // orthographe/accords dans la colonne élèves (J.3).
+  const consigneFactuelEtRegistreOI = `
+
+CONSIGNE ABSOLUE -- EXACTITUDE DES DÉFINITIONS ET DES VALEURS DE TABLEAU : n'affirme jamais un fait littéraire faux (ex. les mémoires et l'autobiographie relèvent de la RÉALITÉ vécue par leur auteur, JAMAIS de la fiction -- ne l'affirme jamais, même par erreur). Dans tout tableau comparatif que tu rédiges, n'utilise QUE des valeurs réellement informatives et vérifiables pour la colonne concernée -- jamais une valeur comme "Réelle"/"Authentique"/"Fictif" employée comme si c'était une catégorie ou une caractéristique du genre littéraire lui-même (ex. jamais une ligne "Intrigue : Réelle" ou "Dénouement : Authentique" dans un tableau de caractéristiques de genres) : décris plutôt la caractéristique réelle (ex. "Intrigue : inventée par l'auteur" / "fondée sur des faits vécus").
+
+CONSIGNE -- ORTHOGRAPHE DE LA COLONNE ACTIVITÉS DES ÉLÈVES (chantier J.3, lot 2) : relis chaque phrase de cette colonne avant de répondre -- accords sujet/verbe et adjectif/nom corrects (ex. "réalité sociale", jamais "réalité social"), orthographe correcte de chaque mot.`;
+
   return `
 
 INSTRUCTIONS SPÉCIFIQUES -- CULTURE LITTÉRAIRE (exposé magistral de l'enseignant sur le contexte historique/littéraire/biographique de l'œuvre) : contrairement à l'Introduction et à la Conclusion, cette séance CONSERVE INTÉGRALEMENT la structure générique du tableau Habiletés/Contenus et du déroulement Présentation/Développement/Évaluation -- ne la remplace par aucune autre structure, aucune section I/II/III.
 
-${consigneContenu}${consigneSituation}${garantiEvaluation}${garantiAntiDuplication}${consigneVerbesAPC}${consigneMiseEnForme}${consigneSupportsDidactiques}${consigneRegistreEvaluation}`;
+${consigneContenu}${consigneSituation}${garantiEvaluation}${garantiAntiDuplication}${consigneVerbesAPC}${consigneMiseEnForme}${consigneSupportsDidactiques}${consigneRegistreEvaluation}${consigneFactuelEtRegistreOI}`;
 }
 
 // Lecture méthodique, SECOND CYCLE (23/09, corrigé le 25/09) : contrairement
@@ -7321,7 +7378,7 @@ function construireConsigneAxeEtudeSituationOeuvreLycee(axe, situationFournie) {
   if (situation) {
     return `Situation d'apprentissage : reproduis EXACTEMENT et INTÉGRALEMENT, sans y ajouter ni en retirer aucun détail, sans la reformuler, le texte fourni par l'enseignant ci-dessous : "${situation}"`;
   }
-  return `Situation d'apprentissage : l'enseignant n'a fourni aucune situation d'apprentissage -- propose-en une, ancrée dans le quotidien ivoirien et conforme aux pratiques du système éducatif ivoirien (approche par compétences), mais UNIQUEMENT à partir d'éléments réels (thème, personnages, contexte de l'œuvre) déjà fournis par l'enseignant ou confirmés par recherche documentaire dans cette même séance -- si aucune information réelle sur l'œuvre n'est disponible, reste général (ne mentionne aucun nom de personnage ni aucun fait précis que tu ne connais pas avec certitude) plutôt que d'inventer un scénario. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les séances suivantes de cette même séquence -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance. N'Y MENTIONNE JAMAIS L'AXE D'ÉTUDE NI SON CONTENU ("${axe}") : les deux champs sont distincts et ne doivent partager AUCUNE formulation -- la situation d'apprentissage amène vers la découverte de l'œuvre/du groupement de textes en général, jamais vers l'axe précis.`;
+  return `Situation d'apprentissage : l'enseignant n'a fourni aucune situation d'apprentissage -- propose-en une, ancrée dans le quotidien ivoirien et conforme aux pratiques du système éducatif ivoirien (approche par compétences), mais UNIQUEMENT à partir d'éléments réels (thème, personnages, contexte de l'œuvre) déjà fournis par l'enseignant ou confirmés par recherche documentaire dans cette même séance -- si aucune information réelle sur l'œuvre n'est disponible, reste général (ne mentionne aucun nom de personnage ni aucun fait précis que tu ne connais pas avec certitude) plutôt que d'inventer un scénario. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les séances suivantes de cette même séquence -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance. N'Y MENTIONNE JAMAIS L'AXE D'ÉTUDE NI SON CONTENU ("${axe}"), ni le thème précis de l'œuvre (chantier J.2, lot 2) : la situation d'apprentissage amène vers la découverte de l'œuvre/du groupement de textes en général, jamais vers l'axe ou le thème précis qui seront, eux, découverts par les élèves plus loin dans la séquence. N'UTILISE AUCUN REMPLISSAGE VAGUE qui ne dit rien de concret (interdits : "se déploie sur plusieurs pages", "aborde des thèmes variés", ou toute formule de ce type qui pourrait s'appliquer à n'importe quelle œuvre) -- chaque phrase doit apporter une information concrète ancrée dans le quotidien ivoirien des élèves.`;
 }
 
 // Conclusion (second cycle, 20/09) : deux structures RÉELLEMENT différentes
@@ -9001,6 +9058,24 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
               const listeCitationsLycee = resultatReferencesLycee.nonLocalisees.map((c) => `« ${c} »`).join(', ');
               res.write(`data: ${JSON.stringify({ avertissement: `Référence de ligne non trouvée automatiquement pour ${resultatReferencesLycee.nonLocalisees.length > 1 ? 'les citations suivantes' : 'la citation suivante'} : ${listeCitationsLycee} -- vérifiez/ajoutez la référence de ligne manuellement.` })}\n\n`);
             }
+          }
+        }
+        if (typeSeanceOI === 'culture_litteraire' && approcheNormalisee === 'APC') {
+          // Chantier H.2 (lot 2) : contrôle déterministe sur la règle 3) de
+          // construireConsigneVerbesTaxonomiquesAPC -- cf. commentaire sur
+          // calculerTauxConsignesSansVerbeTaxonomique. PAS de régénération
+          // automatique ici (demandée par l'énoncé du lot, mais délibérément
+          // non implémentée) : le flux est en streaming SSE, la régénération
+          // nécessiterait soit de ne jamais diffuser la 1re tentative au
+          // navigateur (expérience dégradée -- plus aucun texte affiché en
+          // direct pendant toute la génération), soit de remplacer après
+          // coup un contenu déjà vu par l'enseignant pendant le flux (source
+          // de confusion). Un avertissement fort, cohérent avec tous les
+          // autres filets déterministes de ce fichier, est le choix le plus
+          // sûr tant que ce compromis n'a pas été validé explicitement.
+          const { taux, total, nonConformes } = calculerTauxConsignesSansVerbeTaxonomique(contenuHTML);
+          if (total > 0 && taux > 0.3) {
+            res.write(`data: ${JSON.stringify({ avertissement: `${nonConformes.length} consigne(s) du Développement sur ${total} ne commencent pas par un verbe de la taxonomie DPFC (ex. une question "Qu'est-ce que...") -- vérifiez et reformulez-les en consignes d'action avant utilisation.` })}\n\n`);
           }
         }
         if (typeSeanceOI === 'introduction' || typeSeanceOI === 'conclusion') {
