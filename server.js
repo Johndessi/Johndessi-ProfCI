@@ -6175,6 +6175,96 @@ function envoyerBlocageSSE(res, message, heartbeat) {
 const COMPETENCE_OEUVRE_INTEGRALE = "Compétence 2 : Traiter des situations dans lesquelles l'élève doit construire le sens de textes divers";
 const ACTIVITE_OEUVRE_INTEGRALE = 'Lecture';
 
+// Chantier B (05/10, lot Œuvre intégrale 2nde lycée, approche APC
+// UNIQUEMENT -- FPC/PPO inchangés, cf. consigne du lot) : taxonomie DPFC à
+// 4 niveaux (N1 Connaître, N2 Comprendre, N3 Appliquer, N4 Traiter une
+// situation). Verbes "sourceDPFC: true" = sourcés du document DPFC ;
+// "sourceDPFC: false" = ajoutés pour couvrir des besoins réels constatés en
+// test (ex. "Synthétisez" utilisé dans une consigne sans figurer dans
+// Habiletés), marqués explicitement "à valider" -- jamais présentés comme
+// sourcés DPFC au même titre que les premiers. Ordre des niveaux = ordre de
+// déclaration ici (N1 -> N4), jamais réordonné ailleurs. Constante UNIQUEMENT
+// -- non branchée dans le prompt générique partagé (construirePromptSecondaire,
+// ligne ~4214, "verbes taxonomiques pertinents... ex. Identifier, Définir...")
+// qui reste inchangé pour tout le reste de l'appli (1er cycle, LM/LD/Exposé
+// second cycle) : seules construireInstructionsCultureLitteraireLycee et
+// construireInstructionsIntroductionOeuvreLycee (narrative) l'utilisent, et
+// seulement si approche === 'APC' (cf. construireConsigneVerbesTaxonomiquesAPC).
+const VERBES_TAXONOMIQUES = {
+  N1: {
+    nom: 'Connaître',
+    verbes: [
+      { verbe: 'identifier', sourceDPFC: true },
+      { verbe: 'relever', sourceDPFC: true },
+      { verbe: 'citer', sourceDPFC: true },
+      { verbe: 'énumérer', sourceDPFC: true },
+      { verbe: 'indiquer', sourceDPFC: true },
+      { verbe: 'définir', sourceDPFC: true },
+      { verbe: 'nommer', sourceDPFC: true },
+      { verbe: 'trouver', sourceDPFC: false } // à valider
+    ]
+  },
+  N2: {
+    nom: 'Comprendre',
+    verbes: [
+      { verbe: 'déterminer', sourceDPFC: true },
+      { verbe: 'formuler', sourceDPFC: true },
+      { verbe: 'expliquer', sourceDPFC: false }, // à valider
+      { verbe: 'distinguer', sourceDPFC: false }, // à valider
+      { verbe: 'reformuler', sourceDPFC: false } // à valider
+    ]
+  },
+  N3: {
+    nom: 'Appliquer',
+    verbes: [
+      { verbe: 'justifier', sourceDPFC: true },
+      { verbe: 'analyser', sourceDPFC: true },
+      { verbe: 'interpréter', sourceDPFC: true },
+      { verbe: 'argumenter', sourceDPFC: true },
+      { verbe: 'proposer', sourceDPFC: false }, // à valider
+      { verbe: 'appliquer', sourceDPFC: false }, // à valider
+      { verbe: 'classer', sourceDPFC: false } // à valider
+    ]
+  },
+  N4: {
+    nom: 'Traiter une situation',
+    verbes: [
+      { verbe: 'traiter une situation', sourceDPFC: true }
+    ]
+  }
+};
+const NIVEAUX_TAXONOMIQUES_ORDRE = ['N1', 'N2', 'N3', 'N4'];
+
+// Liste à plat de tous les verbes autorisés (sourcés + à valider confondus
+// -- la distinction ne sert qu'à l'affichage/documentation ci-dessus,
+// jamais à restreindre ce qui est utilisable), normalisée en minuscules
+// pour une comparaison insensible à la casse.
+const TOUS_VERBES_TAXONOMIQUES = NIVEAUX_TAXONOMIQUES_ORDRE.flatMap((n) => VERBES_TAXONOMIQUES[n].verbes.map((v) => v.verbe));
+
+// Consigne de prompt pour la taxonomie des verbes (APC uniquement, cf.
+// commentaire sur VERBES_TAXONOMIQUES). Règles du lot (chantier B) :
+// - tableau Habiletés : un verbe par niveau, ordre N1->N4, aucun doublon ;
+// - tout verbe des consignes du Développement doit figurer dans Habiletés ;
+// - les consignes de l'enseignant (Développement ET Évaluation) commencent
+//   par un verbe de la liste ;
+// - ÉVALUATION : 3 consignes, 1re = N1 ou N2, 2e = N3, 3e = N4 -- sans
+//   jamais tester une notion non développée dans la séance.
+function construireConsigneVerbesTaxonomiquesAPC() {
+  const listeParNiveau = NIVEAUX_TAXONOMIQUES_ORDRE
+    .map((n) => `${n} (${VERBES_TAXONOMIQUES[n].nom}) : ${VERBES_TAXONOMIQUES[n].verbes.map((v) => v.verbe).join(', ')}`)
+    .join('\n');
+  return `
+
+CONSIGNE ABSOLUE -- VERBES TAXONOMIQUES (approche APC, taxonomie DPFC à 4 niveaux) : tout verbe utilisé dans cette fiche (tableau Habiletés, consignes du Développement, consignes de l'Évaluation) doit être choisi EXCLUSIVEMENT dans la liste ci-dessous, jamais un autre verbe même proche par le sens :
+${listeParNiveau}
+
+RÈGLES :
+1) Tableau Habiletés : UN SEUL verbe par niveau, dans l'ordre N1 -> N2 -> N3 -> N4 (jamais un autre ordre, jamais deux verbes du même niveau, jamais un niveau absent si tu as une consigne de ce niveau ailleurs dans la fiche).
+2) Tout verbe utilisé dans une consigne du Développement doit aussi figurer dans le tableau Habiletés -- jamais un verbe qui n'y apparaît pas (ex. ne jamais utiliser "Synthétisez" dans une consigne si "synthétiser" n'est pas dans la liste ci-dessus ET dans Habiletés).
+3) Chaque consigne que tu rédiges pour l'enseignant (Développement ET Évaluation) doit COMMENCER par un verbe de cette liste, à l'impératif ou à l'infinitif selon le format déjà utilisé dans le reste de la fiche.
+4) ÉVALUATION -- exactement 3 consignes, dans cet ordre de complexité croissante : la 1re consigne utilise un verbe de niveau N1 ou N2, la 2e un verbe de niveau N3, la 3e un verbe de niveau N4 (traiter une situation). Ne teste JAMAIS une notion qui n'a pas été réellement développée dans cette séance précise, même si elle semble proche.`;
+}
+
 // Libellé du champ Leçon (entête), calibré sur la fiche de référence
 // "Maeva" : "LECON 1 : L'œuvre intégrale « MAEVA » de Fatou Fanny-Cissé" --
 // PAS "Œuvre intégrale n°1" seul (interprétation initiale erronée) : le
@@ -6454,7 +6544,7 @@ function construireConsigneSituationApprentissageSeance1Lycee(situationFournie, 
 //     connaissances réelles et vérifiées sur l'œuvre/l'auteur/le mouvement
 //     littéraire -- même garde-fou anti-fabrication que partout ailleurs
 //     dans l'application (rester général plutôt qu'inventer un fait incertain).
-function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvre, contenuFourni, situationApprentissage, numeroSeance, intituleOfficielSeance, biographieAuteur, themeOeuvre }) {
+function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvre, contenuFourni, situationApprentissage, numeroSeance, intituleOfficielSeance, biographieAuteur, themeOeuvre, approche }) {
   const contenu = (contenuFourni || '').toString().trim();
   const titre = (titreOeuvre || '').toString().trim();
   const auteur = (auteurOeuvre || '').toString().trim();
@@ -6542,11 +6632,24 @@ CONSIGNE ABSOLUE -- ÉVALUATION DE CETTE SÉANCE : à ce stade de la séquence, 
 
 CONSIGNE ABSOLUE -- UN SEUL TABLEAU, UNE SEULE FOIS : si tu inclus un tableau (ex. un tableau comparatif) dans le Développement, ne le réécris JAMAIS une seconde fois ailleurs dans ta réponse, même reformulé ou raccourci. Le tableau DÉROULEMENT (Présentation/Développement/Évaluation) est le DERNIER élément de ta réponse -- n'ajoute RIEN après sa fermeture (</table>), ni résumé, ni rappel, ni tableau déjà placé plus haut.`;
 
+  // Chantier B (05/10) : approche APC uniquement, cf. commentaire sur
+  // VERBES_TAXONOMIQUES -- FPC/PPO ne reçoivent aucune consigne
+  // supplémentaire, comportement inchangé.
+  const consigneVerbesAPC = approche === 'APC' ? construireConsigneVerbesTaxonomiquesAPC() : '';
+
+  // Chantier A (05/10) : <br> explicite plutôt que du texte collé -- 1er
+  // niveau de défense avant le filet mécanique
+  // (restructurerTexteLibreEnParagraphes, cf. commentaire dédié) qui
+  // rattrape le cas où le modèle ignore quand même cette consigne.
+  const consigneMiseEnForme = `
+
+CONSIGNE DE MISE EN FORME (Traces écrites, Activités de l'enseignant/des élèves) : sépare CHAQUE item "- ..." et CHAQUE titre de partie (I-, II-, 1), 2)...) par un <br> explicite -- jamais tout le texte d'une cellule collé en un seul bloc sans aucun <br>. La numérotation/les intitulés utilisés dans la colonne Traces écrites du Développement doivent reprendre EXACTEMENT les mêmes numéros et titres que ceux de la colonne Stratégies pédagogiques/Plan du cours de CETTE MÊME ligne -- jamais une numérotation différente ou inventée.`;
+
   return `
 
 INSTRUCTIONS SPÉCIFIQUES -- CULTURE LITTÉRAIRE (exposé magistral de l'enseignant sur le contexte historique/littéraire/biographique de l'œuvre) : contrairement à l'Introduction et à la Conclusion, cette séance CONSERVE INTÉGRALEMENT la structure générique du tableau Habiletés/Contenus et du déroulement Présentation/Développement/Évaluation -- ne la remplace par aucune autre structure, aucune section I/II/III.
 
-${consigneContenu}${consigneSituation}${garantiEvaluation}${garantiAntiDuplication}`;
+${consigneContenu}${consigneSituation}${garantiEvaluation}${garantiAntiDuplication}${consigneVerbesAPC}${consigneMiseEnForme}`;
 }
 
 // Lecture méthodique, SECOND CYCLE (23/09, corrigé le 25/09) : contrairement
@@ -7759,7 +7862,7 @@ function limiterGenerationParIp(req, res, next) {
           titreOeuvre, auteurOeuvre, contenuFourni: contenuLibreCultureLitteraire,
           situationApprentissage: situationApprentissageOeuvre, numeroSeance: seance,
           intituleOfficielSeance: seanceCatalogueOI && seanceCatalogueOI.intitule,
-          biographieAuteur: biographieEffectiveCL, themeOeuvre: themeEffectifCL
+          biographieAuteur: biographieEffectiveCL, themeOeuvre: themeEffectifCL, approche
         });
       } else if (typeSeanceOI === 'lecture_methodique') {
         // 23/09, corrigé le 25/09 : Mode "plan fourni par l'enseignant" seul
