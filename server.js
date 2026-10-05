@@ -5008,6 +5008,47 @@ function restructurerTexteLibreEnParagraphes(contenuHTML) {
   return $.html($('body').length ? $('body') : $.root());
 }
 
+// Chantier C.5 (05/10, lot Œuvre intégrale 2nde lycée) : caractères
+// invisibles (U+00AD tiret conditionnel, U+200B espace de largeur nulle --
+// observés dans des réponses réelles, probablement résidus de copier-coller
+// du modèle) et liste ÉTROITE de mots couramment privés d'accent constatés
+// en test réel (ex. "preparent" pour "préparent") -- remplacement EXACT,
+// mot entier, insensible à la casse, jamais une correction orthographique
+// générale (risque de faux positif sur un nom propre ou un mot réellement
+// correct) -- la liste reste volontairement courte et documentée plutôt que
+// de prétendre à un correcteur orthographique complet. Scopée à l'appel
+// (Œuvre intégrale lycée), jamais appliquée ailleurs.
+const CORRECTIONS_ACCENTS_COURANTES = [
+  [/\bpreparent\b/gi, 'préparent'],
+  [/\bpreparer\b/gi, 'préparer'],
+  [/\bpreparation\b/gi, 'préparation'],
+  [/\belement\b/gi, 'élément'],
+  [/\belements\b/gi, 'éléments'],
+  [/\bevenement\b/gi, 'événement'],
+  [/\bevenements\b/gi, 'événements'],
+  [/\bproblematique\b/gi, 'problématique'],
+  [/\bperiode\b/gi, 'période'],
+  [/\bgeneral\b/gi, 'général'],
+  [/\bgenerale\b/gi, 'générale']
+];
+
+function nettoyerCaracteresInvisiblesEtAccents(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  let resultat = contenuHTML.replace(/[­​]/g, '');
+  CORRECTIONS_ACCENTS_COURANTES.forEach(([motif, remplacement]) => {
+    resultat = resultat.replace(motif, (match) => {
+      // Préserve la casse de la 1ère lettre (ex. "Preparent" -> "Préparent"
+      // en début de phrase) -- le reste du remplacement est déjà écrit en
+      // minuscules/accentué correctement dans la table ci-dessus.
+      if (match[0] === match[0].toUpperCase() && match[0] !== match[0].toLowerCase()) {
+        return remplacement[0].toUpperCase() + remplacement.slice(1);
+      }
+      return remplacement;
+    });
+  });
+  return resultat;
+}
+
 // Filet déterministe UNIVERSEL (12/09) : la cellule Traces écrites de la
 // ligne PRÉSENTATION rituelle (RÈGLES ABSOLUES de construirePromptSecondaire)
 // ne doit contenir QUE Date/Activité/Leçon/Séance -- jamais un contenu déjà
@@ -6645,11 +6686,32 @@ CONSIGNE ABSOLUE -- UN SEUL TABLEAU, UNE SEULE FOIS : si tu inclus un tableau (e
 
 CONSIGNE DE MISE EN FORME (Traces écrites, Activités de l'enseignant/des élèves) : sépare CHAQUE item "- ..." et CHAQUE titre de partie (I-, II-, 1), 2)...) par un <br> explicite -- jamais tout le texte d'une cellule collé en un seul bloc sans aucun <br>. La numérotation/les intitulés utilisés dans la colonne Traces écrites du Développement doivent reprendre EXACTEMENT les mêmes numéros et titres que ceux de la colonne Stratégies pédagogiques/Plan du cours de CETTE MÊME ligne -- jamais une numérotation différente ou inventée.`;
 
+  // Chantier C.2 (05/10, retour enseignant sur S2 : "Tableau comparatif"
+  // listé en Supports didactiques alors qu'aucun tableau de ce nom
+  // n'apparaît dans la fiche).
+  const consigneSupportsDidactiques = `
+
+CONSIGNE -- SUPPORTS DIDACTIQUES : ne liste QUE des supports réellement présents ou utilisés ailleurs dans CETTE fiche précise (ex. n'écris "Tableau comparatif des sous-genres" que si un tel tableau figure réellement dans le Développement que tu as toi-même rédigé) -- jamais un support générique ou plausible qui n'apparaît pas concrètement dans ta propre réponse.`;
+
+  // Chantier C.3/C.4 (05/10) : consignes de l'Évaluation adressées aux
+  // élèves (jamais un méta-commentaire à l'enseignant du type "Proposez-leur
+  // l'exercice" à la place de la consigne elle-même -- cette indication
+  // reste à sa place normale, dans la colonne Activités de l'enseignant,
+  // jamais dans le texte de la consigne destinée aux élèves) ; énoncés non
+  // ambigus (si 2 catégories définies dans TA PROPRE fiche peuvent
+  // également correspondre à un même exemple, change l'exemple ou précise
+  // l'énoncé) ; registre uniforme des activités de l'enseignant.
+  const consigneRegistreEvaluation = `
+
+CONSIGNE -- FORMULATION DES CONSIGNES D'ÉVALUATION : chaque consigne d'Évaluation est rédigée comme un énoncé À DESTINATION DIRECTE DES ÉLÈVES (ce qu'ils doivent faire), jamais comme un méta-commentaire adressé à l'enseignant (interdits dans le texte de la consigne elle-même : "Proposez-leur...", "Donnez-leur...", "Faites faire..." -- ce type d'indication, si nécessaire, reste dans la colonne Activités de l'enseignant, jamais mêlé à la consigne destinée aux élèves). Chaque énoncé doit être NON AMBIGU au regard des définitions que TU AS TOI-MÊME données dans cette fiche : si un exemple que tu donnes pourrait raisonnablement appartenir à plusieurs des catégories que tu as définies (ex. un extrait qui correspondrait aussi bien à un "conte merveilleux" qu'à un "conte de fées" selon tes propres définitions), choisis un exemple qui ne correspond sans ambiguïté qu'à UNE SEULE catégorie, ou précise l'énoncé pour lever l'ambiguïté.
+
+CONSIGNE -- REGISTRE UNIFORME : dans la colonne Activités de l'enseignant, rédige TOUTES les actions de l'enseignant à la 3e personne du singulier, forme descriptive (ex. "Fait l'appel des élèves.", "Pose la question...", "Distribue...", "Circule dans la classe.") -- JAMAIS à l'impératif de politesse ("Faites l'appel", "Posez la question") : cette forme descriptive doit être la SEULE utilisée, du début à la fin de la fiche, sans jamais mélanger les deux registres.`;
+
   return `
 
 INSTRUCTIONS SPÉCIFIQUES -- CULTURE LITTÉRAIRE (exposé magistral de l'enseignant sur le contexte historique/littéraire/biographique de l'œuvre) : contrairement à l'Introduction et à la Conclusion, cette séance CONSERVE INTÉGRALEMENT la structure générique du tableau Habiletés/Contenus et du déroulement Présentation/Développement/Évaluation -- ne la remplace par aucune autre structure, aucune section I/II/III.
 
-${consigneContenu}${consigneSituation}${garantiEvaluation}${garantiAntiDuplication}${consigneVerbesAPC}${consigneMiseEnForme}`;
+${consigneContenu}${consigneSituation}${garantiEvaluation}${garantiAntiDuplication}${consigneVerbesAPC}${consigneMiseEnForme}${consigneSupportsDidactiques}${consigneRegistreEvaluation}`;
 }
 
 // Lecture méthodique, SECOND CYCLE (23/09, corrigé le 25/09) : contrairement
@@ -8467,6 +8529,9 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // sur restructurerTexteLibreEnParagraphes) -- jamais pour le 1er
         // cycle ni les autres types de séance second cycle.
         contenuHTML = restructurerTexteLibreEnParagraphes(contenuHTML);
+        // Chantier C.5 (05/10) : caractères invisibles + accents manquants
+        // courants, même scope strict.
+        contenuHTML = nettoyerCaracteresInvisiblesEtAccents(contenuHTML);
         if (portionLectureDirigeeHTML) {
           // Filet déterministe (15/09, même principe que structureIntroductionOeuvrePresente
           // ci-dessus) : constaté en test réel en production -- le modèle
