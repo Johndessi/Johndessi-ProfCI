@@ -4991,17 +4991,39 @@ function restructurerTexteLibreEnParagraphes(contenuHTML) {
     });
   } else {
     // Introduction/Conclusion : AUCUN tableau (structure texte libre
-    // imposée par le prompt, cf. construireInstructionsIntroductionOeuvreLycee)
-    // -- le <br> plat peut alors apparaître directement au niveau racine
-    // (.fiche-cours ou body). On ne redescend jamais dans un <p>/<table>
-    // déjà bien formé : seul le conteneur racine lui-même est reconstruit.
+    // imposée par le prompt, cf. construireInstructionsIntroductionOeuvreLycee).
+    // Bug réel trouvé en test local (05/10, avant tout push) : le modèle
+    // enveloppe généralement chaque partie dans SON PROPRE <p> (comme
+    // demandé par le prompt -- "chaque partie = un titre suivi d'un ou
+    // plusieurs paragraphes"), mais les SOUS-lignes à l'intérieur restent
+    // séparées par <br> plutôt que d'être elles-mêmes des <p> (impossible
+    // d'imbriquer un <p> dans un <p> de toute façon) -- un <p> contenant un
+    // <br> est donc remplacé par PLUSIEURS <p> frères, un par segment.
+    // Couvre aussi le cas (plus rare) où le modèle n'utilise aucun <p> du
+    // tout et laisse du texte+<br> directement au niveau racine
+    // (.fiche-cours ou body) -- même traitement, avec .children('br')
+    // (jamais .find('> br'), syntaxe de sélecteur non supportée par
+    // cheerio-select qui renvoyait toujours 0 silencieusement ici --
+    // 1re version de ce correctif, jamais déployée telle quelle).
+    // Les 2 chemins sont mutuellement exclusifs (jamais les deux à la
+    // fois) : réécrire racine.html() après avoir déjà éclaté des <p>
+    // imbriquerait les nouveaux <p> autour des <p> déjà corrects (HTML
+    // invalide, structure imprévisible une fois reparsée).
     const racine = $('.fiche-cours').first().length ? $('.fiche-cours').first() : $('body');
-    if (racine.length && racine.find('> br').length) {
+    if (racine.length && racine.children('br').length) {
       const html = racine.html();
       if (html && /<br\s*\/?>/i.test(html)) {
         const nouveauHtml = segmenterEnParagraphesHtml(html);
         if (nouveauHtml) racine.html(nouveauHtml);
       }
+    } else {
+      $('p').each((_, p) => {
+        const $p = $(p);
+        const html = $p.html();
+        if (!html || !/<br\s*\/?>/i.test(html)) return;
+        const nouveauHtml = segmenterEnParagraphesHtml(html);
+        if (nouveauHtml) $p.replaceWith(nouveauHtml);
+      });
     }
   }
 
