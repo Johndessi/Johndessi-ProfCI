@@ -315,7 +315,14 @@ function blockChildrenToParagraphs($, el, fmt = {}) {
       });
     } else {
       const runs = collectRuns($, node, fmt);
-      if (runs.length) paragraphs.push(new Paragraph({ children: runs }));
+      // data-docx-titre (04/10, chantier A -- mise en forme Œuvre intégrale
+      // lycée) : espacement avant/après pour un <p> marqué comme titre de
+      // partie (ex. "I-", "1)") par restructurerCellulesEnParagraphes,
+      // SEULE fonction qui pose cet attribut -- inerte pour tout <p>
+      // préexistant ailleurs dans l'appli (jamais posé), donc sans impact
+      // sur le 1er cycle ni sur les autres types de séance.
+      const estTitreSection = tag === 'p' && $(node).attr('data-docx-titre');
+      if (runs.length) paragraphs.push(new Paragraph({ children: runs, spacing: estTitreSection ? { before: 160, after: 80 } : undefined }));
     }
   });
   return paragraphs;
@@ -4931,6 +4938,76 @@ function supprimerTableauDupliqueApresDeroulement(contenuHTML) {
   return { html: $.html($('body').length ? $('body') : $.root()), avertissement };
 }
 
+// Chantier A (05/10, lot Œuvre intégrale 2nde lycée) : le modèle écrit le
+// contenu des cellules Développement/Évaluation (Culture littéraire) et des
+// parties I/II/III (Introduction) en texte plat séparé par <br> plutôt
+// qu'en paragraphes <p> distincts -- blockChildrenToParagraphs (cf. plus
+// haut, inchangée) ne découpe en plusieurs Paragraph DOCX QUE les enfants
+// directs <p>/<ul>/<ol> : un <br> reste un simple retour à la ligne À
+// L'INTÉRIEUR d'un seul Paragraph (constaté : "un seul paragraphe sans
+// saut de ligne" dans le DOCX, signalé par l'enseignant sur S2/S3).
+// Corrige à la source en réécrivant chaque segment séparé par <br> en son
+// propre <p> -- les segments ressemblant à un titre de partie ("I-", "1)")
+// reçoivent en plus data-docx-titre="1" (espacement DOCX, cf.
+// blockChildrenToParagraphs) et un style gras/espacé pour l'écran et le PDF
+// (même HTML que les 2, cf. genererDocxDepuisHtml vs le rendu navigateur/
+// puppeteer). SCOPÉ STRICTEMENT à l'appel (cf. /api/generer-fiche, bloc
+// estOeuvreIntegrale && profilInfoOI) -- jamais appelée pour le 1er cycle
+// ni pour un autre type de séance second cycle.
+const PATTERN_TITRE_SECTION_DOCX = /^\s*(?:[IVXLCDM]+[\-.)]|[0-9]+[\-.)])\s*\S/;
+
+function restructurerTexteLibreEnParagraphes(contenuHTML) {
+  if (!contenuHTML || !/<br\s*\/?>/i.test(contenuHTML)) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+
+  const segmenterEnParagraphesHtml = (htmlBrut) => {
+    return htmlBrut
+      .split(/<br\s*\/?>/i)
+      .map((seg) => {
+        const texteBrut = seg.replace(/<[^>]+>/g, '').trim();
+        if (!texteBrut) return '';
+        const estTitre = PATTERN_TITRE_SECTION_DOCX.test(texteBrut);
+        const attr = estTitre
+          ? ' data-docx-titre="1" style="margin:10px 0 4px 0;font-weight:bold"'
+          : ' style="margin:2px 0"';
+        return `<p${attr}>${seg.trim()}</p>`;
+      })
+      .filter(Boolean)
+      .join('');
+  };
+
+  if ($('table').length) {
+    // Culture littéraire (et tout autre cas avec tableau Déroulement) :
+    // seules les cellules <td> en texte plat sont concernées -- jamais une
+    // cellule contenant déjà un tableau imbriqué (axes Lecture méthodique)
+    // ou une liste structurée.
+    $('td').each((_, td) => {
+      const $td = $(td);
+      if ($td.find('table, ul, ol').length) return;
+      const html = $td.html();
+      if (!html || !/<br\s*\/?>/i.test(html)) return;
+      const nouveauHtml = segmenterEnParagraphesHtml(html);
+      if (nouveauHtml) $td.html(nouveauHtml);
+    });
+  } else {
+    // Introduction/Conclusion : AUCUN tableau (structure texte libre
+    // imposée par le prompt, cf. construireInstructionsIntroductionOeuvreLycee)
+    // -- le <br> plat peut alors apparaître directement au niveau racine
+    // (.fiche-cours ou body). On ne redescend jamais dans un <p>/<table>
+    // déjà bien formé : seul le conteneur racine lui-même est reconstruit.
+    const racine = $('.fiche-cours').first().length ? $('.fiche-cours').first() : $('body');
+    if (racine.length && racine.find('> br').length) {
+      const html = racine.html();
+      if (html && /<br\s*\/?>/i.test(html)) {
+        const nouveauHtml = segmenterEnParagraphesHtml(html);
+        if (nouveauHtml) racine.html(nouveauHtml);
+      }
+    }
+  }
+
+  return $.html($('body').length ? $('body') : $.root());
+}
+
 // Filet déterministe UNIVERSEL (12/09) : la cellule Traces écrites de la
 // ligne PRÉSENTATION rituelle (RÈGLES ABSOLUES de construirePromptSecondaire)
 // ne doit contenir QUE Date/Activité/Leçon/Séance -- jamais un contenu déjà
@@ -8282,6 +8359,11 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // haut, données non sourcées pour l'instant).
         contenuHTML = injecterChampEntete(contenuHTML, 'Leçon', leconAfficheeOI);
         contenuHTML = injecterChampEntete(contenuHTML, 'Séance', seanceAfficheeOI);
+        // Chantier A (05/10) : restructuration texte plat -> paragraphes,
+        // scopée ici STRICTEMENT à l'Œuvre intégrale lycée (cf. commentaire
+        // sur restructurerTexteLibreEnParagraphes) -- jamais pour le 1er
+        // cycle ni les autres types de séance second cycle.
+        contenuHTML = restructurerTexteLibreEnParagraphes(contenuHTML);
         if (portionLectureDirigeeHTML) {
           // Filet déterministe (15/09, même principe que structureIntroductionOeuvrePresente
           // ci-dessus) : constaté en test réel en production -- le modèle
