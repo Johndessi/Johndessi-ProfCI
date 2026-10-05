@@ -5049,6 +5049,32 @@ function nettoyerCaracteresInvisiblesEtAccents(contenuHTML) {
   return resultat;
 }
 
+// Chantier D.2 (05/10, bug "le thème de Fatou" signalé par l'enseignant --
+// le nom de l'auteur injecté tel quel comme thème de l'œuvre dans la
+// section II de l'Introduction) : contrôle déterministe en complément de
+// l'interdiction posée dans le prompt (cf. consigneAntiThemeAuteur) --
+// jamais un correctif silencieux (on ne sait pas inventer le vrai thème à
+// sa place) : un avertissement explicite si la ligne "Thème" détectée
+// contient le nom de l'auteur, pour que l'enseignant vérifie avant usage.
+function corrigerThemeConfonduAvecAuteur(contenuHTML, auteur) {
+  const auteurNorm = normaliserTexte(auteur);
+  if (!contenuHTML || !auteurNorm) return null;
+  const $ = cheerio.load(contenuHTML);
+  let avertissement = null;
+  $('p, td, div, li').each((_, el) => {
+    if (avertissement) return;
+    const texte = $(el).text().trim();
+    const m = /^Th[èe]me\s*:?\s*(.+)$/i.exec(texte);
+    if (!m) return;
+    const valeurNorm = normaliserTexte(m[1]);
+    if (!valeurNorm) return;
+    if (valeurNorm === auteurNorm || valeurNorm.includes(auteurNorm) || auteurNorm.includes(valeurNorm)) {
+      avertissement = `Le "Thème" généré ("${m[1].trim()}") semble être le nom de l'auteur plutôt qu'un vrai thème de l'œuvre -- vérifiez et corrigez ce champ avant utilisation, ne pas diffuser tel quel.`;
+    }
+  });
+  return avertissement;
+}
+
 // Filet déterministe UNIVERSEL (12/09) : la cellule Traces écrites de la
 // ligne PRÉSENTATION rituelle (RÈGLES ABSOLUES de construirePromptSecondaire)
 // ne doit contenir QUE Date/Activité/Leçon/Séance -- jamais un contenu déjà
@@ -6881,15 +6907,53 @@ RAPPEL FINAL : ta réponse ne contient QUE les parties I à IV en texte libre --
   const consigneBiographie = biographie
     ? `1- Biographie : t'appuyer EXACTEMENT sur ces informations (fournies par l'enseignant ou vérifiées par recherche documentaire), sans y ajouter ni en retirer aucun détail : "${biographie}"`
     : `1- Biographie : bref, JAMAIS un paragraphe développé -- 2 à 3 phrases maximum, uniquement l'essentiel : nationalité/identité, date de naissance (et de décès si l'auteur n'est plus vivant), profession, activité principale (distinctions/prix notables). À partir de tes connaissances réelles sur cet auteur.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE}`;
+  // Chantier D.3 (05/10, règle du 04/09, signalement enseignant) : "Thème"
+  // et "Les personnages" sont des blocs FOURNIS PAR L'ENSEIGNANT -- champ
+  // vide = bloc ABSENT de la réponse, jamais un remplissage générique
+  // ("reste général...") qui laissait jusqu'ici une ligne vide de sens à la
+  // place d'une vraie absence. Lieux suit déjà cette règle (consigneLieux
+  // ci-dessous, inchangé -- déjà '' quand vide).
   const consigneTheme = theme
     ? `Thème : t'appuyer EXACTEMENT sur ce thème fourni par l'enseignant, sans y ajouter ni en retirer aucun détail : "${theme}"`
-    : `Thème : l'enseignant n'a fourni aucun thème précis -- si tu n'es pas certain du thème réel de cette œuvre précise, reste général (genre, tonalité) plutôt que d'inventer un thème ou une intrigue précise que tu ne connais pas avec certitude.`;
+    : `N'ÉCRIS PAS de ligne "Thème" dans ta réponse : l'enseignant n'a fourni aucun thème précis pour cette séance -- ce champ est un bloc fourni par l'enseignant (jamais un remplissage générique de ta part, même prudent) : omets ENTIÈREMENT cette ligne plutôt que de rester vague ou d'inventer un thème.`;
   const consignePersonnages = personnages
     ? `2- Les personnages : t'appuyer EXACTEMENT sur cette liste fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${personnages}"`
-    : `2- Les personnages : l'enseignant n'a fourni AUCUNE liste de personnages -- si tu n'es pas certain des personnages réels de cette œuvre précise (noms, rôles), N'INVENTE AUCUN nom de personnage : reste général, présentation plus sobre plutôt qu'un détail inventé.`;
+    : `N'ÉCRIS PAS de section "2- Les personnages" dans ta réponse : l'enseignant n'a fourni aucune liste de personnages -- ce bloc est fourni par l'enseignant (jamais un remplissage générique de ta part, jamais un nom inventé) : omets ENTIÈREMENT cette section plutôt que de rester vague.`;
   const consigneLieux = lieux
     ? `\n3- Lieux et espace : t'appuyer EXACTEMENT sur cette description fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${lieux}"`
     : '';
+
+  // Chantier D.4/D.5 (05/10, signalements enseignant) : graphie du nom de
+  // l'auteur strictement identique à la saisie partout dans la fiche
+  // (constaté : "Keita"/"Keïta" mélangés dans une même fiche réelle) ;
+  // jamais "il ou elle" -- le genre doit être résolu depuis les infos
+  // disponibles (titre/civilité connue, biographie fournie/vérifiée) ou,
+  // à défaut, une formulation neutre qui ne nécessite aucun pronom genré.
+  const consigneGrapheGenre = auteur
+    ? `
+
+CONSIGNE ABSOLUE -- GRAPHIE DU NOM DE L'AUTEUR : reproduis "${auteur}" EXACTEMENT comme saisi par l'enseignant (mêmes accents, mêmes signes diacritiques, même orthographe) PARTOUT dans ta réponse -- jamais une variante orthographique, même si elle te semble plus correcte ou plus courante (ex. jamais "Keita" à un endroit et "Keïta" à un autre : une seule graphie, celle fournie, du début à la fin).
+
+CONSIGNE ABSOLUE -- JAMAIS "IL OU ELLE" : n'utilise jamais la formulation "il ou elle"/"il/elle" ni aucune variante hésitante sur le genre de l'auteur. Si tu connais son genre avec certitude (à partir des informations fournies ou vérifiées), utilise le pronom correspondant normalement. Si tu ne le connais PAS avec certitude, reformule pour éviter tout pronom genré (répète le nom de l'auteur, utilise "cet auteur"/"cette autrice" seulement si connu, ou une tournure impersonnelle) plutôt que d'écrire une formule hésitante.`
+    : '';
+
+  // Chantier D.2 (05/10, bug "le thème de Fatou" signalé par l'enseignant :
+  // le nom de l'auteur injecté comme thème de l'œuvre) : interdiction
+  // explicite dans le prompt -- complétée par un contrôle déterministe en
+  // post-traitement (cf. corrigerThemeConfonduAvecAuteur, appelé dans le
+  // pipeline Œuvre intégrale lycée).
+  const consigneAntiThemeAuteur = auteur
+    ? `
+
+CONSIGNE ABSOLUE -- NE JAMAIS CONFONDRE THÈME ET AUTEUR : le "Thème" de l'œuvre (section II) est TOUJOURS un sujet, une idée ou une problématique -- ce n'est JAMAIS le nom de l'auteur ("${auteur}") ni une variante de celui-ci. Si tu ne connais pas le thème réel avec certitude, suis la consigne ci-dessus (omets la ligne) -- n'écris JAMAIS "${auteur}" ou une paraphrase de ce nom en guise de thème.`
+    : '';
+
+  // Chantier D.7 (05/10, anti-fabrication déjà en place complétée par un
+  // seuil explicite) : la rubrique Bibliographie entière n'apparaît QUE si
+  // au moins 2 titres sont connus avec certitude -- sinon omise
+  // intégralement (jamais renommée, jamais remplacée par une liste
+  // incertaine d'1 seul titre).
+  const consigneBibliographie = `2- Bibliographie (CONDITIONNELLE) : liste des œuvres majeures de l'auteur avec leur année de publication, au format "Titre en année, Titre en année..." -- à partir de tes connaissances réelles.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE} N'INCLUS CETTE RUBRIQUE "2- Bibliographie" QUE SI tu connais avec certitude au moins 2 titres ET leur année -- si tu n'en connais qu'un seul (même « ${titre} ») ou aucun avec une certitude suffisante, N'ÉCRIS PAS la rubrique "2- Bibliographie" du tout (ni le titre de section, ni aucune liste incertaine) plutôt que de la renommer ou de la remplir partiellement.`;
 
   return `
 
@@ -6897,7 +6961,7 @@ STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉG
 
 I- Présentation de l'auteur
 ${consigneBiographie}
-2- Bibliographie : liste des œuvres majeures de l'auteur avec leur année de publication, au format "Titre en année, Titre en année..." -- à partir de tes connaissances réelles.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE} Si tu n'es certain avec exactitude ni du titre ni de l'année d'une œuvre secondaire, ne la mentionne PAS plutôt que de citer un titre approximatif ou une année incertaine -- limite-toi alors à l'œuvre principale déjà connue avec certitude (« ${titre} »).
+${consigneBibliographie}
 
 II- Présentation de l'œuvre
 Présente le genre du récit ou de la pièce (roman, pièce de théâtre...) en 1-2 phrases (pas le thème -- traité séparément ci-dessous).
@@ -6907,7 +6971,7 @@ ${consignePersonnages}${consigneLieux}
 III- Axe d'étude
 "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Conclusion, à la fin de la séquence).
 
-${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}
+${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}${consigneGrapheGenre}${consigneAntiThemeAuteur}
 
 RAPPEL FINAL : ta réponse ne contient QUE les parties I à III en texte libre -- jamais de tableau Habiletés/Contenus, jamais de tableau DÉROULEMENT 5 colonnes, jamais de section ÉVALUATION.`;
 }
@@ -7830,7 +7894,22 @@ function limiterGenerationParIp(req, res, next) {
       // collège où COMPETENCE_OEUVRE_INTEGRALE est une valeur connue et
       // vérifiée. Laissé à la résolution générale par défaut plutôt que
       // d'imposer une valeur non vérifiée.
-      leconAfficheeOI = construireLeconAfficheeOeuvre(numeroSequence, titreOeuvre, auteurOeuvre, titreLeconCatalogueOI);
+      // Chantier D.1 (05/10, signalement enseignant) : le champ Leçon de
+      // l'entête doit TOUJOURS afficher le titre officiel de la leçon au
+      // catalogue (ex. "1 : Œuvre narrative"), jamais le titre de l'œuvre
+      // choisie par l'enseignant -- contrairement au repli précédent
+      // (04/10) qui ne s'appliquait qu'aux Séances 1-2, avant que titre/
+      // auteur ne soient connus. Titre/auteur restent REELLEMENT utilisés
+      // partout ailleurs dans le prompt (biographie, bibliographie...) :
+      // seul l'affichage du champ Leçon de l'entête en est indépendant --
+      // d'où l'appel ci-dessous avec titre/auteur forcés à '' (déclenche
+      // systématiquement le repli catalogue de construireLeconAfficheeOeuvre,
+      // cf. son propre commentaire), jamais pour le collège (ligne
+      // équivalente plus haut, non modifiée, où titre/auteur restent la
+      // seule info disponible). La clé de recherche d'historique
+      // (numeroSequenceOeuvre) reste séparée de cet affichage depuis le
+      // 04/10 -- aucun impact ici, vérifié par le chantier E.
+      leconAfficheeOI = construireLeconAfficheeOeuvre(numeroSequence, '', '', titreLeconCatalogueOI);
       activiteAffichee = ACTIVITE_OEUVRE_INTEGRALE;
       systemPrompt += `\n\nCHAMP ACTIVITÉ DE L'ENTÊTE : écris EXACTEMENT "${ACTIVITE_OEUVRE_INTEGRALE}" dans le champ Activité de l'entête -- jamais "Étude de l'œuvre intégrale" ni une autre formulation.`;
       // 21/09 (retour enseignant, cf. fiche_francais_2nde_3.docx) : laissé
@@ -8611,6 +8690,15 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           }
           if (!structureRemplacementSeanceOeuvreLyceePresente(contenuHTML, etapesAttendues)) {
             res.write(`data: ${JSON.stringify({ avertissement: `La structure attendue pour cette séance de ${typeSeanceOI === 'introduction' ? 'Introduction' : 'Conclusion'} (parties I à ${estPoetique ? 'IV' : (typeSeanceOI === 'introduction' ? 'III' : 'II')} en texte libre, sans tableau Habiletés/Contenus ni tableau Développement/Évaluation) n'a pas été respectée -- le modèle a probablement gardé le squelette générique de fiche (Habiletés/Contenus et/ou tableau 5 colonnes Présentation/Développement/Évaluation) au lieu de le remplacer, ou ajouté une évaluation non prévue pour cette séance. Ne pas utiliser cette fiche telle quelle : régénérez-la.` })}\n\n`);
+          }
+          // Chantier D.2 (05/10) : bug "le thème de l'auteur" -- Introduction
+          // narrative uniquement (seul genre avec une ligne "Thème" dédiée,
+          // cf. construireInstructionsIntroductionOeuvreLycee).
+          if (typeSeanceOI === 'introduction' && !estPoetique) {
+            const avertissementTheme = corrigerThemeConfonduAvecAuteur(contenuHTML, auteurOeuvre);
+            if (avertissementTheme) {
+              res.write(`data: ${JSON.stringify({ avertissement: avertissementTheme })}\n\n`);
+            }
           }
         }
       }
