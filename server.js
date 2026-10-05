@@ -8,6 +8,7 @@ const pdfParse = require('pdf-parse');
 const chromium = require('@sparticuz/chromium').default;
 const puppeteer = require('puppeteer-core');
 const cheerio = require('cheerio');
+const JSZip = require('jszip');
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, ShadingType, PageOrientation, BorderStyle, VerticalAlign
@@ -504,7 +505,82 @@ function contenuToDocxChildren(html) {
   return elements;
 }
 
-async function genererDocxDepuisHtml(contenuHTML, landscape) {
+// Chantier F.1 (lot 2, Œuvre intégrale 2nde lycée -- SCOPÉ au second cycle via
+// le paramètre miseEnFormeSecondCycle, jamais appliqué au 1er cycle, cf. son
+// origine : fiche.estOeuvreIntegraleSecondCycle, posé UNIQUEMENT dans le bloc
+// estOeuvreIntegrale && profilInfoOI de /api/generer-fiche) : police Times
+// New Roman + interligne 1,5 sur TOUT le document, cellules de tableau
+// comprises. Appliqué en post-traitement DIRECTEMENT sur le XML interne du
+// .docx (word/document.xml) plutôt qu'en configurant un style de document
+// docx.js (styles.default.document.run/paragraph) : la preuve mécanique
+// exigée (w:spacing w:line="360" SUR CHAQUE <w:p>, y compris les paragraphes
+// vides utilisés comme espaceurs et ceux des cellules de tableau) doit être
+// un attribut RÉELLEMENT présent sur chaque paragraphe, jamais seulement
+// hérité d'un style qu'un lecteur strict pourrait ignorer -- plus fiable que
+// de faire confiance à la cascade de styles OOXML, et plus simple que de
+// faire transiter un paramètre de mise en forme à travers la dizaine de
+// fonctions qui construisent des Paragraph/TextRun (contenuToDocxChildren,
+// buildDocxTable, buildEnteteTable, tableCellFromNode, collectRuns,
+// blockChildrenToParagraphs, titrePar, elementsTexteSupportDepuisDiv).
+const RFONTS_TIMES_NEW_ROMAN = '<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/>';
+
+// Shape XML RÉELLEMENT produite par docx.js (vérifié empiriquement, jamais
+// supposée) : <w:p> ne s'imbrique jamais, <w:r> non plus -- un paragraphe/run
+// vide est systématiquement auto-fermé (<w:p/>), un run sans aucune mise en
+// forme n'a aucun <w:rPr> du tout. D'où les regex non imbriquées ci-dessous,
+// volontairement plus simples qu'un vrai parseur XML (inutile ici : on ne
+// traite QUE la sortie de notre propre générateur, jamais un XML arbitraire).
+function appliquerPoliceEtInterligneXml(xml) {
+  // 1) Police -- chaque <w:r> doit porter Times New Roman : remplace son
+  // <w:rFonts> existant, ou en crée un (avec son <w:rPr>) s'il n'en a aucun.
+  xml = xml.replace(/<w:r>(?:(?!<\/w:r>)[\s\S])*?<\/w:r>|<w:r\/>/g, (run) => {
+    if (run === '<w:r/>') return run;
+    if (/<w:rFonts\b[^>]*\/>/.test(run)) {
+      return run.replace(/<w:rFonts\b[^>]*\/>/, RFONTS_TIMES_NEW_ROMAN);
+    }
+    if (/<w:rPr>/.test(run)) {
+      return run.replace('<w:rPr>', `<w:rPr>${RFONTS_TIMES_NEW_ROMAN}`);
+    }
+    return run.replace('<w:r>', `<w:r><w:rPr>${RFONTS_TIMES_NEW_ROMAN}</w:rPr>`);
+  });
+
+  // 2) Interligne 1,5 (w:line="360", 240 = simple) + espacement entre
+  // paragraphes -- sur CHAQUE <w:p>, y compris les paragraphes vides
+  // (<w:p/>, espaceurs entre tableaux) et ceux des cellules de tableau.
+  // w:before/w:after existants (ex. titrePar, data-docx-titre) sont
+  // conservés tels quels -- seuls w:line/w:lineRule sont forcés.
+  xml = xml.replace(/<w:p\/>|<w:p>(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g, (paragraphe) => {
+    const estVide = paragraphe === '<w:p/>';
+    const corps = estVide ? '' : paragraphe.slice(5, -6);
+    const mSpacing = /<w:spacing\b([^/]*)\/>/.exec(corps);
+    const mBefore = mSpacing && /w:before="(\d+)"/.exec(mSpacing[1]);
+    const mAfter = mSpacing && /w:after="(\d+)"/.exec(mSpacing[1]);
+    const before = mBefore ? mBefore[1] : '0';
+    const after = mAfter ? mAfter[1] : '140';
+    const nouvelleSpacing = `<w:spacing w:before="${before}" w:after="${after}" w:line="360" w:lineRule="auto"/>`;
+    if (/<w:pPr>/.test(corps)) {
+      const nouveauCorps = mSpacing
+        ? corps.replace(mSpacing[0], nouvelleSpacing)
+        : corps.replace('<w:pPr>', `<w:pPr>${nouvelleSpacing}`);
+      return `<w:p>${nouveauCorps}</w:p>`;
+    }
+    return `<w:p><w:pPr>${nouvelleSpacing}</w:pPr>${corps}</w:p>`;
+  });
+
+  return xml;
+}
+
+async function appliquerMiseEnFormeSecondCycleDocx(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const chemin = 'word/document.xml';
+  const fichier = zip.file(chemin);
+  if (!fichier) return buffer; // structure inattendue -- jamais planter l'export pour autant
+  const xml = await fichier.async('string');
+  zip.file(chemin, appliquerPoliceEtInterligneXml(xml));
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+async function genererDocxDepuisHtml(contenuHTML, landscape, miseEnFormeSecondCycle) {
   const doc = new Document({
     sections: [{
       properties: {
@@ -518,7 +594,11 @@ async function genererDocxDepuisHtml(contenuHTML, landscape) {
       children: contenuToDocxChildren(contenuHTML)
     }]
   });
-  return Packer.toBuffer(doc);
+  let buffer = await Packer.toBuffer(doc);
+  if (miseEnFormeSecondCycle) {
+    buffer = await appliquerMiseEnFormeSecondCycleDocx(buffer);
+  }
+  return buffer;
 }
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost/profci')
@@ -598,6 +678,15 @@ const FicheSchema = new mongoose.Schema({
   // séance précédente à travers cette transition. Absent (undefined) pour
   // toute activité hors Étude de l'œuvre intégrale.
   numeroSequenceOeuvre : { type: String, default: undefined },
+  // Chantier F.1 (lot 2, 06/10) : scope la mise en forme Times New Roman +
+  // interligne 1,5 (cf. genererDocxDepuisHtml/appliquerMiseEnFormeSecondCycleDocx)
+  // au SEUL second cycle de l'Étude de l'œuvre intégrale -- jamais le 1er
+  // cycle ni un autre type de séance. Posé une fois pour toutes à la création
+  // de la fiche (estOeuvreIntegrale && profilInfoOI, seule et même condition
+  // que partout ailleurs dans ce lot) plutôt que redéduit à l'export DOCX, où
+  // aucune de ces deux informations n'est autrement disponible (le schéma ne
+  // retient ni l'activité ni le profil de l'enseignant).
+  estOeuvreIntegraleSecondCycle : { type: Boolean, default: false },
   createdAt    : { type: Date, default: Date.now }
 });
 
@@ -1095,9 +1184,44 @@ function injecterActiviteEntete(contenuHTML, activiteAttendue) {
 function nettoyerPreambuleHallucine(contenuHTML) {
   if (!contenuHTML) return contenuHTML;
   const re = /<div[^>]*class="[^"]*\b(?:fiche-cours|entete-libre)\b[^"]*"/i;
-  const m = re.exec(contenuHTML);
+  let m = re.exec(contenuHTML);
+  if (!m) {
+    // Chantier G (lot 2, Œuvre intégrale 2nde lycée -- bug réel S3 : préambule
+    // "0789753004 Ministère de l'éducation nationale... DREN ABIDJAN 4...
+    // LYCEE DE YOPOUGON..." encore présent malgré le filet ci-dessus) :
+    // identifié comme venant de modelePersonnel.structure (cf. /api/upload-modele
+    // et son interpolation telle quelle dans userMessage, "REPRODUIS exactement
+    // la STRUCTURE de ce modèle de fiche") -- un enseignant a visiblement
+    // enregistré "Mon modèle" à partir d'une fiche de référence qui portait
+    // cet en-tête administratif, et la consigne "reproduis EXACTEMENT"
+    // l'emporte alors sur la structure HTML habituelle au point que le modèle
+    // abandonne parfois jusqu'aux balises <div class="fiche-cours">/
+    // "entete-libre"> elles-mêmes -- dans ce cas précis, le marqueur ci-dessus
+    // ne matche plus rien. "Discipline" reste l'ancrage de repli : premier
+    // champ officiel de TOUT gabarit (grep confirmé : jamais lui-même une
+    // invention), donc tout ce qui le précède est nécessairement un
+    // préambule à retirer, même hors de toute balise div reconnue.
+    const reDiscipline = /\bDiscipline\s*:/i;
+    m = reDiscipline.exec(contenuHTML);
+  }
   if (!m || m.index <= 0) return contenuHTML;
   return contenuHTML.slice(m.index);
+}
+
+// Chantier G.3 (lot 2) : "STAGIAIRE : Professeur conseiller :" n'est renseigné
+// nulle part dans l'application (aucun champ "stagiaire"/"professeur conseiller"
+// n'existe côté enseignant, cf. grep confirmé sur server.js/public/index.html) --
+// donc jamais une valeur légitime à afficher "seulement si renseignée" : c'est
+// TOUJOURS une invention du modèle (déjà interdite explicitement en RÈGLES
+// ABSOLUES, cf. plus haut) à supprimer intégralement si elle apparaît malgré
+// tout, y compris quand nettoyerPreambuleHallucine ne l'a pas déjà éliminée
+// parce qu'elle se trouve APRÈS l'ancrage "Discipline" (ex. insérée entre deux
+// champs de l'entête plutôt qu'avant). Ne retire que la ligne elle-même,
+// jamais le contenu qui l'entoure.
+function nettoyerLigneStagiaireHallucine(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  return contenuHTML.replace(/<div[^>]*>\s*STAGIAIRE\s*:?\s*Professeur conseiller\s*:?\s*<\/div>\s*<div[^>]*>[\s\S]*?<\/div>/gi, '')
+    .replace(/\bSTAGIAIRE\s*:\s*Professeur conseiller\s*:\s*/gi, '');
 }
 
 // Même principe que ci-dessus, mais pour le paragraphe "Situation
@@ -4956,8 +5080,99 @@ function supprimerTableauDupliqueApresDeroulement(contenuHTML) {
 // ni pour un autre type de séance second cycle.
 const PATTERN_TITRE_SECTION_DOCX = /^\s*(?:[IVXLCDM]+[\-.)]|[0-9]+[\-.)])\s*\S/;
 
+// Chantier F.3 (lot 2, Œuvre intégrale 2nde lycée -- bug réel S3, forme RÉELLE
+// observée en test) : pour l'Introduction, le modèle aplatit parfois la
+// grille d'entête ("Discipline :"/"Date :".../"Séance :") dans un seul bloc de
+// texte libre au lieu du vrai <div class="entete-libre"> en grille attendu --
+// même défaut de conformité que celui qui affecte les parties I à III
+// ci-dessous. Conséquence grave et silencieuse : injecterChampEntete
+// (Leçon/Séance, chantier D.1 du lot précédent) ne fait RIEN si la grille
+// n'existe pas (no-op documenté), donc le titre du catalogue officiel ne
+// remplace alors jamais le titre de l'œuvre. Reconstruit ici la grille à
+// partir du texte libre AVANT ces injections, sur l'hypothèse que le modèle
+// sépare les champs par le même double espace que celui observé pour les
+// parties I à III (même défaut de conformité, pas vérifié sur autant
+// d'échantillons réels que le cas texte libre -- à confirmer en production).
+const LIBELLES_ENTETE_OI = ['Discipline', 'Date', 'Classe', 'Compétence', 'Activité', 'Durée', 'Leçon', 'Séance'];
+
+function extraireChampsEnteteDepuisTexteLibre(texte) {
+  const alternatives = LIBELLES_ENTETE_OI.join('|');
+  const motif = new RegExp(`(${alternatives})\\s*:\\s*([\\s\\S]*?)(?=\\s{2,}(?:${alternatives})\\s*:|$)`, 'g');
+  const champs = {};
+  let trouve = 0;
+  let m;
+  while ((m = motif.exec(texte))) {
+    champs[m[1]] = m[2].trim();
+    trouve++;
+  }
+  return trouve >= 2 ? champs : null;
+}
+
+function construireDivEnteteLibreDepuisChamps(champs) {
+  const lignes = LIBELLES_ENTETE_OI.map((libelle) => {
+    const valeur = champs[libelle] || '';
+    return `<div style="font-weight:bold;padding:2px 0;">${libelle} :</div><div style="padding:2px 0;">${echapperHtml(valeur)}</div>`;
+  }).join('');
+  return `<div class="entete-libre" style="display:grid;grid-template-columns:110px 1fr;column-gap:12px;row-gap:2px;margin-bottom:14px;">${lignes}</div>`;
+}
+
+function reconstruireEnteteLibreDepuisTexteLibre(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  if ($('.entete-libre').length) return contenuHTML; // grille déjà présente -- rien à faire
+
+  const racine = $('.fiche-cours').first().length ? $('.fiche-cours').first() : $('body');
+  if (!racine.length) return contenuHTML;
+
+  let cible = null;
+  racine.children('p').each((_, p) => {
+    if (cible) return;
+    if (extraireChampsEnteteDepuisTexteLibre($(p).text())) cible = $(p);
+  });
+  if (!cible) {
+    const texteDirect = racine.contents().filter((_, n) => n.type === 'text').map((_, n) => $(n).data()).get().join(' ');
+    if (extraireChampsEnteteDepuisTexteLibre(texteDirect)) {
+      const champs = extraireChampsEnteteDepuisTexteLibre(texteDirect);
+      racine.contents().filter((_, n) => n.type === 'text').remove();
+      racine.prepend(construireDivEnteteLibreDepuisChamps(champs));
+      return $.html($('body').length ? $('body') : $.root());
+    }
+    return contenuHTML;
+  }
+
+  const champs = extraireChampsEnteteDepuisTexteLibre(cible.text());
+  cible.replaceWith(construireDivEnteteLibreDepuisChamps(champs));
+  return $.html($('body').length ? $('body') : $.root());
+}
+
+// Chantier F.2 (lot 2, forme RÉELLE observée en test, DOCX réel : S3 produit
+// UN SEUL paragraphe de 1869 caractères, 0 saut de ligne -- AUCUN <br>, les
+// parties/rubriques étant séparées par un simple DOUBLE ESPACE : "...avec
+// adultes.  II- Présentation de l'œuvre  Genre : ..."). Le lot 1 supposait à
+// tort un <br> partout (cf. commentaire ci-dessus) : cas RÉEL non couvert,
+// traité séparément ici plutôt qu'en modifiant la détection <br> existante.
+const RE_MARQUEUR_RUBRIQUE_OI = /^(?:[IVXLCDM]+-|[0-9]+-|Genre\s*:|Th[èe]me\s*:)/i;
+const RE_SEPARATEUR_RUBRIQUE_OI = / {2,}(?=(?:[IVXLCDM]+-|[0-9]+-|Genre\s*:|Th[èe]me\s*:))/i;
+
+function decouperTexteRubriquesOI(texte) {
+  return (texte || '').split(new RegExp(RE_SEPARATEUR_RUBRIQUE_OI, 'gi')).map((s) => s.trim()).filter(Boolean);
+}
+
+function construireParagraphesRubriquesOI(texte) {
+  const segments = decouperTexteRubriquesOI(texte);
+  if (segments.length < 2) return null;
+  return segments.map((seg) => {
+    const estTitre = RE_MARQUEUR_RUBRIQUE_OI.test(seg);
+    const attr = estTitre
+      ? ' data-docx-titre="1" style="margin:10px 0 4px 0;font-weight:bold"'
+      : ' style="margin:2px 0"';
+    return `<p${attr}>${echapperHtml(seg)}</p>`;
+  }).join('');
+}
+
 function restructurerTexteLibreEnParagraphes(contenuHTML) {
-  if (!contenuHTML || !/<br\s*\/?>/i.test(contenuHTML)) return contenuHTML;
+  if (!contenuHTML) return contenuHTML;
+  const aDesBr = /<br\s*\/?>/i.test(contenuHTML);
   const $ = cheerio.load(contenuHTML);
 
   const segmenterEnParagraphesHtml = (htmlBrut) => {
@@ -5010,13 +5225,13 @@ function restructurerTexteLibreEnParagraphes(contenuHTML) {
     // imbriquerait les nouveaux <p> autour des <p> déjà corrects (HTML
     // invalide, structure imprévisible une fois reparsée).
     const racine = $('.fiche-cours').first().length ? $('.fiche-cours').first() : $('body');
-    if (racine.length && racine.children('br').length) {
+    if (aDesBr && racine.length && racine.children('br').length) {
       const html = racine.html();
       if (html && /<br\s*\/?>/i.test(html)) {
         const nouveauHtml = segmenterEnParagraphesHtml(html);
         if (nouveauHtml) racine.html(nouveauHtml);
       }
-    } else {
+    } else if (aDesBr) {
       $('p').each((_, p) => {
         const $p = $(p);
         const html = $p.html();
@@ -5024,9 +5239,99 @@ function restructurerTexteLibreEnParagraphes(contenuHTML) {
         const nouveauHtml = segmenterEnParagraphesHtml(html);
         if (nouveauHtml) $p.replaceWith(nouveauHtml);
       });
+    } else if (racine.length) {
+      // Chantier F.2 : aucun <br> du tout -- cas réel décrit ci-dessus.
+      // Cherche d'abord un <p> contenant plusieurs rubriques (cas le plus
+      // courant, un seul <p> enveloppant tout le texte), sinon le texte brut
+      // directement enfant de la racine (aucun <p> du tout).
+      let traite = false;
+      racine.children('p').each((_, p) => {
+        const $p = $(p);
+        const nouveauHtml = construireParagraphesRubriquesOI($p.text());
+        if (nouveauHtml) { $p.replaceWith(nouveauHtml); traite = true; }
+      });
+      if (!traite) {
+        const noeudsTexte = racine.contents().filter((_, n) => n.type === 'text');
+        const texteDirect = noeudsTexte.map((_, n) => $(n).data()).get().join(' ');
+        const nouveauHtml = construireParagraphesRubriquesOI(texteDirect);
+        if (nouveauHtml) {
+          noeudsTexte.remove();
+          racine.append(nouveauHtml);
+        }
+      }
     }
   }
 
+  return $.html($('body').length ? $('body') : $.root());
+}
+
+// Chantier F.1 (lot 2) : police Times New Roman + interligne 1,5 pour l'écran
+// et le PDF -- scopé au second cycle de l'Œuvre intégrale via un style posé
+// directement sur <div class="fiche-cours"> (hérité par tous ses descendants,
+// cellules de tableau comprises, aussi bien dans l'iframe d'aperçu --
+// cf. afficherFiche -- que dans le rendu Puppeteer du PDF -- cf.
+// genererPdfDepuisHtml -- les deux affichant ce même contenuHTML tel quel,
+// sans feuille de style propre à .fiche-cours). Le DOCX suit un chemin
+// entièrement différent (cf. appliquerMiseEnFormeSecondCycleDocx, post-
+// traitement XML -- aucune cascade CSS possible dans ce format).
+function injecterStyleSecondCycleOeuvreIntegrale(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const re = /(<div[^>]*\bclass="[^"]*\bfiche-cours\b[^"]*"[^>]*)(>)/i;
+  if (!re.test(contenuHTML)) return contenuHTML;
+  if (/<div[^>]*\bclass="[^"]*\bfiche-cours\b[^"]*"[^>]*\bstyle=/i.test(contenuHTML)) return contenuHTML;
+  return contenuHTML.replace(re, `$1 style="font-family:'Times New Roman',serif;line-height:1.5"$2`);
+}
+
+// Chantier F.5 (lot 2, bug réel S1/S2) : le modèle écrit parfois un tableau
+// comparatif en syntaxe Markdown ("| a | b |" / ligne "|---|---|") en texte
+// brut dans une cellule Traces écrites au lieu d'un vrai tableau HTML --
+// jamais corrigé par la consigne seule (même limite que partout ailleurs
+// dans ce fichier). Détecte un bloc Markdown valide (au moins une ligne
+// d'en-tête "| ... |" suivie d'une ligne de séparation "|---|...") n'importe
+// où dans le HTML et le convertit en <table> réel, AVANT que
+// restructurerTexteLibreEnParagraphes ne traite le texte environnant (sans
+// quoi les "|" résiduels seraient simplement redécoupés en paragraphes,
+// jamais transformés en tableau).
+const RE_BLOC_TABLEAU_MARKDOWN = /^[ \t]*\|(.+)\|[ \t]*\r?\n[ \t]*\|[ \t:-]*-[ \t:|-]*\|[ \t]*\r?\n((?:[ \t]*\|.*\|[ \t]*\r?\n?)+)/m;
+
+function ligneMarkdownVersCellules(ligne) {
+  return ligne.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+}
+
+function construireTableHtmlDepuisMarkdown(texteBrut) {
+  const m = RE_BLOC_TABLEAU_MARKDOWN.exec(texteBrut);
+  if (!m) return null;
+  const ligneEntete = m[0].split(/\r?\n/)[0];
+  const entetes = ligneMarkdownVersCellules(ligneEntete);
+  const lignesCorps = m[2].split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('|'));
+  const theadHtml = `<tr>${entetes.map((c) => `<th style="border:1px solid #000;padding:4px;">${echapperHtml(c)}</th>`).join('')}</tr>`;
+  const tbodyHtml = lignesCorps.map((ligne) => {
+    const cellules = ligneMarkdownVersCellules(ligne);
+    return `<tr>${cellules.map((c) => `<td style="border:1px solid #000;padding:4px;">${echapperHtml(c)}</td>`).join('')}</tr>`;
+  }).join('');
+  const tableHtml = `<table style="width:100%;border-collapse:collapse;">${theadHtml}${tbodyHtml}</table>`;
+  return { tableHtml, texteAvant: texteBrut.slice(0, m.index), texteApres: texteBrut.slice(m.index + m[0].length) };
+}
+
+function convertirTableauxMarkdownEnHtml(contenuHTML) {
+  if (!contenuHTML || !/\|.+\|/.test(contenuHTML)) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+
+  $('td').each((_, td) => {
+    const $td = $(td);
+    if ($td.find('table').length) return;
+    const texteBrut = $td.text();
+    if (!RE_BLOC_TABLEAU_MARKDOWN.test(texteBrut)) return;
+    const resultat = construireTableHtmlDepuisMarkdown(texteBrut);
+    if (!resultat) return;
+    const avantHtml = resultat.texteAvant.trim() ? `<p style="margin:2px 0">${echapperHtml(resultat.texteAvant.trim())}</p>` : '';
+    const apresHtml = resultat.texteApres.trim() ? `<p style="margin:2px 0">${echapperHtml(resultat.texteApres.trim())}</p>` : '';
+    $td.html(`${avantHtml}${resultat.tableHtml}${apresHtml}`);
+    modifie = true;
+  });
+
+  if (!modifie) return contenuHTML;
   return $.html($('body').length ? $('body') : $.root());
 }
 
@@ -6979,7 +7284,10 @@ CONSIGNE ABSOLUE -- NE JAMAIS CONFONDRE THÈME ET AUTEUR : le "Thème" de l'œuv
 
   return `
 
-STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (« ${titre} » de ${auteur}) : cette fiche N'A PAS de tableau Habiletés/Contenus générique ET N'A PAS le tableau DÉROULEMENT 5 colonnes (Moments didactiques/Stratégies pédagogiques/Activités de l'enseignant/Activités des élèves/Traces écrites) avec ses lignes PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION habituelles -- AUCUN DES DEUX ne doit apparaître nulle part dans ta réponse, même vide, même partiellement, même sous une forme abrégée. Rédige UNIQUEMENT, en texte structuré libre (chaque partie = un titre suivi d'un ou plusieurs paragraphes, JAMAIS à l'intérieur d'un tableau), les 3 parties I à III ci-dessous, RIEN D'AUTRE : pas de ligne ni de section ÉVALUATION, pas d'exercice, pas de question, pas de corrigé, pas de travail individuel ou oral à faire par les élèves -- cette séance d'Introduction ouvre la séquence, elle n'évalue jamais rien, quoi qu'il te semble utile d'ajouter par ailleurs :
+STRUCTURE OBLIGATOIRE SPÉCIFIQUE -- INTRODUCTION À L'ÉTUDE DE L'ŒUVRE INTÉGRALE (« ${titre} » de ${auteur}) : cette fiche N'A PAS de tableau Habiletés/Contenus générique ET N'A PAS le tableau DÉROULEMENT 5 colonnes (Moments didactiques/Stratégies pédagogiques/Activités de l'enseignant/Activités des élèves/Traces écrites) avec ses lignes PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION habituelles -- AUCUN DES DEUX ne doit apparaître nulle part dans ta réponse, même vide, même partiellement, même sous une forme abrégée. Rédige, DANS CET ORDRE EXACT, le paragraphe Situation d'apprentissage PUIS les 3 parties I à III ci-dessous, RIEN D'AUTRE : pas de ligne ni de section ÉVALUATION, pas d'exercice, pas de question, pas de corrigé, pas de travail individuel ou oral à faire par les élèves -- cette séance d'Introduction ouvre la séquence, elle n'évalue jamais rien, quoi qu'il te semble utile d'ajouter par ailleurs :
+
+Situation d'apprentissage -- EN TOUT PREMIER, AVANT la partie I ci-dessous (même emplacement que pour les séances de Culture littéraire de cette même séquence), dans SON PROPRE paragraphe au format EXACT suivant, rien d'autre avant : <p><strong>Situation d'apprentissage :</strong> [texte]</p>
+${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}
 
 I- Présentation de l'auteur
 ${consigneBiographie}
@@ -6992,10 +7300,9 @@ ${consignePersonnages}${consigneLieux}
 
 III- Axe d'étude
 "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Conclusion, à la fin de la séquence).
+${consigneGrapheGenre}${consigneAntiThemeAuteur}
 
-${construireConsigneAxeEtudeSituationOeuvreLycee(axe, situation)}${consigneGrapheGenre}${consigneAntiThemeAuteur}
-
-RAPPEL FINAL : ta réponse ne contient QUE les parties I à III en texte libre -- jamais de tableau Habiletés/Contenus, jamais de tableau DÉROULEMENT 5 colonnes, jamais de section ÉVALUATION.`;
+RAPPEL FINAL : ta réponse ne contient QUE le paragraphe Situation d'apprentissage suivi des parties I à III en texte libre, DANS CET ORDRE -- jamais de tableau Habiletés/Contenus, jamais de tableau DÉROULEMENT 5 colonnes, jamais de section ÉVALUATION.`;
 }
 
 // Rappel commun aux deux genres : la Situation d'apprentissage ne doit
@@ -8582,6 +8889,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       const debugPipelineAxesData = {};
       contenuHTML = contenuHTML.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
       contenuHTML = nettoyerPreambuleHallucine(contenuHTML);
+      contenuHTML = nettoyerLigneStagiaireHallucine(contenuHTML);
       contenuHTML = injecterActiviteEntete(contenuHTML, activiteAffichee);
       contenuHTML = nettoyerCellulePresentationRituelle(contenuHTML);
       contenuHTML = nettoyerPlaceholdersNonExecutes(contenuHTML);
@@ -8621,10 +8929,22 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           }
         }
       } else if (estOeuvreIntegrale && profilInfoOI) {
+        // Chantier F.3 (lot 2) : reconstruit la grille d'entête AVANT les
+        // injections Leçon/Séance ci-dessous, qui ne font rien si la grille
+        // (.entete-libre) n'existe pas (cf. commentaire sur
+        // reconstruireEnteteLibreDepuisTexteLibre) -- sans quoi le titre du
+        // catalogue officiel ne remplacerait jamais le titre de l'œuvre dans
+        // ce cas précis.
+        contenuHTML = reconstruireEnteteLibreDepuisTexteLibre(contenuHTML);
         // Second cycle -- pas d'injection Compétence (cf. commentaire plus
         // haut, données non sourcées pour l'instant).
         contenuHTML = injecterChampEntete(contenuHTML, 'Leçon', leconAfficheeOI);
         contenuHTML = injecterChampEntete(contenuHTML, 'Séance', seanceAfficheeOI);
+        // Chantier F.5 (lot 2) : tableaux comparatifs écrits en Markdown
+        // brut (Traces écrites, S1/S2) -> vrais <table> -- AVANT la
+        // restructuration ci-dessous pour que les "|" résiduels ne soient
+        // pas simplement redécoupés en paragraphes de texte plat.
+        contenuHTML = convertirTableauxMarkdownEnHtml(contenuHTML);
         // Chantier A (05/10) : restructuration texte plat -> paragraphes,
         // scopée ici STRICTEMENT à l'Œuvre intégrale lycée (cf. commentaire
         // sur restructurerTexteLibreEnParagraphes) -- jamais pour le 1er
@@ -8723,6 +9043,11 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
             }
           }
         }
+        // Chantier F.1 (lot 2) : police + interligne écran/PDF -- en tout
+        // dernier, une fois le HTML définitivement structuré par tout ce qui
+        // précède (aucune étape ultérieure ne reparse ni ne réécrit
+        // .fiche-cours pour ce bloc).
+        contenuHTML = injecterStyleSecondCycleOeuvreIntegrale(contenuHTML);
       }
       // Contrôle des 3 marqueurs attendus du mode plan-enseignant, AVANT toute
       // injection -- un marqueur omis par le modèle ne doit jamais provoquer
@@ -9265,6 +9590,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         texteSupportBrut: texteSupport,
         debugPipelineAxes: JSON.stringify(debugPipelineAxesData),
         numeroSequenceOeuvre: estOeuvreIntegrale ? numeroSequence : undefined,
+        estOeuvreIntegraleSecondCycle: !!(estOeuvreIntegrale && profilInfoOI),
         origineGeneration: origineGenerationNormalisee
       });
       const payloadDone = { done: true, ficheId: fiche._id, contenuFinal: contenuHTML };
@@ -9461,7 +9787,7 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
     if (!fiche) return res.status(404).json({ error: 'Fiche introuvable' });
 
     const landscape = req.body.view === 'paysage';
-    const docxBuffer = await genererDocxDepuisHtml(fiche.contenu, landscape);
+    const docxBuffer = await genererDocxDepuisHtml(fiche.contenu, landscape, fiche.estOeuvreIntegraleSecondCycle);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${slugFichier(fiche)}.docx"`);
