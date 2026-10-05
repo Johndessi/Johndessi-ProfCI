@@ -1186,10 +1186,11 @@ function nettoyerPreambuleHallucine(contenuHTML) {
   const re = /<div[^>]*class="[^"]*\b(?:fiche-cours|entete-libre)\b[^"]*"/i;
   let m = re.exec(contenuHTML);
   if (!m) {
-    // Chantier G (lot 2, Œuvre intégrale 2nde lycée -- bug réel S3 : préambule
-    // "0789753004 Ministère de l'éducation nationale... DREN ABIDJAN 4...
-    // LYCEE DE YOPOUGON..." encore présent malgré le filet ci-dessus) :
-    // identifié comme venant de modelePersonnel.structure (cf. /api/upload-modele
+    // Chantier G (lot 2, Œuvre intégrale 2nde lycée -- bug réel S3 : un
+    // préambule administratif TIERS -- coordonnées/en-tête d'établissement
+    // n'appartenant pas à l'enseignant qui a généré cette fiche -- encore
+    // présent malgré le filet ci-dessus) : identifié comme venant de
+    // modelePersonnel.structure (cf. /api/upload-modele
     // et son interpolation telle quelle dans userMessage, "REPRODUIS exactement
     // la STRUCTURE de ce modèle de fiche") -- un enseignant a visiblement
     // enregistré "Mon modèle" à partir d'une fiche de référence qui portait
