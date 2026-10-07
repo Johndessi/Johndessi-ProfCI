@@ -11,7 +11,7 @@ const cheerio = require('cheerio');
 const JSZip = require('jszip');
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  WidthType, ShadingType, PageOrientation, BorderStyle, VerticalAlign
+  WidthType, ShadingType, PageOrientation, BorderStyle, VerticalAlign, AlignmentType
 } = require('docx');
 
 const app = express();
@@ -486,7 +486,17 @@ function contenuToDocxChildren(html) {
       elements.push(new Paragraph({ text: '' }));
     } else if (tag === 'p') {
       const runs = collectRuns($, $node);
-      if (runs.length) elements.push(new Paragraph({ children: runs, spacing: { after: 120 } }));
+      // Chantier A (lot 3) : titre "FICHE DE COURS", centré, gras -- posé par
+      // injecterTitreFicheDeCours, jamais par un <p> préexistant ailleurs
+      // (attribut inerte pour tout autre <p>).
+      const estTitreFiche = $node.attr('data-docx-titre-fiche');
+      if (runs.length) {
+        elements.push(new Paragraph({
+          children: runs,
+          spacing: { after: 120 },
+          alignment: estTitreFiche ? AlignmentType.CENTER : undefined
+        }));
+      }
     } else if (tag === 'table') {
       const table = buildDocxTable($, $node);
       if (table) { elements.push(table); elements.push(new Paragraph({ text: '' })); }
@@ -1223,6 +1233,47 @@ function nettoyerLigneStagiaireHallucine(contenuHTML) {
   if (!contenuHTML) return contenuHTML;
   return contenuHTML.replace(/<div[^>]*>\s*STAGIAIRE\s*:?\s*Professeur conseiller\s*:?\s*<\/div>\s*<div[^>]*>[\s\S]*?<\/div>/gi, '')
     .replace(/\bSTAGIAIRE\s*:\s*Professeur conseiller\s*:\s*/gi, '');
+}
+
+// Chantier G.2 (lot 3, bug réel S2, extrait direct du XML du docx fourni par
+// l'enseignant) : DEUX formes de casse fautive différentes constatées, pas
+// une seule -- "LEÇON 1 : ŒUVRE NARRATIVE" où la phrase ENTIÈRE est en
+// majuscules, et "SÉANCE 2 : Culture littéraire : ..." où SEUL le mot
+// "SÉANCE" l'est, le reste de la phrase étant déjà bien casé. La consigne de
+// prompt seule n'a pas suffi. Filet déterministe en deux passes : 1) si la
+// phrase entière qui suit le label est la forme MAJUSCULE exacte de la
+// valeur déjà connue côté serveur (leconAffichee/seanceAffichee), remplace
+// tout le passage par cette valeur correctement casée ; 2) sinon, se
+// contente de corriger le mot-label lui-même ("LEÇON"/"SÉANCE" ->
+// "Leçon"/"Séance"), sans toucher au reste de la phrase qui l'accompagne.
+function corrigerCasseLeconSeanceCorps(contenuHTML, leconAffichee, seanceAffichee) {
+  if (!contenuHTML) return contenuHTML;
+  let resultat = contenuHTML;
+  for (const [libelleMotif, libelleAffiche, valeur] of [
+    ['Le[ÇC]on', 'Leçon', leconAffichee],
+    ['S[ÉE]ance', 'Séance', seanceAffichee]
+  ]) {
+    const valeurTexte = (valeur || '').toString().trim();
+    if (!valeurTexte) continue;
+    const valeurEchappee = valeurTexte.toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    resultat = resultat.replace(new RegExp(`\\b${libelleMotif}\\b\\s*${valeurEchappee}`, 'gi'), `${libelleAffiche} ${valeurTexte}`);
+  }
+  return resultat
+    .replace(/\bLE[ÇC]ON\b(?=\s*\d)/g, 'Leçon')
+    .replace(/\bS[ÉE]ANCE\b(?=\s*\d)/g, 'Séance');
+}
+
+// Chantier G.3 (lot 3, bug réel S2 : "[Procédé interrogatif, dialogue
+// dirigé]") : la consigne de prompt seule n'a pas suffi -- des crochets
+// littéraux, résidus visibles d'un repère de gabarit jamais remplacé,
+// restent dans la réponse. Retire uniquement les caractères "[" "]" entourant
+// un texte court (jamais un intervalle numérique ou une référence légitime,
+// volontairement exclus par la longueur courte et l'absence de chiffres purs)
+// -- conserve le texte qu'ils entouraient, puisqu'il reste pertinent
+// ("Procédé interrogatif, dialogue dirigé" une fois les crochets retirés).
+function nettoyerCrochetsLitteraux(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  return contenuHTML.replace(/\[([^\[\]\d]{2,80})\]/g, '$1');
 }
 
 // Même principe que ci-dessus, mais pour le paragraphe "Situation
@@ -5333,6 +5384,30 @@ function injecterStyleSecondCycleOeuvreIntegrale(contenuHTML) {
   return contenuHTML.replace(re, `$1 style="font-family:'Times New Roman',serif;line-height:1.5"$2`);
 }
 
+// Chantier A (lot 3, bug réel confirmé sur 3 docx S1/S2/S3 fournis par
+// l'enseignant -- absent des 3) : titre "FICHE DE COURS" en toute première
+// ligne du document, centré/gras -- jamais généré par le modèle ni par aucun
+// gabarit de ce fichier (grep confirmé). Injecté déterministiquement en tout
+// premier enfant de .fiche-cours, jamais confié au modèle (même logique que
+// partout ailleurs : un champ structurel connu à l'avance côté serveur n'est
+// jamais laissé à la discrétion du modèle). Marqué data-docx-titre-fiche
+// pour que contenuToDocxChildren (cf. plus bas) le rende centré en DOCX --
+// la police/l'interligne suivent, comme tout le reste du document, le style
+// posé par injecterStyleSecondCycleOeuvreIntegrale (écran/PDF) et
+// appliquerMiseEnFormeSecondCycleDocx (DOCX), jamais dupliqués ici.
+function injecterTitreFicheDeCours(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  if (/\bFICHE DE COURS\b/i.test(contenuHTML)) return contenuHTML; // déjà présent -- jamais un doublon
+  const re = /(<div[^>]*\bclass="[^"]*\bfiche-cours\b[^"]*"[^>]*>)/i;
+  if (!re.test(contenuHTML)) return contenuHTML;
+  // <strong> (et non le seul style CSS "font-weight:bold" du <p>) : le DOCX
+  // (collectRuns, cf. contenuToDocxChildren) ne détecte le gras qu'à travers
+  // une balise <strong>/<b> imbriquée, jamais via le style du <p> englobant
+  // -- bug réel trouvé par ce test même avant tout envoi en production (le
+  // titre restait centré mais pas gras en DOCX).
+  return contenuHTML.replace(re, `$1<p data-docx-titre-fiche="1" style="text-align:center;font-weight:bold;margin:0 0 10px 0"><strong>FICHE DE COURS</strong></p>`);
+}
+
 // Chantier F.5 (lot 2, bug réel S1/S2) : le modèle écrit parfois un tableau
 // comparatif en syntaxe Markdown ("| a | b |" / ligne "|---|---|") en texte
 // brut dans une cellule Traces écrites au lieu d'un vrai tableau HTML --
@@ -5364,6 +5439,20 @@ function construireTableHtmlDepuisMarkdown(texteBrut) {
   return { tableHtml, texteAvant: texteBrut.slice(0, m.index), texteApres: texteBrut.slice(m.index + m[0].length) };
 }
 
+const RE_LIGNE_TABLEAU_MARKDOWN = /^\s*\|.*\|\s*$/;
+const RE_LIGNE_SEPARATION_MARKDOWN = /^\s*\|[\s:|-]*-[\s:|-]*\|\s*$/;
+
+function construireTableHtmlDepuisLignes(lignesMarkdown) {
+  const entetes = ligneMarkdownVersCellules(lignesMarkdown[0]);
+  const lignesCorps = lignesMarkdown.slice(2);
+  const theadHtml = `<tr>${entetes.map((c) => `<th style="border:1px solid #000;padding:4px;">${echapperHtml(c)}</th>`).join('')}</tr>`;
+  const tbodyHtml = lignesCorps.map((ligne) => {
+    const cellules = ligneMarkdownVersCellules(ligne);
+    return `<tr>${cellules.map((c) => `<td style="border:1px solid #000;padding:4px;">${echapperHtml(c)}</td>`).join('')}</tr>`;
+  }).join('');
+  return `<table style="width:100%;border-collapse:collapse;">${theadHtml}${tbodyHtml}</table>`;
+}
+
 function convertirTableauxMarkdownEnHtml(contenuHTML) {
   if (!contenuHTML || !/\|.+\|/.test(contenuHTML)) return contenuHTML;
   const $ = cheerio.load(contenuHTML);
@@ -5372,6 +5461,37 @@ function convertirTableauxMarkdownEnHtml(contenuHTML) {
   $('td').each((_, td) => {
     const $td = $(td);
     if ($td.find('table').length) return;
+
+    // Chemin PRINCIPAL (bug réel confirmé, lot 3, sur les 3 docx fournis par
+    // l'enseignant) : chaque ligne "| a | b |" du Markdown est en réalité un
+    // <p> FRÈRE distinct dans la cellule -- jamais un bloc de texte unique
+    // séparé par de vrais "\n". $td.text() ne réinsère JAMAIS l'espace/saut
+    // de ligne qu'un navigateur afficherait entre deux <p> frères (même
+    // défaut que celui corrigé dans texteHorsTableauMajuscule, chantier F.2
+    // du lot 2) : la 1re version de cette fonction (ci-dessous, conservée en
+    // repli) ne pouvait donc JAMAIS matcher ce cas réel -- jamais déployée
+    // ainsi, corrigée avant tout usage réel grâce à ces 3 docx.
+    const paragraphes = $td.children('p').toArray();
+    let debut = -1;
+    for (let i = 0; i < paragraphes.length - 1; i++) {
+      if (RE_LIGNE_TABLEAU_MARKDOWN.test($(paragraphes[i]).text()) && RE_LIGNE_SEPARATION_MARKDOWN.test($(paragraphes[i + 1]).text())) {
+        debut = i;
+        break;
+      }
+    }
+    if (debut !== -1) {
+      let fin = debut + 1;
+      while (fin + 1 < paragraphes.length && RE_LIGNE_TABLEAU_MARKDOWN.test($(paragraphes[fin + 1]).text())) fin++;
+      const lignesMarkdown = paragraphes.slice(debut, fin + 1).map((p) => $(p).text().trim());
+      const tableHtml = construireTableHtmlDepuisLignes(lignesMarkdown);
+      $(paragraphes[debut]).before(tableHtml);
+      for (let i = debut; i <= fin; i++) $(paragraphes[i]).remove();
+      modifie = true;
+      return;
+    }
+
+    // Repli (cas plus rare : tout le Markdown dans un seul bloc de texte
+    // séparé par de vrais retours à la ligne, ex. texte collé sans <p>).
     const texteBrut = $td.text();
     if (!RE_BLOC_TABLEAU_MARKDOWN.test(texteBrut)) return;
     const resultat = construireTableHtmlDepuisMarkdown(texteBrut);
@@ -5382,6 +5502,80 @@ function convertirTableauxMarkdownEnHtml(contenuHTML) {
     modifie = true;
   });
 
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
+// Chantier C (lot 3, bug réel confirmé sur S2 : le Plan du cours annonce
+// "1) Définition et caractéristiques générales / 2) Principaux sous-genres"
+// sous chaque partie I/II/III, alors que les Traces écrites de CETTE MÊME
+// ligne détaillent en réalité I-1) à I-6), II-1) à II-4), III-1)/III-2) --
+// numérotation et granularité totalement différentes). La consigne de
+// prompt seule (chantier A du lot 2, "la numérotation du Plan doit reprendre
+// EXACTEMENT celle des Traces") n'a jamais suffi à empêcher le modèle
+// d'annoncer un plan générique avant de rédiger un contenu plus détaillé.
+// Corrige à la source : une fois les Traces écrites de la ligne DÉVELOPPEMENT
+// définitivement structurées en paragraphes (restructurerTexteLibreEnParagraphes,
+// convertirTableauxMarkdownEnHtml -- DOIT donc s'exécuter APRÈS les deux),
+// reconstruit le Plan du cours en reprenant MOT POUR MOT les seuls titres de
+// partie qu'on y trouve (repérés par le même motif que celui qui marque un
+// titre en DOCX, PATTERN_TITRE_SECTION_DOCX -- jamais le seul attribut
+// data-docx-titre, que le modèle peut ne jamais poser lui-même s'il écrit
+// déjà des <p> propres sans passer par le chemin <br> qui pose cet attribut).
+// No-op si moins de 2 titres sont détectés (jamais remplacer un Plan par un
+// contenu appauvri faute de repères suffisants).
+function construirePlanDepuisTraces(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+
+  $('tr').each((_, tr) => {
+    const $tds = $(tr).children('td');
+    if ($tds.length < 5) return;
+    const premiereColonne = $tds.eq(0).text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    const $planCell = $tds.eq(1);
+    const $tracesCell = $tds.eq(4);
+    const titres = $tracesCell.children('p')
+      .filter((_, p) => PATTERN_TITRE_SECTION_DOCX.test($(p).text().trim()))
+      .map((_, p) => $(p).text().trim())
+      .get();
+    if (titres.length < 2) return;
+    const nouveauHtml = titres.map((t) => `<p data-docx-titre="1" style="margin:10px 0 4px 0;font-weight:bold">${echapperHtml(t)}</p>`).join('');
+    $planCell.html(nouveauHtml);
+    modifie = true;
+  });
+
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
+// Chantier F (lot 3, bug réel confirmé : S1 utilise 5/45/10 mn, S2 utilise
+// 5/50/5 mn pour les 3 mêmes phases) : durées non fiables si laissées au
+// choix du modèle d'une séance à l'autre. Forcées déterministiquement à
+// 5/45/10 -- valeur déjà correcte sur S1, prise comme référence -- quelle que
+// soit la durée que le modèle a écrite, dans la cellule "Moments didactiques
+// / Durée" de chaque ligne du tableau Déroulement.
+const DUREES_PHASES_CONSTANTES = [
+  [/PR[ÉE]SENTATION/i, '5'],
+  [/D[ÉE]VELOPPEMENT/i, '45'],
+  [/[ÉE]VALUATION/i, '10']
+];
+
+function forcerDureesConstantes(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  $('tr').each((_, tr) => {
+    const $premiere = $(tr).children('td').first();
+    if (!$premiere.length) return;
+    const texte = $premiere.text();
+    const phase = DUREES_PHASES_CONSTANTES.find(([re]) => re.test(texte));
+    if (!phase) return;
+    const htmlActuel = $premiere.html();
+    const nouveauHtml = htmlActuel.replace(/\(\s*\d+\s*mn\s*\)/i, `(${phase[1]} mn)`);
+    if (nouveauHtml !== htmlActuel) { $premiere.html(nouveauHtml); modifie = true; }
+  });
   if (!modifie) return contenuHTML;
   return $.html($('body').length ? $('body') : $.root());
 }
@@ -5451,6 +5645,38 @@ function corrigerThemeConfonduAvecAuteur(contenuHTML, auteur) {
     }
   });
   return avertissement;
+}
+
+// Chantier I.2 (lot 3, bug réel confirmé sur S3 : la Situation d'apprentissage
+// a révélé explicitement le thème -- "se révolte contre les traditions
+// contraignantes" -- et un équivalent de l'axe d'étude -- "réfléchir sur les
+// valeurs de liberté et de dignité humaine" --, malgré l'interdiction déjà
+// posée dans le prompt, chantier J.2 du lot 2) : contrôle déterministe en
+// complément -- jamais une correction automatique (reformuler sans contenu
+// révélateur demanderait de réinventer la situation, hors de portée d'un
+// simple filet) : un avertissement explicite si la Situation d'apprentissage
+// contient un extrait substantiel du thème, de l'axe ou des personnages déjà
+// connus, pour que l'enseignant vérifie avant usage.
+function verifierSituationRevelantContenuOeuvre(contenuHTML, { theme, axe, personnages }) {
+  if (!contenuHTML) return null;
+  const $ = cheerio.load(contenuHTML);
+  const $situation = $('p').filter((_, p) => /^Situation d'apprentissage\s*:/i.test($(p).text().trim())).first();
+  if (!$situation.length) return null;
+  const texteSituationNorm = normaliserTexte($situation.text());
+  const candidats = [
+    ['le thème', theme],
+    ['l\'axe d\'étude', axe],
+    ['les personnages', personnages]
+  ];
+  for (const [libelle, valeur] of candidats) {
+    const valeurNorm = normaliserTexte(valeur);
+    // Seuil de longueur : évite un faux positif sur un mot isolé trop court
+    // (ex. "roman") qui pourrait coïncider par hasard.
+    if (valeurNorm && valeurNorm.length > 12 && texteSituationNorm.includes(valeurNorm)) {
+      return `La Situation d'apprentissage semble révéler ${libelle} de l'œuvre déjà connu(e) par ailleurs -- elle doit rester générique (vérifiez et reformulez avant utilisation).`;
+    }
+  }
+  return null;
 }
 
 // Filet déterministe UNIVERSEL (12/09) : la cellule Traces écrites de la
@@ -5789,8 +6015,21 @@ function leconNecessiteTexteSupport({ discipline, lecon, theme, activite }) {
   return motsClefs.some((m) => cible.includes(m));
 }
 
+// Chantier D (lot 3, bug réel) : .text() seul ne réinsère JAMAIS l'espace
+// qu'un navigateur afficherait entre deux éléments de bloc frères (même
+// défaut déjà rencontré et corrigé isolément dans texteHorsTableauMajuscule
+// et convertirTableauxMarkdownEnHtml) -- une cellule Traces écrites réelle
+// où chaque ligne est son propre <p> (confirmé sur les 3 docx fournis par
+// l'enseignant, cf. extraction directe du XML) donnait donc un texte
+// "CONTENU RÉEL DES SÉANCES PRÉCÉDENTES" illisible, mots collés les uns aux
+// autres -- un contexte dégradé que le modèle suit alors moins fidèlement,
+// ce qui expliquerait au moins en partie qu'il ait écrit "nouvelle" au lieu
+// de reprendre tels quels les 5 genres réellement couverts en S1 (roman,
+// conte, mémoires, autobiographie, journal intime). Corrigé une fois pour
+// toutes ici (<br> ET tout élément de bloc frère), plutôt qu'au cas par cas.
 function texteCelluleAvecEspaces($, cell) {
   $(cell).find('br').replaceWith(' ');
+  $(cell).find('p, div, li, tr').each((_, el) => { $(el).append(' '); });
   return $(cell).text().replace(/\s+/g, ' ').trim();
 }
 
@@ -6704,9 +6943,11 @@ CONSIGNE ABSOLUE -- VERBES TAXONOMIQUES (approche APC, taxonomie DPFC à 4 nivea
 ${listeParNiveau}
 
 RÈGLES :
-1) Tableau Habiletés : UN SEUL verbe par niveau, dans l'ordre N1 -> N2 -> N3 -> N4 (jamais un autre ordre, jamais deux verbes du même niveau, jamais un niveau absent si tu as une consigne de ce niveau ailleurs dans la fiche).
+1) Tableau Habiletés : UN SEUL verbe par niveau, dans l'ordre N1 -> N2 -> N3 -> N4 (jamais un autre ordre, jamais deux verbes du même niveau, jamais un niveau absent si tu as une consigne de ce niveau ailleurs dans la fiche). CHAQUE cellule Habiletés contient le verbe SUIVI d'un complément précis (ex. "Identifier les genres en prose et leurs caractéristiques distinctives") -- JAMAIS le verbe seul isolé sans complément (ex. jamais une cellule réduite à "Identifier").
 2) Tout verbe utilisé dans une consigne du Développement doit aussi figurer dans le tableau Habiletés -- jamais un verbe qui n'y apparaît pas (ex. ne jamais utiliser "Synthétisez" dans une consigne si "synthétiser" n'est pas dans la liste ci-dessus ET dans Habiletés). RÉCIPROQUEMENT (chantier H.1, lot 2) : chaque verbe que tu places dans le tableau Habiletés doit être concrètement exercé par AU MOINS une consigne du Développement ou de l'Évaluation -- jamais un verbe du tableau qui reste sans consigne correspondante nulle part dans la fiche.
-3) CHAQUE consigne que tu rédiges pour l'enseignant, SANS AUCUNE EXCEPTION (toutes les consignes du Développement ET les 3 de l'Évaluation), doit COMMENCER par un verbe de cette liste, à l'impératif ou à l'infinitif selon le format déjà utilisé dans le reste de la fiche -- JAMAIS une question introduite par "Qu'est-ce que...", "Comment...", "Pourquoi..." ou toute autre tournure interrogative à la place d'une consigne à l'impératif/infinitif (reformule TOUJOURS en consigne d'action : jamais "Qu'est-ce qu'un roman ?" mais "Identifiez un roman à partir de ses caractéristiques.").
+3) CHAQUE consigne que tu rédiges pour l'enseignant, SANS AUCUNE EXCEPTION (toutes les consignes du Développement ET les 3 de l'Évaluation), doit COMMENCER par un verbe de cette liste, à l'IMPÉRATIF, 2e PERSONNE DU PLURIEL (ex. "Identifiez", "Analysez", "Citez" -- jamais l'infinitif "Identifier", jamais le singulier "Identifie"). Le verbe doit rester OBSERVABLE : ce que l'élève fait concrètement (identifier, citer, relever, classer...), jamais une question ni une formulation qui décrit l'action de l'ENSEIGNANT ("Demande...", "Relève la notion centrale...", "Pose la question...").
+TROIS EXEMPLES CONFORMES : "Identifiez le genre de chaque extrait proposé." / "Citez deux caractéristiques du roman policier." / "Distinguez le conte de fées du conte populaire à partir de leurs éléments magiques."
+TROIS EXEMPLES INTERDITS, à ne jamais reproduire sous cette forme : "Qu'est-ce qui différencie un roman des mémoires ?" (question, pas une consigne d'action) ; "Relève la notion centrale : « Pourquoi est-il important de connaître les genres littéraires ? »" (verbe à la 3e personne du singulier décrivant l'enseignant, ET question imbriquée) ; "Explique comment le sous-genre aide le lecteur..." (verbe au singulier "Explique" au lieu du pluriel "Expliquez").
 4) ÉVALUATION -- exactement 3 consignes, dans cet ordre de complexité croissante : la 1re consigne utilise un verbe de niveau N1 ou N2, la 2e un verbe de niveau N3, la 3e un verbe de niveau N4 (traiter une situation). Ne teste JAMAIS une notion qui n'a pas été réellement développée dans cette séance précise, même si elle semble proche.
 5) (Chantier H.4, lot 2) Une consigne qui demande de comparer, distinguer ou différencier plusieurs éléments vient TOUJOURS APRÈS que ces éléments ont été présentés/définis individuellement plus haut dans le Développement -- jamais une comparaison portant sur une notion pas encore introduite à ce stade de la fiche.`;
 }
@@ -6721,23 +6962,34 @@ RÈGLES :
 // consigneMiseEnForme/chantier A) dans la colonne Activités de l'enseignant
 // du Développement -- jamais dans les autres colonnes (Activités des
 // élèves, Traces écrites), qui ne sont pas des consignes à l'enseignant.
-// Radical du verbe (1er mot, privé de sa terminaison -er/-ir) -- la consigne
-// 3) autorise explicitement l'impératif OU l'infinitif ("Identifiez"/
-// "Identifier"), jamais un seul des deux : comparer le texte à la forme
-// infinitive seule (ex. "identifier") aurait laissé passer une imposante
-// proportion de FAUX positifs sur des consignes pourtant parfaitement
-// conformes à l'impératif ("Identifiez..."), confirmé par ce test même
-// (chantier K) avant cette correction. "traiter une situation" -> radical
-// "trait", qui matche aussi bien "Traitez la situation..." que "Traiter...".
-function radicalVerbeTaxonomique(verbeComplet) {
-  return verbeComplet.split(/\s+/)[0].replace(/(?:er|ir)$/i, '');
+// Chantier E (lot 3) : règle resserrée par rapport au lot 2 -- l'impératif OU
+// l'infinitif étaient acceptés ("Identifiez"/"Identifier"), ce lot exige
+// EXCLUSIVEMENT l'impératif 2e personne du pluriel ("Identifiez", jamais
+// "Identifier" ni "Identifie"). Un simple radical-préfixe (ex. "identifi")
+// laissait passer "Explique..." (singulier) comme s'il matchait "expliquer"
+// -- bug réel confirmé par ce test même, "Explique comment le sous-genre
+// aide le lecteur" (extrait tel quel de S2) ne déclenchait aucune non-
+// conformité alors que la règle l'exige au pluriel "Expliquez". Conjugue
+// donc chaque verbe à l'impératif pluriel explicitement (2e groupe -ir -> -
+// issez, ex. "définir" -> "définissez" ; 1er groupe -er -> -ez) plutôt que de
+// comparer un simple préfixe.
+function imperatifPlurielVerbeTaxonomique(verbeComplet) {
+  // Seul le 1er mot (le verbe lui-même) sert à reconnaître un début de
+  // consigne conforme -- "traiter une situation" -> "traitez" seul, jamais
+  // la phrase entière "traitez une situation" (la consigne réelle dit
+  // généralement "Traitez LA situation suivante...", pas "une" : comparer la
+  // phrase entière aurait raté ce cas pourtant conforme).
+  const verbe = verbeComplet.split(/\s+/)[0];
+  if (/ir$/i.test(verbe)) return verbe.slice(0, -2) + 'issez';
+  if (/er$/i.test(verbe)) return verbe.slice(0, -2) + 'ez';
+  return verbe;
 }
 
 function calculerTauxConsignesSansVerbeTaxonomique(contenuHTML) {
   if (!contenuHTML) return { taux: 0, total: 0, nonConformes: [] };
   const $ = cheerio.load(contenuHTML);
-  const radicaux = TOUS_VERBES_TAXONOMIQUES.map(radicalVerbeTaxonomique).map((r) => r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const motifDebutVerbe = new RegExp(`^(?:${radicaux.join('|')})`, 'i');
+  const formes = TOUS_VERBES_TAXONOMIQUES.map(imperatifPlurielVerbeTaxonomique).map((r) => r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const motifDebutVerbe = new RegExp(`^(?:${formes.join('|')})\\b`, 'i');
   const consignes = [];
   $('tr').each((_, tr) => {
     const $tr = $(tr);
@@ -6756,6 +7008,61 @@ function calculerTauxConsignesSansVerbeTaxonomique(contenuHTML) {
     total: consignes.length,
     nonConformes
   };
+}
+
+// Chantier E (lot 3) : régénération automatique, UNE SEULE fois, journalisée,
+// quand plus de 30% des consignes du Développement ne commencent pas par un
+// verbe de la taxonomie (cf. calculerTauxConsignesSansVerbeTaxonomique).
+// Choix délibéré : régénère UNIQUEMENT les consignes fautives (un petit appel
+// ciblé, non street streaming), jamais toute la fiche -- une régénération de
+// la fiche ENTIÈRE aurait demandé soit de ne jamais diffuser au navigateur la
+// 1re tentative tant que la conformité n'est pas vérifiée (fiche entière
+// générée "à l'aveugle" avant tout affichage, expérience dégradée), soit de
+// remplacer après coup un contenu déjà vu par l'enseignant pendant le direct
+// (confusion). Cibler les seules consignes fautives règle le problème exact
+// signalé sans aucun de ces deux inconvénients, pour un coût (tokens, latence)
+// bien moindre qu'une 2e génération complète. Remplace le texte de chaque
+// consigne fautive, dans son <p> d'origine (conserve le tiret de liste "- "
+// s'il était présent), par sa reformulation -- jamais le reste de la fiche.
+async function regenererConsignesNonConformes(contenuHTML, nonConformes) {
+  const $ = cheerio.load(contenuHTML);
+  const listeVerbes = TOUS_VERBES_TAXONOMIQUES.join(', ');
+  const listeConsignes = nonConformes.map((c, i) => `${i + 1}. "${c}"`).join('\n');
+  const reponse = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: `Voici des consignes pédagogiques destinées à des élèves qui ne respectent pas la règle suivante : chaque consigne doit COMMENCER par un verbe à l'impératif, 2e personne du pluriel, choisi EXCLUSIVEMENT dans cette liste : ${listeVerbes}. Reformule CHACUNE des consignes ci-dessous pour qu'elle commence par un de ces verbes à l'impératif pluriel, SANS EN CHANGER LE SENS ni le contenu (même notion, mêmes éléments demandés) -- seule la formulation change. Jamais une question, jamais un verbe à une autre personne.
+
+CONSIGNES À REFORMULER :
+${listeConsignes}
+
+Réponds UNIQUEMENT avec un tableau JSON, sans aucun texte avant ni après, au format exact :
+[{"original": "texte exact de la consigne originale", "corrigee": "texte reformulé"}]`
+    }]
+  });
+  const texteBrut = (reponse.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+  const correspondance = texteBrut.match(/\[[\s\S]*\]/);
+  if (!correspondance) return { contenuHTML, nbCorrigees: 0 };
+  let paires;
+  try {
+    paires = JSON.parse(correspondance[0]);
+  } catch (e) {
+    return { contenuHTML, nbCorrigees: 0 };
+  }
+  let nbCorrigees = 0;
+  $('td p').each((_, p) => {
+    const $p = $(p);
+    const texteActuel = $p.text().trim();
+    const avecTiret = /^-\s*/.test(texteActuel);
+    const texteSansTiret = texteActuel.replace(/^-\s*/, '');
+    const paire = paires.find((x) => x && typeof x.original === 'string' && x.original.trim() === texteSansTiret);
+    if (!paire || typeof paire.corrigee !== 'string' || !paire.corrigee.trim()) return;
+    $p.text((avecTiret ? '- ' : '') + paire.corrigee.trim());
+    nbCorrigees++;
+  });
+  return { contenuHTML: $.html($('body').length ? $('body') : $.root()), nbCorrigees };
 }
 
 // Libellé du champ Leçon (entête), calibré sur la fiche de référence
@@ -7014,7 +7321,7 @@ function construireConsigneSituationApprentissageSeance1Lycee(situationFournie, 
   if (situation) {
     return `SITUATION D'APPRENTISSAGE (à placer une seule fois, en une courte introduction avant le tableau Habiletés/Contenus de cette séance) : reproduis EXACTEMENT et INTÉGRALEMENT, sans y ajouter ni en retirer aucun détail, sans la reformuler, le texte fourni par l'enseignant ci-dessous : "${situation}"`;
   }
-  return `SITUATION D'APPRENTISSAGE (à placer une seule fois, en une courte introduction avant le tableau Habiletés/Contenus de cette séance) : l'enseignant n'a fourni aucune situation d'apprentissage -- propose-en une, ancrée dans le quotidien ivoirien et conforme aux pratiques du système éducatif ivoirien (approche par compétences), mais UNIQUEMENT à partir d'éléments réels déjà fournis par l'enseignant ci-dessus (le cas échéant) ou de tes connaissances réelles et vérifiées sur l'œuvre « ${(titre || '').toString().trim() || '(titre non précisé)'} »${(auteur || '').toString().trim() ? ` de ${(auteur || '').toString().trim()}` : ''} -- si aucune information réelle n'est disponible avec certitude, reste général (ne mentionne aucun nom de personnage ni aucun fait précis que tu ne connais pas avec certitude) plutôt que d'inventer un scénario. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les séances suivantes de cette même séquence (notamment l'Introduction) -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance.`;
+  return `SITUATION D'APPRENTISSAGE (à placer une seule fois, en une courte introduction avant le tableau Habiletés/Contenus de cette séance) : l'enseignant n'a fourni aucune situation d'apprentissage -- propose-en une, ancrée dans le quotidien ivoirien et conforme aux pratiques du système éducatif ivoirien (approche par compétences), mais UNIQUEMENT à partir d'éléments réels déjà fournis par l'enseignant ci-dessus (le cas échéant) ou de tes connaissances réelles et vérifiées sur l'œuvre « ${(titre || '').toString().trim() || '(titre non précisé)'} »${(auteur || '').toString().trim() ? ` de ${(auteur || '').toString().trim()}` : ''} -- si aucune information réelle n'est disponible avec certitude, reste général (ne mentionne aucun nom de personnage ni aucun fait précis que tu ne connais pas avec certitude) plutôt que d'inventer un scénario. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les séances suivantes de cette même séquence (notamment l'Introduction) -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance. CONSIGNE ABSOLUE (chantier H, lot 3) : n'invente JAMAIS le nom d'un établissement scolaire précis (interdits : "lycée Jean-Jaurès", ou tout autre nom propre d'établissement que tu ne connais pas réellement et avec certitude comme étant celui de cet enseignant) -- désigne l'établissement de façon générique ("au lycée", "dans leur établissement", "au lycée d'Abidjan" si une ville est déjà connue), jamais par un nom propre inventé.`;
 }
 
 // Culture littéraire, RÉÉCRITURE du 21/09 (remplace le bypass ci-dessus,
@@ -7117,7 +7424,13 @@ CONSIGNE ABSOLUE -- SUPPORT MATÉRIEL DE L'ÉVALUATION (chantier I.1, lot 2) : s
 
 CONSIGNE ABSOLUE -- COHÉRENCE DE LA 3e CONSIGNE (N4, traiter une situation, chantier I.2 du lot 2) : cette consigne doit avoir UNE SEULE réponse défendable compte tenu des définitions données plus haut dans CETTE fiche (ex. si tu as défini les mémoires comme un récit de la vie réelle de leur auteur, la situation que tu inventes ne doit jamais raconter la vie d'une AUTRE personne que le narrateur -- sinon elle ne peut être classée "mémoires" selon ta propre définition, et la consigne n'a plus de réponse correcte unique). Elle ne doit citer AUCUN genre, sous-genre ou catégorie qui n'a pas été explicitement défini dans cette même séance (ex. jamais "roman autobiographique" si seuls "mémoires" et "autobiographie" ont été définis).
 
-CONSIGNE -- COHÉRENCE DES NOMS ET LIEUX (chantier I.4, lot 2) : tout nom propre (personnage, ville, lieu) que tu inventes pour un exemple ou une situation reste IDENTIQUE du début à la fin de cette même consigne et de cette même fiche -- ne change jamais un lieu ou un nom en cours de route (ex. un personnage qui commence son récit à Yamoussoukro ne doit pas se retrouver à Bouaké sans qu'un déplacement explicite ne soit mentionné).`;
+CONSIGNE -- COHÉRENCE DES NOMS ET LIEUX (chantier I.4, lot 2) : tout nom propre (personnage, ville, lieu) que tu inventes pour un exemple ou une situation reste IDENTIQUE du début à la fin de cette même consigne et de cette même fiche -- ne change jamais un lieu ou un nom en cours de route (ex. un personnage qui commence son récit à Yamoussoukro ne doit pas se retrouver à Bouaké sans qu'un déplacement explicite ne soit mentionné).
+
+CONSIGNE ABSOLUE -- UNE SEULE FORMULATION PAR CONSIGNE (chantier F, lot 3, bug réel confirmé : la colonne Activités de l'enseignant paraphrase différemment la même consigne déjà écrite dans les Traces écrites, ex. "Vous disposez de trois extraits. Identifiez le genre..." contre "Lisez les trois extraits suivants et indiquez, pour chacun, le genre..." pour la MÊME consigne 1) : rédige le texte de chaque consigne UNE SEULE FOIS, dans les Traces écrites, avec son corrigé juste après. La colonne Activités de l'enseignant ne reformule JAMAIS cette consigne avec d'autres mots -- elle se contente de décrire l'action de distribution/lecture ("Distribue la feuille d'évaluation.", "Lit les consignes à voix haute.", "Circule et observe le travail des élèves."), jamais le contenu de la consigne elle-même. La colonne Activités des élèves ne contient QUE des actions observables des élèves ("Lisent les consignes et les extraits.", "Répondent individuellement.", "Rendent leur copie.") -- JAMAIS la réponse attendue ni le nom du genre/sous-genre identifié : cela appartient exclusivement au corrigé des Traces écrites, jamais révélé ailleurs dans la fiche.
+
+CONSIGNE ABSOLUE -- UN SEUL NIVEAU TAXONOMIQUE PAR CONSIGNE (chantier F, lot 3) : la 1re consigne (C1) teste un niveau N1 ou N2 UNIQUEMENT -- jamais de demande de justification dans son énoncé (la justification est une opération de niveau N3, réservée à C2 : jamais "en justifiant votre réponse" dans la consigne C1). La 2e consigne (C2) teste le niveau N3. La 3e consigne (C3) teste le niveau N4 (traiter une situation) : cette situation est FERMÉE (une seule réponse défendable, cf. consigne ci-dessus sur la cohérence de la 3e consigne) -- JAMAIS une consigne d'écriture libre/créative (interdits : "rédigez un résumé", "rédigez une histoire", "imaginez un récit" -- toute consigne qui laisse l'élève inventer librement un contenu, même court, n'est jamais une situation fermée à réponse unique).
+
+CONSIGNE ABSOLUE -- MENTION DES EXTRAITS (chantier F, lot 3) : juste avant les extraits que tu rédiges toi-même dans les Traces écrites de l'Évaluation, ajoute la mention exacte "Extraits composés pour la séance." -- pour que l'enseignant sache qu'il s'agit d'exemples que tu as composés, jamais présentés comme des extraits d'œuvres réelles existantes.`;
 
   // Garde-fou anti-duplication (04/10, retour enseignant sur un tableau
   // comparatif des sous-genres écrit une 1ère fois dans le Développement
@@ -7143,6 +7456,24 @@ CONSIGNE ABSOLUE -- UN SEUL TABLEAU, UNE SEULE FOIS : si tu inclus un tableau (e
   const consigneMiseEnForme = `
 
 CONSIGNE DE MISE EN FORME (Traces écrites, Activités de l'enseignant/des élèves) : sépare CHAQUE item "- ..." et CHAQUE titre de partie (I-, II-, 1), 2)...) par un <br> explicite -- jamais tout le texte d'une cellule collé en un seul bloc sans aucun <br>. La numérotation/les intitulés utilisés dans la colonne Traces écrites du Développement doivent reprendre EXACTEMENT les mêmes numéros et titres que ceux de la colonne Stratégies pédagogiques/Plan du cours de CETTE MÊME ligne -- jamais une numérotation différente ou inventée.`;
+
+  // Chantier G (lot 3, bugs réels confirmés sur S2) :
+  // - "LEÇON 1 : ŒUVRE NARRATIVE"/"SÉANCE 2 : ..." écrits tout en majuscules
+  //   dans la colonne Activités de l'enseignant (PRÉSENTATION), alors que le
+  //   même intitulé est en casse normale dans l'entête ;
+  // - "[Procédé interrogatif, dialogue dirigé]" laissé entre crochets
+  //   littéraux dans le Plan du cours -- résidu visible d'un gabarit/exemple
+  //   de prompt recopié tel quel au lieu d'être remplacé par du vrai contenu ;
+  // - un tableau comparatif qui applique "Dénouement" (notion propre à une
+  //   intrigue construite) aux mémoires, qui n'en ont pas (récit d'une vie
+  //   réellement vécue, pas une intrigue inventée avec un dénouement).
+  const consigneHarmonisationFormeG = `
+
+CONSIGNE -- CASSE DU TITRE DE LA LEÇON/SÉANCE : quand tu annonces le titre officiel de la leçon et de la séance dans la colonne Activités de l'enseignant (PRÉSENTATION), reproduis-le EXACTEMENT dans la même casse mixte que celle de l'entête (ex. "Leçon 1 : Œuvre narrative", "Séance 2 : ...") -- JAMAIS tout en majuscules ("LEÇON 1 : ŒUVRE NARRATIVE").
+
+CONSIGNE ABSOLUE -- AUCUN CROCHET LITTÉRAL DANS TA RÉPONSE : n'écris jamais de texte entre crochets comme s'il s'agissait d'un espace réservé non rempli (interdits : "[Procédé interrogatif, ...]", "[nom de l'auteur]", ou toute autre mention entre crochets) -- remplace TOUJOURS ce type de repère par du contenu réel et rédigé (ex. "Procédé interrogatif" sans les crochets, ou directement la vraie stratégie pédagogique employée).
+
+CONSIGNE -- COLONNE "DÉNOUEMENT" DU TABLEAU COMPARATIF : si ton tableau comparatif inclut une colonne "Dénouement" et que tu y décris des sous-genres des MÉMOIRES ou d'un autre genre non fictionnel, n'y écris RIEN qui présuppose une intrigue construite (les mémoires relatent une vie réellement vécue, pas une intrigue avec un dénouement) -- laisse la cellule vide pour ces lignes, ou remplace la notion par quelque chose de réellement pertinent pour un récit factuel (ex. "aboutissement" au sens de ce que le témoignage cherche à transmettre), jamais le mot "Dénouement" appliqué tel quel à un genre non fictionnel.`;
 
   // Chantier C.2 (05/10, retour enseignant sur S2 : "Tableau comparatif"
   // listé en Supports didactiques alors qu'aucun tableau de ce nom
@@ -7181,11 +7512,26 @@ CONSIGNE ABSOLUE -- EXACTITUDE DES DÉFINITIONS ET DES VALEURS DE TABLEAU : n'af
 
 CONSIGNE -- ORTHOGRAPHE DE LA COLONNE ACTIVITÉS DES ÉLÈVES (chantier J.3, lot 2) : relis chaque phrase de cette colonne avant de répondre -- accords sujet/verbe et adjectif/nom corrects (ex. "réalité sociale", jamais "réalité social"), orthographe correcte de chaque mot.`;
 
+  // Chantier H (lot 3, bugs réels confirmés sur S1/S2) : durcit la règle
+  // Bibliographie déjà existante dans le squelette partagé (qui tolère un
+  // intitulé générique de repli, ex. "Manuel scolaire de la classe") -- pour
+  // CETTE séance précise, cette tolérance a produit des références
+  // inventées, plausibles mais non vérifiées (ex. "Mitterand, Henri. La
+  // Littérature française du Moyen Âge à nos jours.") puisqu'aucune liste
+  // statique vérifiée n'existe dans l'application pour cette leçon. Impose
+  // donc ici une règle plus stricte que celle, générale, du squelette
+  // partagé : absence totale plutôt qu'un intitulé générique de repli.
+  const consigneAntiFabricationH = `
+
+CONSIGNE ABSOLUE -- BIBLIOGRAPHIE (chantier H, lot 3, remplace pour cette séance la tolérance générale du squelette partagé) : n'inclus la colonne "Bibliographie" QUE si l'enseignant a lui-même fourni des références, OU si tu connais avec certitude absolue au moins une référence précise et réelle (auteur, titre, année) directement liée à cette notion. Dans tous les autres cas, laisse cette colonne VIDE -- jamais un intitulé générique de ton invention ("Manuel scolaire de littérature générale", "Études critiques sur les genres littéraires"...) qui donnerait l'illusion d'une vraie source alors qu'aucune n'est vérifiée.
+
+CONSIGNE ABSOLUE -- AUCUN "EXEMPLE :" INVENTÉ : dans les Traces écrites, n'ajoute jamais une ligne "Exemple : [mini-scénario inventé]" pour illustrer une définition ou un sous-genre (ex. jamais "Exemple : Un jeune explorateur abidjanais qui traverse la forêt..."). Les définitions et caractéristiques que tu rédiges doivent se suffire à elles-mêmes, sans scénario d'illustration inventé -- si un exemple est réellement nécessaire, appuie-toi uniquement sur une œuvre réelle et vérifiée que tu connais avec certitude, jamais sur une anecdote de ton invention.`;
+
   return `
 
 INSTRUCTIONS SPÉCIFIQUES -- CULTURE LITTÉRAIRE (exposé magistral de l'enseignant sur le contexte historique/littéraire/biographique de l'œuvre) : contrairement à l'Introduction et à la Conclusion, cette séance CONSERVE INTÉGRALEMENT la structure générique du tableau Habiletés/Contenus et du déroulement Présentation/Développement/Évaluation -- ne la remplace par aucune autre structure, aucune section I/II/III.
 
-${consigneContenu}${consigneSituation}${garantiEvaluation}${garantiAntiDuplication}${consigneVerbesAPC}${consigneMiseEnForme}${consigneSupportsDidactiques}${consigneRegistreEvaluation}${consigneFactuelEtRegistreOI}`;
+${consigneContenu}${consigneSituation}${garantiEvaluation}${garantiAntiDuplication}${consigneVerbesAPC}${consigneMiseEnForme}${consigneHarmonisationFormeG}${consigneSupportsDidactiques}${consigneRegistreEvaluation}${consigneFactuelEtRegistreOI}${consigneAntiFabricationH}`;
 }
 
 // Lecture méthodique, SECOND CYCLE (23/09, corrigé le 25/09) : contrairement
@@ -7352,9 +7698,16 @@ RAPPEL FINAL : ta réponse ne contient QUE les parties I à IV en texte libre --
   const personnages = (personnagesOeuvre || '').toString().trim();
   const lieux = (lieuxOeuvre || '').toString().trim();
 
+  // Chantier I (lot 3, bug réel confirmé sur S3 : "1- Biographie" reste seul
+  // sous "I-" dès que la Bibliographie est omise -- cf. chantier D.7 --,
+  // numéro orphelin sans "2-" en vis-à-vis, alors que II/III n'utilisent
+  // eux-mêmes AUCUNE numérotation de sous-point. Retire la numérotation
+  // 1-/2-/3- de Biographie/Bibliographie/Personnages/Lieux : un simple
+  // intitulé en gras, cohérent avec le style déjà utilisé par II et III, qui
+  // ne peut plus jamais se retrouver seul avec un numéro sans pendant.
   const consigneBiographie = biographie
-    ? `1- Biographie : t'appuyer EXACTEMENT sur ces informations (fournies par l'enseignant ou vérifiées par recherche documentaire), sans y ajouter ni en retirer aucun détail : "${biographie}"`
-    : `1- Biographie : bref, JAMAIS un paragraphe développé -- 2 à 3 phrases maximum, uniquement l'essentiel : nationalité/identité, date de naissance (et de décès si l'auteur n'est plus vivant), profession, activité principale (distinctions/prix notables). À partir de tes connaissances réelles sur cet auteur.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE}`;
+    ? `Biographie : t'appuyer EXACTEMENT sur ces informations (fournies par l'enseignant ou vérifiées par recherche documentaire), sans y ajouter ni en retirer aucun détail : "${biographie}"`
+    : `Biographie : bref, JAMAIS un paragraphe développé -- 2 à 3 phrases maximum, uniquement l'essentiel : nationalité/identité, date de naissance (et de décès si l'auteur n'est plus vivant), profession, activité principale (distinctions/prix notables). À partir de tes connaissances réelles sur cet auteur.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE}`;
   // Chantier D.3 (05/10, règle du 04/09, signalement enseignant) : "Thème"
   // et "Les personnages" sont des blocs FOURNIS PAR L'ENSEIGNANT -- champ
   // vide = bloc ABSENT de la réponse, jamais un remplissage générique
@@ -7365,10 +7718,10 @@ RAPPEL FINAL : ta réponse ne contient QUE les parties I à IV en texte libre --
     ? `Thème : t'appuyer EXACTEMENT sur ce thème fourni par l'enseignant, sans y ajouter ni en retirer aucun détail : "${theme}"`
     : `N'ÉCRIS PAS de ligne "Thème" dans ta réponse : l'enseignant n'a fourni aucun thème précis pour cette séance -- ce champ est un bloc fourni par l'enseignant (jamais un remplissage générique de ta part, même prudent) : omets ENTIÈREMENT cette ligne plutôt que de rester vague ou d'inventer un thème.`;
   const consignePersonnages = personnages
-    ? `2- Les personnages : t'appuyer EXACTEMENT sur cette liste fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${personnages}"`
-    : `N'ÉCRIS PAS de section "2- Les personnages" dans ta réponse : l'enseignant n'a fourni aucune liste de personnages -- ce bloc est fourni par l'enseignant (jamais un remplissage générique de ta part, jamais un nom inventé) : omets ENTIÈREMENT cette section plutôt que de rester vague.`;
+    ? `Les personnages : t'appuyer EXACTEMENT sur cette liste fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${personnages}"`
+    : `N'ÉCRIS PAS de section "Les personnages" dans ta réponse : l'enseignant n'a fourni aucune liste de personnages -- ce bloc est fourni par l'enseignant (jamais un remplissage générique de ta part, jamais un nom inventé) : omets ENTIÈREMENT cette section plutôt que de rester vague.`;
   const consigneLieux = lieux
-    ? `\n3- Lieux et espace : t'appuyer EXACTEMENT sur cette description fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${lieux}"`
+    ? `\nLieux et espace : t'appuyer EXACTEMENT sur cette description fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${lieux}"`
     : '';
 
   // Chantier D.4/D.5 (05/10, signalements enseignant) : graphie du nom de
@@ -7401,7 +7754,7 @@ CONSIGNE ABSOLUE -- NE JAMAIS CONFONDRE THÈME ET AUTEUR : le "Thème" de l'œuv
   // au moins 2 titres sont connus avec certitude -- sinon omise
   // intégralement (jamais renommée, jamais remplacée par une liste
   // incertaine d'1 seul titre).
-  const consigneBibliographie = `2- Bibliographie (CONDITIONNELLE) : liste des œuvres majeures de l'auteur avec leur année de publication, au format "Titre en année, Titre en année..." -- à partir de tes connaissances réelles.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE} N'INCLUS CETTE RUBRIQUE "2- Bibliographie" QUE SI tu connais avec certitude au moins 2 titres ET leur année -- si tu n'en connais qu'un seul (même « ${titre} ») ou aucun avec une certitude suffisante, N'ÉCRIS PAS la rubrique "2- Bibliographie" du tout (ni le titre de section, ni aucune liste incertaine) plutôt que de la renommer ou de la remplir partiellement.`;
+  const consigneBibliographie = `Bibliographie (CONDITIONNELLE) : liste des œuvres majeures de l'auteur avec leur année de publication, au format "Titre en année, Titre en année..." -- à partir de tes connaissances réelles.${INTERDICTION_FAIT_PRECIS_NON_VERIFIE} N'INCLUS CETTE RUBRIQUE "Bibliographie" QUE SI tu connais avec certitude au moins 2 titres ET leur année -- si tu n'en connais qu'un seul (même « ${titre} ») ou aucun avec une certitude suffisante, N'ÉCRIS PAS la rubrique "Bibliographie" du tout (ni le titre de section, ni aucune liste incertaine) plutôt que de la renommer ou de la remplir partiellement.`;
 
   return `
 
@@ -7415,7 +7768,7 @@ ${consigneBiographie}
 ${consigneBibliographie}
 
 II- Présentation de l'œuvre
-Présente le genre du récit ou de la pièce (roman, pièce de théâtre...) en 1-2 phrases (pas le thème -- traité séparément ci-dessous).
+Présente le genre du récit ou de la pièce (roman, pièce de théâtre...) en 1-2 phrases (pas le thème -- traité séparément ci-dessous). CONSIGNE ABSOLUE (chantier I, lot 3) : pas de remplissage générique qui pourrait s'appliquer à n'importe quel roman (interdites : "intrigue complexe avec des personnages nuancés", "structure narrative détaillée et des descriptions enrichies", ou toute formule de ce type qui ne dit rien de spécifique à CETTE œuvre précise) -- limite-toi à nommer le genre et, si tu les connais avec certitude, un ou deux traits réellement distinctifs de cette œuvre précise ; à défaut, une seule phrase brève et factuelle suffit (ex. "Rebelle est un roman.").
 ${consigneTheme}
 ${consignePersonnages}${consigneLieux}
 
@@ -7442,7 +7795,7 @@ function construireConsigneAxeEtudeSituationOeuvreLycee(axe, situationFournie) {
   if (situation) {
     return `Situation d'apprentissage : reproduis EXACTEMENT et INTÉGRALEMENT, sans y ajouter ni en retirer aucun détail, sans la reformuler, le texte fourni par l'enseignant ci-dessous : "${situation}"`;
   }
-  return `Situation d'apprentissage : l'enseignant n'a fourni aucune situation d'apprentissage -- propose-en une, ancrée dans le quotidien ivoirien et conforme aux pratiques du système éducatif ivoirien (approche par compétences), mais UNIQUEMENT à partir d'éléments réels (thème, personnages, contexte de l'œuvre) déjà fournis par l'enseignant ou confirmés par recherche documentaire dans cette même séance -- si aucune information réelle sur l'œuvre n'est disponible, reste général (ne mentionne aucun nom de personnage ni aucun fait précis que tu ne connais pas avec certitude) plutôt que d'inventer un scénario. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les séances suivantes de cette même séquence -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance. N'Y MENTIONNE JAMAIS L'AXE D'ÉTUDE NI SON CONTENU ("${axe}"), ni le thème précis de l'œuvre (chantier J.2, lot 2) : la situation d'apprentissage amène vers la découverte de l'œuvre/du groupement de textes en général, jamais vers l'axe ou le thème précis qui seront, eux, découverts par les élèves plus loin dans la séquence. N'UTILISE AUCUN REMPLISSAGE VAGUE qui ne dit rien de concret (interdits : "se déploie sur plusieurs pages", "aborde des thèmes variés", ou toute formule de ce type qui pourrait s'appliquer à n'importe quelle œuvre) -- chaque phrase doit apporter une information concrète ancrée dans le quotidien ivoirien des élèves.`;
+  return `Situation d'apprentissage : l'enseignant n'a fourni aucune situation d'apprentissage -- propose-en une, ancrée dans le quotidien ivoirien et conforme aux pratiques du système éducatif ivoirien (approche par compétences), mais UNIQUEMENT à partir d'éléments réels (thème, personnages, contexte de l'œuvre) déjà fournis par l'enseignant ou confirmés par recherche documentaire dans cette même séance -- si aucune information réelle sur l'œuvre n'est disponible, reste général (ne mentionne aucun nom de personnage ni aucun fait précis que tu ne connais pas avec certitude) plutôt que d'inventer un scénario. IMPORTANT : cette situation sera réutilisée TELLE QUELLE par l'enseignant dans les séances suivantes de cette même séquence -- rédige-la donc comme un texte autonome qui reste valable pour toute la séquence, pas seulement pour cette première séance. N'Y MENTIONNE JAMAIS L'AXE D'ÉTUDE NI SON CONTENU ("${axe}"), ni le thème précis de l'œuvre (chantier J.2, lot 2) : la situation d'apprentissage amène vers la découverte de l'œuvre/du groupement de textes en général, jamais vers l'axe ou le thème précis qui seront, eux, découverts par les élèves plus loin dans la séquence. N'UTILISE AUCUN REMPLISSAGE VAGUE qui ne dit rien de concret (interdits : "se déploie sur plusieurs pages", "aborde des thèmes variés", ou toute formule de ce type qui pourrait s'appliquer à n'importe quelle œuvre) -- chaque phrase doit apporter une information concrète ancrée dans le quotidien ivoirien des élèves. CONSIGNE ABSOLUE (chantier H, lot 3) : n'invente JAMAIS le nom d'un établissement scolaire précis (interdits : "lycée Jean-Jaurès", ou tout autre nom propre d'établissement que tu ne connais pas réellement) -- désigne-le de façon générique ("au lycée", "dans leur établissement"), jamais par un nom propre inventé.`;
 }
 
 // Conclusion (second cycle, 20/09) : deux structures RÉELLEMENT différentes
@@ -8086,6 +8439,14 @@ function limiterGenerationParIp(req, res, next) {
     // d'Introduction/Conclusion à appliquer (narrative/theatrale vs
     // poetique, cf. construireInstructionsIntroductionOeuvreLycee).
     let genreOeuvreOI = null;
+    // themeEffectifIntroductionOI (06/10, chantier I.2 lot 3) : même piège de
+    // portée que genreOeuvreOI/seanceCatalogueOI/titreLeconCatalogueOI
+    // ci-dessus -- themeEffectif est déclaré par un second "let" à l'intérieur
+    // du bloc de construction du systemPrompt (portée locale à ce bloc),
+    // inaccessible depuis le bloc de post-traitement du finalMessage plus bas
+    // (vérifierSituationRevelantContenuOeuvre) qui en a besoin. Hissé ici
+    // selon le même pattern déjà établi.
+    let themeEffectifIntroductionOI = null;
     // titreLeconCatalogueOI (04/10, crash ReferenceError confirmé par les
     // logs Render -- leconCatalogueOI is not defined) : même piège de
     // portée que genreOeuvreOI/seanceCatalogueOI ci-dessus, décrit dans le
@@ -8411,6 +8772,7 @@ function limiterGenerationParIp(req, res, next) {
             if (!themeEffectif) themeEffectif = infosTrouvees.themeOeuvre;
           }
         }
+        themeEffectifIntroductionOI = themeEffectif;
         systemPrompt += construireInstructionsIntroductionOeuvreLycee({
           genreOeuvre: genreOeuvreOI, titreOeuvre, auteurOeuvre, axeEtude,
           biographieAuteur: biographieEffective, themeOeuvre: themeEffectif,
@@ -8803,7 +9165,7 @@ function limiterGenerationParIp(req, res, next) {
       const fichesPrecedentes = await trouverFichesPrecedentes({ enseignantId, discipline, classe, lecon: leconEffectif, niveau, seance, numeroSequenceOeuvre: estOeuvreIntegrale ? numeroSequence : undefined });
       if (fichesPrecedentes.length) {
         const resume = resumerSeancesPrecedentes(fichesPrecedentes);
-        systemPrompt += `\n\nCONTENU RÉEL DES SÉANCES PRÉCÉDENTES DE CETTE LEÇON :\n${resume}\n\nBase le rappel de la PRÉSENTATION EXCLUSIVEMENT sur ce contenu réel ci-dessus (questions, réponses, traces écrites déjà vues), PAS sur une supposition.`;
+        systemPrompt += `\n\nCONTENU RÉEL DES SÉANCES PRÉCÉDENTES DE CETTE LEÇON :\n${resume}\n\nBase le rappel de la PRÉSENTATION EXCLUSIVEMENT sur ce contenu réel ci-dessus (questions, réponses, traces écrites déjà vues), PAS sur une supposition. CONSIGNE ABSOLUE (chantier D, lot 3) : si ce contenu réel énumère des éléments précis (ex. une liste de genres, de notions ou de catégories), le rappel reprend EXACTEMENT cette liste, ni plus ni moins -- n'ajoute JAMAIS un élément plausible qui n'y figure pas (ex. un genre que tu connais par ailleurs mais que CETTE liste ne mentionne pas), et n'en omets aucun.`;
       } else {
         const avertissementHistorique = "Aucune fiche de séance précédente trouvée pour cette leçon — le rappel généré est une estimation, vérifie-le.";
         avertissementRappel = avertissementRappel ? `${avertissementRappel} ${avertissementHistorique}` : avertissementHistorique;
@@ -9061,6 +9423,11 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // haut, données non sourcées pour l'instant).
         contenuHTML = injecterChampEntete(contenuHTML, 'Leçon', leconAfficheeOI);
         contenuHTML = injecterChampEntete(contenuHTML, 'Séance', seanceAfficheeOI);
+        // Chantier G.2 (lot 3) : casse mixte du titre Leçon/Séance partout
+        // dans le corps, jamais tout en majuscules.
+        contenuHTML = corrigerCasseLeconSeanceCorps(contenuHTML, leconAfficheeOI, seanceAfficheeOI);
+        // Chantier G.3 (lot 3) : crochets littéraux résiduels.
+        contenuHTML = nettoyerCrochetsLitteraux(contenuHTML);
         // Chantier F.5 (lot 2) : tableaux comparatifs écrits en Markdown
         // brut (Traces écrites, S1/S2) -> vrais <table> -- AVANT la
         // restructuration ci-dessous pour que les "|" résiduels ne soient
@@ -9071,6 +9438,14 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // sur restructurerTexteLibreEnParagraphes) -- jamais pour le 1er
         // cycle ni les autres types de séance second cycle.
         contenuHTML = restructurerTexteLibreEnParagraphes(contenuHTML);
+        // Chantier C (lot 3) : reconstruit le Plan du cours à partir des
+        // titres réels des Traces écrites -- APRÈS les deux étapes
+        // ci-dessus, qui garantissent que les Traces sont déjà sous forme de
+        // <p> exploitables à ce stade.
+        contenuHTML = construirePlanDepuisTraces(contenuHTML);
+        // Chantier F (lot 3) : durées constantes 5/45/10 mn, quelle que soit
+        // la durée écrite par le modèle.
+        contenuHTML = forcerDureesConstantes(contenuHTML);
         // Chantier C.5 (05/10) : caractères invisibles + accents manquants
         // courants, même scope strict.
         contenuHTML = nettoyerCaracteresInvisiblesEtAccents(contenuHTML);
@@ -9125,21 +9500,29 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           }
         }
         if (typeSeanceOI === 'culture_litteraire' && approcheNormalisee === 'APC') {
-          // Chantier H.2 (lot 2) : contrôle déterministe sur la règle 3) de
+          // Chantier E (lot 3, remplace le choix du lot 2 qui n'implémentait
+          // QUE l'avertissement) : contrôle déterministe sur la règle 3) de
           // construireConsigneVerbesTaxonomiquesAPC -- cf. commentaire sur
-          // calculerTauxConsignesSansVerbeTaxonomique. PAS de régénération
-          // automatique ici (demandée par l'énoncé du lot, mais délibérément
-          // non implémentée) : le flux est en streaming SSE, la régénération
-          // nécessiterait soit de ne jamais diffuser la 1re tentative au
-          // navigateur (expérience dégradée -- plus aucun texte affiché en
-          // direct pendant toute la génération), soit de remplacer après
-          // coup un contenu déjà vu par l'enseignant pendant le flux (source
-          // de confusion). Un avertissement fort, cohérent avec tous les
-          // autres filets déterministes de ce fichier, est le choix le plus
-          // sûr tant que ce compromis n'a pas été validé explicitement.
+          // calculerTauxConsignesSansVerbeTaxonomique. Une régénération
+          // CIBLÉE (cf. regenererConsignesNonConformes) sur les seules
+          // consignes fautives, UNE SEULE fois, journalisée -- jamais une
+          // 2e génération de la fiche entière (cf. le commentaire détaillé
+          // sur regenererConsignesNonConformes pour le raisonnement complet).
           const { taux, total, nonConformes } = calculerTauxConsignesSansVerbeTaxonomique(contenuHTML);
           if (total > 0 && taux > 0.3) {
-            res.write(`data: ${JSON.stringify({ avertissement: `${nonConformes.length} consigne(s) du Développement sur ${total} ne commencent pas par un verbe de la taxonomie DPFC (ex. une question "Qu'est-ce que...") -- vérifiez et reformulez-les en consignes d'action avant utilisation.` })}\n\n`);
+            console.log(`⚠️ Chantier E -- ${nonConformes.length}/${total} consigne(s) non conformes (verbe taxonomique manquant), régénération ciblée déclenchée :`, nonConformes);
+            try {
+              const resultatRegen = await regenererConsignesNonConformes(contenuHTML, nonConformes);
+              contenuHTML = resultatRegen.contenuHTML;
+              console.log(`✅ Chantier E -- régénération ciblée : ${resultatRegen.nbCorrigees}/${nonConformes.length} consigne(s) reformulée(s).`);
+            } catch (e) {
+              console.error('❌ Chantier E -- échec de la régénération ciblée (fiche conservée telle quelle) :', e.message);
+            }
+            const verif = calculerTauxConsignesSansVerbeTaxonomique(contenuHTML);
+            if (verif.total > 0 && verif.taux > 0.3) {
+              console.log(`⚠️ Chantier E -- encore ${verif.nonConformes.length}/${verif.total} non conforme(s) après régénération, avertissement affiché.`);
+              res.write(`data: ${JSON.stringify({ avertissement: `${verif.nonConformes.length} consigne(s) du Développement sur ${verif.total} ne commencent toujours pas par un verbe de la taxonomie DPFC après une tentative de correction automatique -- vérifiez et reformulez-les en consignes d'action avant utilisation.` })}\n\n`);
+            }
           }
         }
         if (typeSeanceOI === 'introduction' || typeSeanceOI === 'conclusion') {
@@ -9180,6 +9563,12 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
             if (avertissementTheme) {
               res.write(`data: ${JSON.stringify({ avertissement: avertissementTheme })}\n\n`);
             }
+            // Chantier I.2 (lot 3) : la Situation d'apprentissage ne doit
+            // révéler ni le thème, ni l'axe, ni les personnages déjà connus.
+            const avertissementSituation = verifierSituationRevelantContenuOeuvre(contenuHTML, { theme: themeEffectifIntroductionOI, axe: axeEtude, personnages: personnagesOeuvre });
+            if (avertissementSituation) {
+              res.write(`data: ${JSON.stringify({ avertissement: avertissementSituation })}\n\n`);
+            }
           }
         }
         // Chantier F.1 (lot 2) : police + interligne écran/PDF -- en tout
@@ -9187,6 +9576,9 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // précède (aucune étape ultérieure ne reparse ni ne réécrit
         // .fiche-cours pour ce bloc).
         contenuHTML = injecterStyleSecondCycleOeuvreIntegrale(contenuHTML);
+        // Chantier A (lot 3) : titre "FICHE DE COURS" -- après coup, un
+        // simple ajout de 1er enfant qui ne modifie rien d'autre.
+        contenuHTML = injecterTitreFicheDeCours(contenuHTML);
       }
       // Contrôle des 3 marqueurs attendus du mode plan-enseignant, AVANT toute
       // injection -- un marqueur omis par le modèle ne doit jamais provoquer
