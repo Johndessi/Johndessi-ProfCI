@@ -299,7 +299,7 @@ function collectRuns($, el, fmt = {}) {
 
 function blockChildrenToParagraphs($, el, fmt = {}) {
   const paragraphs = [];
-  const directBlocks = $(el).children('p, ul, ol, div').toArray();
+  const directBlocks = $(el).children('p, ul, ol, div, table').toArray();
 
   if (directBlocks.length === 0) {
     const runs = collectRuns($, el, fmt);
@@ -309,7 +309,25 @@ function blockChildrenToParagraphs($, el, fmt = {}) {
 
   directBlocks.forEach((node) => {
     const tag = node.name.toLowerCase();
-    if (tag === 'ul' || tag === 'ol') {
+    if (tag === 'table') {
+      // Chantier B (lot 4) : bug réel confirmé sur le docx fourni par
+      // l'enseignant (fiche_francais_2nde_2.docx) -- un <table> imbriqué
+      // dans une cellule (ex. tableau comparatif converti depuis du
+      // Markdown brut par convertirTableauxMarkdownEnHtml, chantier B lot 3)
+      // était auparavant totalement IGNORÉ ici (ce tag n'était pas dans le
+      // sélecteur ci-dessus), puis ses lignes étaient en réalité récupérées
+      // par erreur dans buildDocxTable via un $table.find('tbody, thead')
+      // qui descend dans TOUS les descendants -- y compris ce <table>
+      // imbriqué -- et fusionnait ses lignes (7 colonnes) comme des lignes
+      // SUPPLÉMENTAIRES de la table extérieure (5 colonnes) : un <w:tbl>
+      // unique et corrompu (nombre de colonnes incohérent d'une ligne à
+      // l'autre), jamais un vrai tableau imbriqué. La librairie docx
+      // supporte nativement un Table comme enfant direct d'un TableCell
+      // (cf. ITableCellOptions.children: readonly (Paragraph | Table)[]) --
+      // on construit donc ici un vrai tableau imbriqué indépendant.
+      const tableImbriquee = buildDocxTable($, $(node));
+      if (tableImbriquee) paragraphs.push(tableImbriquee);
+    } else if (tag === 'ul' || tag === 'ol') {
       $(node).children('li').each((_, li) => {
         const runs = collectRuns($, li, fmt);
         paragraphs.push(new Paragraph({ children: [new TextRun({ text: '- ', bold: fmt.bold, color: fmt.color }), ...runs] }));
@@ -346,10 +364,22 @@ function tableCellFromNode($, node, opts = {}) {
 
 function buildDocxTable($, $table) {
   const rows = [];
+  // Chantier B (lot 4) : bug réel confirmé -- .find('tbody, thead') descend
+  // dans TOUS les descendants de $table, y compris un <table> imbriqué à
+  // l'intérieur d'une de ses <td> (ex. tableau comparatif converti depuis du
+  // Markdown brut, chantier B lot 3). Ses lignes (nombre de colonnes
+  // différent) étaient alors ajoutées par erreur comme lignes
+  // supplémentaires de CETTE table extérieure -- un <w:tbl> unique et
+  // corrompu (colonnes incohérentes d'une ligne à l'autre), jamais un
+  // tableau correctement imbriqué dans sa cellule. On ne parcourt donc plus
+  // que les <tbody>/<thead> ENFANTS DIRECTS de $table (jamais via .find()) --
+  // le <table> imbriqué lui-même est construit indépendamment par
+  // blockChildrenToParagraphs/tableCellFromNode, qui l'inclut comme un vrai
+  // Table imbriqué dans les children du TableCell parent.
   $table.children('tr').each((_, tr) => {
     buildRow(tr);
   });
-  $table.find('tbody, thead').each((_, group) => {
+  $table.children('tbody, thead').each((_, group) => {
     $(group).children('tr').each((_, tr) => buildRow(tr));
   });
 
@@ -10226,7 +10256,18 @@ app.get('/api/fiche/:id', async (req, res) => {
   try {
     const fiche = await Fiche.findById(req.params.id);
     if (!fiche) return res.status(404).json({ error: 'Fiche introuvable' });
-    res.json(fiche);
+    // Chantier B (lot 4) : une fiche déjà enregistrée AVANT ce correctif (ou
+    // dont la conversion n'a pour une raison quelconque pas eu lieu au moment
+    // de la génération) ne rejouait jamais convertirTableauxMarkdownEnHtml --
+    // cette fonction n'était câblée que dans le pipeline SSE de génération,
+    // jamais relue à l'affichage. Preuve réelle (docx enseignant fourni,
+    // 2e envoi) : tableau Markdown encore brut ("|...|") dans l'aperçu HTML.
+    // Fonction idempotente et auto-gated (no-op si aucun "|" détecté) --
+    // sans risque à appliquer systématiquement, pour tout type de fiche.
+    const contenuAffiche = convertirTableauxMarkdownEnHtml(fiche.contenu);
+    const ficheAffichee = fiche.toObject ? fiche.toObject() : { ...fiche };
+    ficheAffichee.contenu = contenuAffiche;
+    res.json(ficheAffichee);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -10301,7 +10342,11 @@ app.post('/api/fiche/:id/pdf', async (req, res) => {
     if (!fiche) return res.status(404).json({ error: 'Fiche introuvable' });
 
     const landscape = req.body.view === 'paysage';
-    const pdfBuffer = await genererPdfDepuisHtml(fiche.contenu, landscape);
+    // Chantier B (lot 4) : voir commentaire identique sur GET /api/fiche/:id --
+    // le PDF téléchargé relit fiche.contenu tel quel, sans jamais rejouer la
+    // conversion Markdown -> tableau. Idempotent, sans risque.
+    const contenuExport = convertirTableauxMarkdownEnHtml(fiche.contenu);
+    const pdfBuffer = await genererPdfDepuisHtml(contenuExport, landscape);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${slugFichier(fiche)}.pdf"`);
@@ -10318,7 +10363,17 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
     if (!fiche) return res.status(404).json({ error: 'Fiche introuvable' });
 
     const landscape = req.body.view === 'paysage';
-    const docxBuffer = await genererDocxDepuisHtml(fiche.contenu, landscape, fiche.estOeuvreIntegraleSecondCycle);
+    // Chantier B (lot 4) : preuve demandée par l'enseignant -- un tableau
+    // Markdown resté brut ("|...|") dans fiche.contenu (cas réel confirmé,
+    // 2e docx fourni) n'était JAMAIS converti ici : /api/fiche/:id/docx (la
+    // route du bouton "Télécharger Word") relit fiche.contenu directement et
+    // ne rejoue aucune étape de nettoyage -- convertirTableauxMarkdownEnHtml
+    // n'était câblée que dans le pipeline de génération (/api/generer-fiche),
+    // jamais à l'export. Donc toute fiche déjà enregistrée avec ce bug restait
+    // bloquée dessus pour toujours, même après correction du chantier B au
+    // lot 3. Fonction idempotente et auto-gated (no-op si aucun "|" détecté).
+    const contenuExport = convertirTableauxMarkdownEnHtml(fiche.contenu);
+    const docxBuffer = await genererDocxDepuisHtml(contenuExport, landscape, fiche.estOeuvreIntegraleSecondCycle);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${slugFichier(fiche)}.docx"`);
