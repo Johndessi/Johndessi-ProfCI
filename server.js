@@ -1306,6 +1306,43 @@ function nettoyerCrochetsLitteraux(contenuHTML) {
   return contenuHTML.replace(/\[([^\[\]\d]{2,80})\]/g, '$1');
 }
 
+// Chantier G.4 (lot 4) : équilibre des guillemets dans les colonnes
+// Activités de l'enseignant/des élèves (bug réel observé : une consigne cite
+// un texte entre « » ou entre guillemets droits, mais le modèle oublie le
+// guillemet fermant, ex. une phrase coupée) -- ferme automatiquement toute
+// paire restée ouverte, paragraphe par paragraphe (jamais à l'échelle de
+// toute la cellule, qui mélangerait des citations de phrases différentes).
+function corrigerGuillemetsNonFermes(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/D[ÉE]VELOPPEMENT|[ÉE]VALUATION|PR[ÉE]SENTATION/i.test(premiereColonne)) return;
+    [2, 3].forEach((idx) => {
+      const $colonne = $tr.children('td').eq(idx);
+      if (!$colonne.length) return;
+      $colonne.find('p').each((_, p) => {
+        const $p = $(p);
+        let texte = $p.text();
+        const texteOriginal = texte;
+        const ouvrants = (texte.match(/«/g) || []).length;
+        const fermants = (texte.match(/»/g) || []).length;
+        if (ouvrants > fermants) texte += ' »'.repeat(ouvrants - fermants);
+        const guillemetsDroits = (texte.match(/"/g) || []).length;
+        if (guillemetsDroits % 2 === 1) texte += '"';
+        if (texte !== texteOriginal) {
+          $p.text(texte);
+          modifie = true;
+        }
+      });
+    });
+  });
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
 // Même principe que ci-dessus, mais pour le paragraphe "Situation
 // d'apprentissage :" (jamais un champ de l'entête vertical -- un <p><strong>
 // isolé, cf. le gabarit ligne ~3916). Utilisé UNIQUEMENT quand la situation
@@ -6889,6 +6926,203 @@ function envoyerBlocageSSE(res, message, heartbeat) {
 const COMPETENCE_OEUVRE_INTEGRALE = "Compétence 2 : Traiter des situations dans lesquelles l'élève doit construire le sens de textes divers";
 const ACTIVITE_OEUVRE_INTEGRALE = 'Lecture';
 
+// Chantier B (lot 4) : catalogue Habiletés/Contenus GRAVÉ depuis le
+// PROGRAMME ÉDUCATIF OFFICIEL (PDF "PROGRAMMES EDUCATIFS DES CLASSES DE
+// SECONDE A/C/B", Compétence 1, Activité Lecture, IV- Corps du Programme
+// Éducatif, pages 10 à 14) -- transcription fidèle, relue contre le PDF
+// avant d'être gravée ici (demande explicite de l'enseignant). Remplace la
+// génération par le modèle (qui inventait un contenu différent, ex.
+// "exposé magistral sur le contexte historique/littéraire" pour Culture
+// littéraire au lieu des Habiletés/Contenus réellement prescrits) : ce
+// tableau est désormais rendu de façon DÉTERMINISTE depuis cet objet (cf.
+// injecterHabiletesContenusDeterministe), jamais laissé au LLM.
+// Clé de 1er niveau = genreOeuvre tel que stocké dans LeconOfficielleDPFC
+// (narrative/theatrale/poetique, cf. commentaire sur ce champ) -- le
+// contenu dépend du GENRE de l'œuvre, jamais du numéro de la leçon
+// (Leçon 1/2/3 ne sont qu'une convention d'ordre, cf. seed réel où leurs
+// numéros varient selon la classe). Clé de 2e niveau :
+//   - 's1'/'s2' : Culture littéraire, séances 1 et 2 (contenu différent).
+//   - 's3' : Introduction à l'étude de l'œuvre intégrale (séance 3).
+//   - 'construction' : bloc unique couvrant TOUTES les séances de
+//     construction du sens (Lecture méthodique/Lecture dirigée/Exposé --
+//     séances 4 à 11 narrative/théâtrale, 4 à 7/9 poétique selon le
+//     programme, qui prescrit un seul et même bloc Habiletés/Contenus pour
+//     tout ce groupe de séances).
+//   - 'conclusion' : séance de conclusion (séance 12 narrative/théâtrale,
+//     8/10 poétique).
+// Chaque entrée {verbe, contenus} représente UNE ligne du tableau officiel
+// (losange "♦" du PDF) ; contenus est un tableau de lignes déjà formatées
+// (tirets "- " repris tels quels quand le PDF les utilise), jointes par
+// <br> au rendu -- jamais reformulées. 's3' et 'conclusion' sont conservés
+// ici pour référence/traçabilité et pour les futurs chantiers qui en
+// auraient besoin, mais NE SONT PAS injectés comme tableau HTML : ces deux
+// séances remplacent entièrement le squelette générique par une structure
+// I/II/III en texte libre qui ne comporte JAMAIS de tableau Habiletés/
+// Contenus (cf. construireInstructionsIntroductionOeuvreLycee/
+// construireInstructionsConclusionOeuvreLycee, structure déjà conforme à
+// l'esprit de ces habiletés : Présentation de l'auteur/de l'œuvre/Axe
+// d'étude pour l'Introduction ; non re-vérifiée terme à terme contre le
+// PDF dans ce lot faute de temps -- à signaler explicitement en ÉTAT FINAL).
+const HABILETES_CONTENUS_OEUVRE_INTEGRALE = {
+  narrative: {
+    s1: [
+      { verbe: 'Connaître', contenus: ['les genres en prose (roman, conte, épopée, nouvelle...).'] },
+      { verbe: 'Déterminer', contenus: ['les éléments constitutifs de ces genres :', "- l'intrigue ;", '- le schéma narratif ;', '- le schéma actantiel.'] },
+      { verbe: 'Lire', contenus: ['un texte en prose.'] }
+    ],
+    s2: [
+      { verbe: 'Connaître', contenus: ['les sous-genres :', "- roman : roman d'aventure, épistolaire, de science-fiction ;", '- conte : philosophique, drolatique, étiologique, didactique ;', '- nouvelle ;', '- épopée...'] },
+      { verbe: 'Présenter', contenus: ['les auteurs de quelques œuvres narratives de la littérature ivoirienne, africaine et étrangère.'] },
+      { verbe: 'Lire', contenus: ['un texte en prose.'] }
+    ],
+    s3: [
+      { verbe: 'Présenter', contenus: ["l'auteur et l'œuvre en indiquant le genre (roman, conte, épopée, nouvelle...)."] },
+      { verbe: 'Situer', contenus: ["l'œuvre dans son contexte historique, littéraire, voire dans un courant littéraire."] },
+      { verbe: 'Formuler', contenus: ["l'axe d'étude de l'œuvre."] }
+    ],
+    construction: [
+      { verbe: 'Formuler', contenus: ['- des hypothèses de lecture (Lecture méthodique) ;', "- l'hypothèse générale (Lecture méthodique) ;", '- le fil conducteur (Lecture dirigée) ;', "- le problème en rapport avec le thème de l'exposé."] },
+      { verbe: 'Identifier', contenus: ['- le type de texte ;', '- la tonalité ;', '- les personnages et les thèmes majeurs ;', '- les outils grammaticaux pertinents ;', '- les indices lexicaux pertinents ;', '- les figures de style pertinentes ;', '- le schéma actantiel.'] },
+      { verbe: 'Analyser', contenus: ['les indices textuels relevés.'] },
+      { verbe: 'Interpréter', contenus: ['les indices textuels relevés.'] },
+      { verbe: 'Appliquer', contenus: ['- la démarche des activités de lecture ;', "- la démarche de l'exposé."] }
+    ],
+    conclusion: [
+      { verbe: 'Rappeler', contenus: ["- l'axe d'étude ;", '- les thèmes étudiés.'] },
+      { verbe: 'Relever', contenus: ['les faits d\'écriture étudiés.'] },
+      { verbe: 'Préciser', contenus: ["la portée de l'œuvre."] },
+      { verbe: 'Porter', contenus: ["un jugement critique sur l'œuvre (thème, écriture, visée, etc.)."] }
+    ]
+  },
+  theatrale: {
+    s1: [
+      { verbe: 'Connaître', contenus: ['les caractéristiques du texte théâtral :', '- les caractéristiques formelles du texte théâtral : la structure du texte (actes, tableaux et scènes), les noms des personnages, les didascalies, les paroles prononcées par les personnages ;', '- les modalités de la parole au théâtre : le dialogue (les répliques, les stichomythies, la tirade), le monologue, le quiproquo, l\'aparté.'] },
+      { verbe: 'Déterminer', contenus: ["la fonction des étapes de l'action théâtrale : l'exposition, le nœud de l'intrigue, les péripéties, le dénouement."] },
+      { verbe: 'Lire', contenus: ['un texte dramatique.'] }
+    ],
+    s2: [
+      { verbe: 'Connaître', contenus: ['les genres dramatiques classiques (la tragédie, la comédie, la tragi-comédie).'] },
+      { verbe: 'Présenter', contenus: ['les auteurs de quelques œuvres dramatiques classiques.'] },
+      { verbe: 'Lire', contenus: ['un texte dramatique.'] }
+    ],
+    s3: [
+      { verbe: 'Présenter', contenus: ["l'auteur et son œuvre."] },
+      { verbe: 'Situer', contenus: ["l'œuvre dans son contexte historique, littéraire voire dans un courant littéraire."] },
+      { verbe: 'Formuler', contenus: ["l'axe d'étude."] }
+    ],
+    construction: [
+      { verbe: 'Formuler', contenus: ['- des hypothèses de lecture (Lecture méthodique) ;', "- l'hypothèse générale (Lecture méthodique) ;", '- le fil conducteur (Lecture dirigée) ;', "- le problème en rapport avec le thème de l'exposé."] },
+      { verbe: 'Identifier', contenus: ['- la structure du texte ;', "- la fonction du texte (scène d'exposition, nœud de l'intrigue ; dénouement, etc.) ;", '- les thèmes majeurs ;', '- les personnages et leurs modes d\'intervention ;', '- les didascalies ;', '- le schéma actantiel ;', '- la tonalité littéraire ;', '- la double énonciation ;', '- les outils grammaticaux pertinents ;', '- les indices lexicaux (textuels) pertinents ;', '- les figures de style pertinentes.'] },
+      { verbe: 'Analyser', contenus: ['les indices textuels relevés.'] },
+      { verbe: 'Interpréter', contenus: ['les indices textuels relevés.'] },
+      { verbe: 'Appliquer', contenus: ['- la démarche des activités de lecture ;', "- la démarche de l'exposé."] }
+    ],
+    conclusion: [
+      { verbe: 'Rappeler', contenus: ["- l'axe d'étude ;", '- les thèmes étudiés.', '- les faits d\'écriture étudiés.'] },
+      { verbe: 'Préciser', contenus: ["la portée de l'œuvre."] },
+      { verbe: 'Porter', contenus: ["un jugement critique sur l'œuvre (thème, écriture, visée, etc.)."] }
+    ]
+  },
+  poetique: {
+    s1: [
+      { verbe: 'Connaître', contenus: ['le genre poétique (création verbale, pouvoir de suggestion, beauté du langage, contraintes formelles).'] },
+      { verbe: 'Présenter', contenus: ['le genre poétique (la forme fixe et les vers libres).'] },
+      { verbe: 'Distinguer', contenus: ['les poèmes à forme fixe :', '- le rondeau, le sonnet, la balade, l\'ode, l\'idylle, l\'élégie, l\'épigramme, etc.'] },
+      { verbe: 'Lire', contenus: ['un texte poétique.'] }
+    ],
+    s2: [
+      { verbe: 'Distinguer', contenus: ['les poèmes en vers libres :', '- les poèmes épiques,', '- les poèmes en prose,', '- les calligrammes.'] },
+      { verbe: 'Présenter', contenus: ['les auteurs de quelques œuvres poétiques de la littérature ivoirienne, africaine et étrangère.'] },
+      { verbe: 'Lire', contenus: ['un texte poétique.'] }
+    ],
+    s3: [
+      { verbe: 'Identifier', contenus: ['- l\'époque des textes du groupement ;', '- le genre littéraire ;', '- le thème commun aux textes.'] },
+      { verbe: 'Présenter', contenus: ['les auteurs du groupement et leurs œuvres.'] },
+      { verbe: 'Situer', contenus: ['leurs œuvres dans leur contexte historique et littéraire.'] },
+      { verbe: 'Formuler', contenus: ["l'axe d'étude du groupement de textes."] }
+    ],
+    construction: [
+      { verbe: 'Formuler', contenus: ['- des hypothèses de lecture (Lecture méthodique) ;', "- l'hypothèse générale (Lecture méthodique)."] },
+      { verbe: 'Identifier', contenus: ['- les outils grammaticaux pertinents ;', '- les indices lexicaux pertinents ;', '- la tonalité ;', '- la structure du poème (forme et typographie) ;', '- les éléments de versification (sonorités, rythmes, les procédés d\'écriture, etc.) ;', '- les figures de style pertinentes.'] },
+      { verbe: 'Analyser', contenus: ['les indices textuels relevés.'] },
+      { verbe: 'Interpréter', contenus: ['les indices textuels relevés.'] },
+      { verbe: 'Appliquer', contenus: ['la démarche de la lecture méthodique.'] }
+    ],
+    conclusion: [
+      { verbe: 'Rappeler', contenus: ["- l'axe d'étude et les thèmes étudiés ;", '- les faits d\'écriture étudiés ;', '- les similitudes et les différences/les écarts entre les poèmes étudiés par rapport à l\'axe d\'étude.'] },
+      { verbe: 'Préciser', contenus: ['la portée littéraire et la thématique du Groupement de Textes.'] },
+      { verbe: 'Porter', contenus: ['un jugement critique sur le Groupement de Textes (thème, écriture, visée, etc.).'] }
+    ]
+  }
+};
+
+// Résout la clé catalogue (s1/s2/construction) pour les séances qui
+// CONSERVENT le tableau Habiletés/Contenus générique (Culture littéraire,
+// Lecture méthodique/dirigée/Exposé) -- jamais pour 'introduction'/
+// 'conclusion', qui remplacent ce tableau par une structure I/II/III en
+// texte libre (cf. commentaire sur HABILETES_CONTENUS_OEUVRE_INTEGRALE).
+function cleCatalogueHabiletesContenus(typeSeanceOeuvre, numeroSeance) {
+  if (typeSeanceOeuvre === 'culture_litteraire') {
+    const n = parseInt(numeroSeance, 10);
+    if (n === 1) return 's1';
+    if (n === 2) return 's2';
+    return null;
+  }
+  if (typeSeanceOeuvre === 'lecture_methodique' || typeSeanceOeuvre === 'lecture_dirigee' || typeSeanceOeuvre === 'expose') {
+    return 'construction';
+  }
+  return null;
+}
+
+function obtenirHabiletesContenusCatalogue(genreOeuvre, typeSeanceOeuvre, numeroSeance) {
+  const genre = HABILETES_CONTENUS_OEUVRE_INTEGRALE[genreOeuvre];
+  if (!genre) return null;
+  const cle = cleCatalogueHabiletesContenus(typeSeanceOeuvre, numeroSeance);
+  if (!cle) return null;
+  return genre[cle] || null;
+}
+
+function formaterLignesHabiletesContenusPourPrompt(entrees) {
+  return entrees.map((e) => {
+    const corpsHtml = e.contenus.map(echapperHtml).join('<br>');
+    return `  <tr><td style="border:1px solid #000;padding:6px;">${echapperHtml(e.verbe)}</td><td style="border:1px solid #000;padding:6px;">${corpsHtml}</td></tr>`;
+  }).join('\n');
+}
+
+function rendreTableHabiletesContenusDeterministe(entrees) {
+  return `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+  <tr><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Habiletés</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Contenus</th></tr>
+${formaterLignesHabiletesContenusPourPrompt(entrees)}
+</table>`;
+}
+
+// Chantier B (lot 4) : remplace le tableau Habiletés/Contenus généré par le
+// LLM (contenu non conforme au programme officiel, confirmé par
+// l'enseignant -- ex. Culture littéraire produisait un "exposé magistral"
+// au lieu des Habiletés/Contenus réellement prescrits) par le rendu
+// déterministe ci-dessus, gravé depuis le PDF officiel. Repère le tableau
+// par son en-tête EXACT ("Habiletés"/"Contenus", 1re ligne) -- jamais par
+// sa position -- pour rester robuste quel que soit ce que le modèle a
+// produit autour. No-op si aucun tableau Habiletés/Contenus n'est trouvé
+// (ex. séances Introduction/Conclusion, qui n'en ont jamais).
+function injecterHabiletesContenusDeterministe(contenuHTML, entrees) {
+  if (!entrees || !entrees.length || !contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let remplace = false;
+  $('table').each((_, table) => {
+    if (remplace) return;
+    const $table = $(table);
+    const premiereLigne = $table.find('tr').first();
+    const entetes = premiereLigne.find('th, td').map((__, c) => normaliserTexte($(c).text())).get();
+    if (entetes[0] === 'habiletes' && entetes[1] === 'contenus') {
+      $table.replaceWith(rendreTableHabiletesContenusDeterministe(entrees));
+      remplace = true;
+    }
+  });
+  if (!remplace) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
 // Chantier B (05/10, lot Œuvre intégrale 2nde lycée, approche APC
 // UNIQUEMENT -- FPC/PPO inchangés, cf. consigne du lot) : taxonomie DPFC à
 // 4 niveaux (N1 Connaître, N2 Comprendre, N3 Appliquer, N4 Traiter une
@@ -6915,7 +7149,13 @@ const VERBES_TAXONOMIQUES = {
       { verbe: 'indiquer', sourceDPFC: true },
       { verbe: 'définir', sourceDPFC: true },
       { verbe: 'nommer', sourceDPFC: true },
-      { verbe: 'trouver', sourceDPFC: false } // à valider
+      { verbe: 'trouver', sourceDPFC: false }, // à valider
+      // Chantier G (lot 4) : "présenter" figure explicitement dans le
+      // catalogue officiel Habiletés/Contenus (cf.
+      // HABILETES_CONTENUS_OEUVRE_INTEGRALE, ex. "Présenter les auteurs de
+      // quelques œuvres...") -- sourcé DPFC, contrairement aux verbes
+      // "à valider" ci-dessous.
+      { verbe: 'présenter', sourceDPFC: true }
     ]
   },
   N2: {
@@ -6937,7 +7177,12 @@ const VERBES_TAXONOMIQUES = {
       { verbe: 'argumenter', sourceDPFC: true },
       { verbe: 'proposer', sourceDPFC: false }, // à valider
       { verbe: 'appliquer', sourceDPFC: false }, // à valider
-      { verbe: 'classer', sourceDPFC: false } // à valider
+      { verbe: 'classer', sourceDPFC: false }, // à valider
+      // Chantier G (lot 4) : "comparer" -- demandé explicitement par
+      // l'enseignant dans l'ensemble "à valider" de ce lot, absent du
+      // catalogue officiel Habiletés/Contenus -- jamais présenté comme
+      // sourcé DPFC.
+      { verbe: 'comparer', sourceDPFC: false } // à valider (chantier G, lot 4)
     ]
   },
   N4: {
@@ -6975,9 +7220,9 @@ ${listeParNiveau}
 RÈGLES :
 1) Tableau Habiletés : UN SEUL verbe par niveau, dans l'ordre N1 -> N2 -> N3 -> N4 (jamais un autre ordre, jamais deux verbes du même niveau, jamais un niveau absent si tu as une consigne de ce niveau ailleurs dans la fiche). CHAQUE cellule Habiletés contient le verbe SUIVI d'un complément précis (ex. "Identifier les genres en prose et leurs caractéristiques distinctives") -- JAMAIS le verbe seul isolé sans complément (ex. jamais une cellule réduite à "Identifier").
 2) Tout verbe utilisé dans une consigne du Développement doit aussi figurer dans le tableau Habiletés -- jamais un verbe qui n'y apparaît pas (ex. ne jamais utiliser "Synthétisez" dans une consigne si "synthétiser" n'est pas dans la liste ci-dessus ET dans Habiletés). RÉCIPROQUEMENT (chantier H.1, lot 2) : chaque verbe que tu places dans le tableau Habiletés doit être concrètement exercé par AU MOINS une consigne du Développement ou de l'Évaluation -- jamais un verbe du tableau qui reste sans consigne correspondante nulle part dans la fiche.
-3) CHAQUE consigne que tu rédiges pour l'enseignant, SANS AUCUNE EXCEPTION (toutes les consignes du Développement ET les 3 de l'Évaluation), doit COMMENCER par un verbe de cette liste, à l'IMPÉRATIF, 2e PERSONNE DU PLURIEL (ex. "Identifiez", "Analysez", "Citez" -- jamais l'infinitif "Identifier", jamais le singulier "Identifie"). Le verbe doit rester OBSERVABLE : ce que l'élève fait concrètement (identifier, citer, relever, classer...), jamais une question ni une formulation qui décrit l'action de l'ENSEIGNANT ("Demande...", "Relève la notion centrale...", "Pose la question...").
-TROIS EXEMPLES CONFORMES : "Identifiez le genre de chaque extrait proposé." / "Citez deux caractéristiques du roman policier." / "Distinguez le conte de fées du conte populaire à partir de leurs éléments magiques."
-TROIS EXEMPLES INTERDITS, à ne jamais reproduire sous cette forme : "Qu'est-ce qui différencie un roman des mémoires ?" (question, pas une consigne d'action) ; "Relève la notion centrale : « Pourquoi est-il important de connaître les genres littéraires ? »" (verbe à la 3e personne du singulier décrivant l'enseignant, ET question imbriquée) ; "Explique comment le sous-genre aide le lecteur..." (verbe au singulier "Explique" au lieu du pluriel "Expliquez").
+3) CHAQUE consigne que tu rédiges pour l'enseignant, SANS AUCUNE EXCEPTION (toutes les consignes du Développement ET les 3 de l'Évaluation), doit COMMENCER par un verbe de cette liste, à l'IMPÉRATIF, 2e PERSONNE DU SINGULIER (ex. "Identifie", "Cite", "Relève", "Justifie" -- jamais l'infinitif "Identifier", jamais le pluriel "Identifiez"). Le verbe doit rester OBSERVABLE : ce que l'élève fait concrètement (identifier, citer, relever, classer...), jamais une question ni une formulation qui décrit l'action de l'ENSEIGNANT ("Demande...", "Pose la question...").
+TROIS EXEMPLES CONFORMES : "Identifie le genre de chaque extrait proposé." / "Cite deux caractéristiques du roman policier." / "Distingue le conte de fées du conte populaire à partir de leurs éléments magiques."
+DEUX EXEMPLES INTERDITS, à ne jamais reproduire sous cette forme : "Qu'est-ce qui différencie un roman des mémoires ?" (une question, jamais une consigne d'action) ; "Relève la notion centrale : « Pourquoi est-il important de connaître les genres littéraires ? »" -- MÊME SI "Relève" est ici un verbe de la liste à la bonne personne, cette phrase reste interdite : elle décrit ce que FAIT l'enseignant (il relève une notion) et cache en réalité une question adressée aux élèves ("Pourquoi...?") derrière un deux-points -- une vraie consigne d'action commence par un verbe qui décrit ce que l'ÉLÈVE doit faire lui-même, jamais une reformulation déguisée d'une question.
 4) ÉVALUATION -- exactement 3 consignes, dans cet ordre de complexité croissante : la 1re consigne utilise un verbe de niveau N1 ou N2, la 2e un verbe de niveau N3, la 3e un verbe de niveau N4 (traiter une situation). Ne teste JAMAIS une notion qui n'a pas été réellement développée dans cette séance précise, même si elle semble proche.
 5) (Chantier H.4, lot 2) Une consigne qui demande de comparer, distinguer ou différencier plusieurs éléments vient TOUJOURS APRÈS que ces éléments ont été présentés/définis individuellement plus haut dans le Développement -- jamais une comparaison portant sur une notion pas encore introduite à ce stade de la fiche.`;
 }
@@ -6999,26 +7244,41 @@ TROIS EXEMPLES INTERDITS, à ne jamais reproduire sous cette forme : "Qu'est-ce 
 // laissait passer "Explique..." (singulier) comme s'il matchait "expliquer"
 // -- bug réel confirmé par ce test même, "Explique comment le sous-genre
 // aide le lecteur" (extrait tel quel de S2) ne déclenchait aucune non-
-// conformité alors que la règle l'exige au pluriel "Expliquez". Conjugue
-// donc chaque verbe à l'impératif pluriel explicitement (2e groupe -ir -> -
-// issez, ex. "définir" -> "définissez" ; 1er groupe -er -> -ez) plutôt que de
-// comparer un simple préfixe.
-function imperatifPlurielVerbeTaxonomique(verbeComplet) {
+// conformité alors que la règle l'exige au pluriel "Expliquez".
+// Chantier G (lot 4) : l'enseignant INVERSE cette exigence -- l'impératif
+// est désormais exigé à la 2e personne du SINGULIER ("Identifie", "Cite",
+// "Relève", "Justifie"...), remplaçant la règle du pluriel ci-dessus.
+// Conjugue chaque verbe à l'impératif singulier explicitement (2e groupe
+// -ir -> -is, ex. "définir" -> "définis" ; 1er groupe -er -> -e, ex.
+// "identifier" -> "identifie") plutôt que de comparer un simple préfixe
+// (même raisonnement que ci-dessus pour le pluriel). EXCEPTIONS_IMPERATIF_SINGULIER
+// couvre les 3 seuls verbes du référentiel dont le radical change de voyelle
+// à l'impératif (e/é muet devant une syllabe muette -> è) : "relever"/
+// "énumérer"/"interpréter" -> "relève"/"énumère"/"interprète" (toute
+// application mécanique de la règle générale -e/-er -> -e donnerait à tort
+// "releve"/"enumere"/"interprete", sans l'accent grave attendu).
+const EXCEPTIONS_IMPERATIF_SINGULIER = {
+  relever: 'relève',
+  'énumérer': 'énumère',
+  'interpréter': 'interprète'
+};
+function imperatifSingulierVerbeTaxonomique(verbeComplet) {
   // Seul le 1er mot (le verbe lui-même) sert à reconnaître un début de
-  // consigne conforme -- "traiter une situation" -> "traitez" seul, jamais
-  // la phrase entière "traitez une situation" (la consigne réelle dit
-  // généralement "Traitez LA situation suivante...", pas "une" : comparer la
+  // consigne conforme -- "traiter une situation" -> "traite" seul, jamais
+  // la phrase entière "traite une situation" (la consigne réelle dit
+  // généralement "Traite LA situation suivante...", pas "une" : comparer la
   // phrase entière aurait raté ce cas pourtant conforme).
-  const verbe = verbeComplet.split(/\s+/)[0];
-  if (/ir$/i.test(verbe)) return verbe.slice(0, -2) + 'issez';
-  if (/er$/i.test(verbe)) return verbe.slice(0, -2) + 'ez';
+  const verbe = verbeComplet.split(/\s+/)[0].toLowerCase();
+  if (EXCEPTIONS_IMPERATIF_SINGULIER[verbe]) return EXCEPTIONS_IMPERATIF_SINGULIER[verbe];
+  if (/ir$/i.test(verbe)) return verbe.slice(0, -2) + 'is';
+  if (/er$/i.test(verbe)) return verbe.slice(0, -2) + 'e';
   return verbe;
 }
 
 function calculerTauxConsignesSansVerbeTaxonomique(contenuHTML) {
   if (!contenuHTML) return { taux: 0, total: 0, nonConformes: [] };
   const $ = cheerio.load(contenuHTML);
-  const formes = TOUS_VERBES_TAXONOMIQUES.map(imperatifPlurielVerbeTaxonomique).map((r) => r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const formes = TOUS_VERBES_TAXONOMIQUES.map(imperatifSingulierVerbeTaxonomique).map((r) => r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const motifDebutVerbe = new RegExp(`^(?:${formes.join('|')})\\b`, 'i');
   const consignes = [];
   $('tr').each((_, tr) => {
@@ -7063,7 +7323,7 @@ async function regenererConsignesNonConformes(contenuHTML, nonConformes) {
     max_tokens: 1024,
     messages: [{
       role: 'user',
-      content: `Voici des consignes pédagogiques destinées à des élèves qui ne respectent pas la règle suivante : chaque consigne doit COMMENCER par un verbe à l'impératif, 2e personne du pluriel, choisi EXCLUSIVEMENT dans cette liste : ${listeVerbes}. Reformule CHACUNE des consignes ci-dessous pour qu'elle commence par un de ces verbes à l'impératif pluriel, SANS EN CHANGER LE SENS ni le contenu (même notion, mêmes éléments demandés) -- seule la formulation change. Jamais une question, jamais un verbe à une autre personne.
+      content: `Voici des consignes pédagogiques destinées à des élèves qui ne respectent pas la règle suivante : chaque consigne doit COMMENCER par un verbe à l'impératif, 2e personne du SINGULIER, choisi EXCLUSIVEMENT dans cette liste : ${listeVerbes}. Reformule CHACUNE des consignes ci-dessous pour qu'elle commence par un de ces verbes à l'impératif singulier, SANS EN CHANGER LE SENS ni le contenu (même notion, mêmes éléments demandés) -- seule la formulation change. Jamais une question, jamais un verbe à une autre personne.
 
 CONSIGNES À REFORMULER :
 ${listeConsignes}
@@ -7093,6 +7353,312 @@ Réponds UNIQUEMENT avec un tableau JSON, sans aucun texte avant ni après, au f
     nbCorrigees++;
   });
   return { contenuHTML: $.html($('body').length ? $('body') : $.root()), nbCorrigees };
+}
+
+// Chantier C (lot 4) : périmètre exact de Culture littéraire S1/S2 (2nde,
+// narrative UNIQUEMENT -- seul cas transmis avec une liste précise par
+// l'enseignant), relu contre le PDF officiel (cf. HABILETES_CONTENUS_OEUVRE_INTEGRALE.narrative.s1/s2,
+// mêmes notions). "obligatoires"/"interdits" : comparaison par sous-chaîne
+// normalisée (accents/casse ignorés) -- ne détecte donc qu'une copie
+// littérale, jamais une paraphrase (même limite assumée que partout
+// ailleurs dans l'appli, cf. verifierSituationRevelantContenuOeuvre).
+const CONTENUS_IMPOSES_CULTURE_LITTERAIRE = {
+  narrative: {
+    s1: {
+      obligatoires: ['roman', 'conte', 'épopée', 'nouvelle', 'intrigue', 'schéma narratif', 'schéma actantiel'],
+      interdits: ['sous-genre', 'autobiographie', 'mémoires', 'biographie']
+    },
+    s2: {
+      obligatoires: ["roman d'aventure", 'épistolaire', 'science-fiction', 'philosophique', 'drolatique', 'étiologique', 'didactique'],
+      interdits: ['policier', 'historique', 'psychologique', 'conte de fées', 'conte populaire', 'autobiographie', 'biographie', 'mémoires']
+    }
+  }
+};
+
+function obtenirContenusImposes(genreOeuvre, typeSeanceOeuvre, numeroSeance) {
+  if (genreOeuvre !== 'narrative' || typeSeanceOeuvre !== 'culture_litteraire') return null;
+  const table = CONTENUS_IMPOSES_CULTURE_LITTERAIRE.narrative;
+  const n = parseInt(numeroSeance, 10);
+  if (n === 1) return table.s1;
+  if (n === 2) return table.s2;
+  return null;
+}
+
+function construireConsigneContenusImposes(contenusImposes) {
+  if (!contenusImposes) return '';
+  return `
+
+CONTENUS IMPOSÉS (chantier C, lot 4, périmètre strict de CETTE séance) : le Développement et les Traces écrites ne portent QUE sur les notions suivantes, TOUTES obligatoires (assure-toi que chacune apparaisse explicitement) : ${contenusImposes.obligatoires.join(', ')}. N'introduis JAMAIS, même en passant ou à titre d'exemple, l'une des notions suivantes -- hors programme pour CETTE séance précise, même si elle te semble thématiquement proche : ${contenusImposes.interdits.join(', ')}.
+GUIDE D'EXÉCUTION (programme officiel) : évite de transformer cette séance en cours magistral -- illustre chaque notion par un COURT EXTRAIT (composé pour la séance, avec la mention "Extraits composés pour la séance.") plutôt qu'une définition seule, et mentionne dans la colonne "Supports didactiques" qu'une recherche documentaire préalable des élèves (au moins une semaine avant) est supposée avoir eu lieu.`;
+}
+
+// Chantier C (lot 4) : scanne UNIQUEMENT la colonne Activités de l'enseignant
+// et la colonne Traces écrites de la ligne DÉVELOPPEMENT (jamais Plan du
+// cours, déjà garanti titres-only par construirePlanDepuisTraces, ni le
+// tableau Habiletés/Contenus, déterministe depuis le catalogue -- chantier
+// B -- et donc déjà conforme par construction).
+function verifierPerimetreCultureLitteraire(contenuHTML, contenusImposes) {
+  if (!contenuHTML || !contenusImposes) return { interditsPresents: [], obligatoiresManquants: [] };
+  const $ = cheerio.load(contenuHTML);
+  let texte = '';
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    texte += ` ${$tr.children('td').eq(2).text()} ${$tr.children('td').eq(4).text()}`;
+  });
+  const texteNormalise = normaliserTexte(texte);
+  const interditsPresents = contenusImposes.interdits.filter((terme) => texteNormalise.includes(normaliserTexte(terme)));
+  const obligatoiresManquants = contenusImposes.obligatoires.filter((terme) => !texteNormalise.includes(normaliserTexte(terme)));
+  return { interditsPresents, obligatoiresManquants };
+}
+
+// Chantier G.2 (lot 4) : un corrigé avec "(ou X)"/"ou bien X" révèle
+// plusieurs réponses possibles pour une même consigne -- contraire à la
+// règle "une seule réponse défendable" déjà exigée par consigne (chantier
+// F.3, lot 3 : "UNE SEULE FORMULATION PAR CONSIGNE", corrigé dans les
+// Traces écrites de la ligne ÉVALUATION). Détection mécanique + UNE SEULE
+// régénération ciblée, même principe que regenererConsignesNonConformes.
+function detecterCorrigesAvecAlternative(contenuHTML) {
+  if (!contenuHTML) return [];
+  const $ = cheerio.load(contenuHTML);
+  const trouves = [];
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/[ÉE]VALUATION/i.test(premiereColonne)) return;
+    const $traces = $tr.children('td').eq(4);
+    if (!$traces.length) return;
+    $traces.find('p').each((_, p) => {
+      const texte = $(p).text().trim();
+      if (texte && /\(\s*ou\b|\bou\s+bien\b/i.test(texte)) trouves.push(texte);
+    });
+  });
+  return trouves;
+}
+
+async function regenererCorrigesAvecAlternative(contenuHTML, corriges) {
+  const $ = cheerio.load(contenuHTML);
+  const listeCorriges = corriges.map((c, i) => `${i + 1}. "${c}"`).join('\n');
+  const reponse = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: `Voici des corrigés qui proposent plusieurs réponses alternatives ("(ou ...)"/"ou bien ...") pour une même consigne, alors qu'une consigne ne doit avoir QU'UNE SEULE réponse défendable. Reformule CHACUN des corrigés ci-dessous pour ne garder QU'UNE SEULE réponse (la plus pertinente, en général la première citée), SANS alternative, sans changer le reste du contenu ni le sens général.
+
+CORRIGÉS À REFORMULER :
+${listeCorriges}
+
+Réponds UNIQUEMENT avec un tableau JSON, sans aucun texte avant ni après, au format exact :
+[{"original": "texte exact du corrigé original", "corrigee": "texte reformulé en une seule réponse"}]`
+    }]
+  });
+  const texteBrut = (reponse.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+  const correspondance = texteBrut.match(/\[[\s\S]*\]/);
+  if (!correspondance) return { contenuHTML, nbCorrigees: 0 };
+  let paires;
+  try {
+    paires = JSON.parse(correspondance[0]);
+  } catch (e) {
+    return { contenuHTML, nbCorrigees: 0 };
+  }
+  let nbCorrigees = 0;
+  $('td p').each((_, p) => {
+    const $p = $(p);
+    const texteActuel = $p.text().trim();
+    const paire = paires.find((x) => x && typeof x.original === 'string' && x.original.trim() === texteActuel);
+    if (!paire || typeof paire.corrigee !== 'string' || !paire.corrigee.trim()) return;
+    $p.text(paire.corrigee.trim());
+    nbCorrigees++;
+  });
+  return { contenuHTML: $.html($('body').length ? $('body') : $.root()), nbCorrigees };
+}
+
+// Chantier F (lot 4) : une consigne qui renvoie à "cet extrait"/"ce texte"/
+// "ce tableau"/"le corpus" exige qu'un support correspondant existe
+// RÉELLEMENT dans la MÊME ligne du déroulement (texte composé pour la
+// séance, avec la mention "composé(s) pour la séance", un vrai tableau, ou
+// une citation substantielle entre « » -- déjà en partie couvert par
+// garantiEvaluation/chantier F.3 lot 3 pour l'Évaluation spécifiquement ;
+// ce contrôle généralise à tout le déroulement et vérifie mécaniquement).
+const MOTIFS_REFERENCE_SUPPORT = /\bcet\s+extrait\b|\bce\s+texte\b|\bce\s+tableau\b|\ble\s+corpus\b/i;
+
+function detecterConsignesSansSupport(contenuHTML) {
+  if (!contenuHTML) return [];
+  const $ = cheerio.load(contenuHTML);
+  const trouvees = [];
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/D[ÉE]VELOPPEMENT|[ÉE]VALUATION/i.test(premiereColonne)) return;
+    const $enseignant = $tr.children('td').eq(2);
+    const $traces = $tr.children('td').eq(4);
+    if (!$enseignant.length || !$traces.length) return;
+    const texteTraces = $traces.text();
+    const supportPresentDansCetteLigne = $traces.find('table').length > 0
+      || /compos[ée]s?\s+pour\s+la\s+s[ée]ance/i.test(texteTraces)
+      || /«[^»]{15,}»/.test(texteTraces);
+    if (supportPresentDansCetteLigne) return;
+    $enseignant.find('p').each((_, p) => {
+      // Même traitement du tiret de liste que calculerTauxConsignesSansVerbeTaxonomique
+      // (chantier A lot 3, consigneMiseEnForme) -- jamais comparé/renvoyé au
+      // modèle avec son "- " devant, pour que regenererConsignesSansSupport
+      // puisse le retrouver par correspondance EXACTE quel que soit le format
+      // réellement utilisé par le modèle (bug réel trouvé lors du test de ce
+      // chantier : sans ce traitement, la correction ne matchait jamais et
+      // échouait silencieusement, 0 consigne corrigée sur 1 détectée).
+      const texte = $(p).text().trim().replace(/^-\s*/, '');
+      if (texte && MOTIFS_REFERENCE_SUPPORT.test(texte)) trouvees.push(texte);
+    });
+  });
+  return trouvees;
+}
+
+// Chantier F (lot 4) : UNE SEULE régénération ciblée -- plutôt que de risquer
+// d'inventer un support de toutes pièces (contraire à la règle anti-
+// fabrication de toute l'application), reformule la consigne pour qu'elle ne
+// dépende plus d'un support externe absent -- une consigne autonome portant
+// directement sur la notion déjà enseignée, jamais une fabrication de
+// contenu supplémentaire.
+async function regenererConsignesSansSupport(contenuHTML, consignes) {
+  const $ = cheerio.load(contenuHTML);
+  const liste = consignes.map((c, i) => `${i + 1}. "${c}"`).join('\n');
+  const reponse = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: `Voici des consignes qui renvoient à un support ("cet extrait"/"ce texte"/"ce tableau"/"le corpus") qui n'existe nulle part ailleurs dans la fiche. Reformule CHACUNE de ces consignes pour qu'elle ne dépende plus d'un support externe -- transforme-la en consigne autonome qui porte directement sur la notion déjà enseignée (sans renvoyer à un texte/tableau/extrait précis), SANS changer son niveau de difficulté ni son objectif pédagogique.
+
+CONSIGNES À REFORMULER :
+${liste}
+
+Réponds UNIQUEMENT avec un tableau JSON, sans aucun texte avant ni après, au format exact :
+[{"original": "texte exact de la consigne originale", "corrigee": "texte reformulé, autonome"}]`
+    }]
+  });
+  const texteBrut = (reponse.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+  const correspondance = texteBrut.match(/\[[\s\S]*\]/);
+  if (!correspondance) return { contenuHTML, nbCorrigees: 0 };
+  let paires;
+  try {
+    paires = JSON.parse(correspondance[0]);
+  } catch (e) {
+    return { contenuHTML, nbCorrigees: 0 };
+  }
+  let nbCorrigees = 0;
+  $('td p').each((_, p) => {
+    const $p = $(p);
+    const texteActuel = $p.text().trim();
+    const avecTiret = /^-\s*/.test(texteActuel);
+    const texteSansTiret = texteActuel.replace(/^-\s*/, '');
+    const paire = paires.find((x) => x && typeof x.original === 'string' && x.original.trim() === texteSansTiret);
+    if (!paire || typeof paire.corrigee !== 'string' || !paire.corrigee.trim()) return;
+    $p.text((avecTiret ? '- ' : '') + paire.corrigee.trim());
+    nbCorrigees++;
+  });
+  return { contenuHTML: $.html($('body').length ? $('body') : $.root()), nbCorrigees };
+}
+
+// Chantier E (lot 4) : vérifie que le Développement est structuré en 3
+// étapes numérotées (titres détectés par PATTERN_TITRE_SECTION_DOCX, même
+// source que construirePlanDepuisTraces) dont les durées -- "(15 mn)" en fin
+// de titre -- totalisent 45. Détection + avertissement uniquement (le lot ne
+// demande pas de régénération pour ce point précis, contrairement aux
+// chantiers C/F/G.2 ci-dessus) -- jamais un échec silencieux : un
+// avertissement explicite plutôt qu'une fiche non conforme présentée comme
+// fiable.
+function verifierDureesEtapesDeveloppement(contenuHTML) {
+  if (!contenuHTML) return null;
+  const $ = cheerio.load(contenuHTML);
+  let titres = [];
+  $('tr').each((_, tr) => {
+    const $tds = $(tr).children('td');
+    if ($tds.length < 5) return;
+    const premiereColonne = $tds.eq(0).text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    titres = $tds.eq(4).children('p')
+      .filter((_, p) => PATTERN_TITRE_SECTION_DOCX.test($(p).text().trim()))
+      .map((_, p) => $(p).text().trim())
+      .get();
+  });
+  if (!titres.length) return null;
+  const durees = titres.map((t) => {
+    const m = t.match(/\((\d+)\s*mn\b/i);
+    return m ? parseInt(m[1], 10) : null;
+  });
+  if (durees.length !== 3 || durees.some((d) => d === null)) {
+    return "Le Développement ne semble pas structuré en exactement 3 étapes numérotées avec une durée \"(X mn)\" chacune (chantier E) -- vérifiez les titres des Traces écrites.";
+  }
+  const somme = durees.reduce((a, b) => a + b, 0);
+  if (somme !== 45) {
+    return `Les durées des 3 étapes du Développement totalisent ${somme} mn au lieu de 45 mn -- vérifiez et corrigez la répartition.`;
+  }
+  return null;
+}
+
+// Chantier G.3 (lot 4) : la Situation d'apprentissage de Culture littéraire
+// (rédigée à la séance 1, cf. construireConsigneSituationApprentissageSeance1Lycee,
+// puis réinjectée verbatim aux séances suivantes) ne doit pas déjà révéler
+// plus d'1 terme de la liste CONTENUS IMPOSÉS de la séance -- elle doit
+// rester une accroche générique, jamais une annonce du contenu de la leçon.
+// Même limite que verifierSituationRevelantContenuOeuvre (Introduction) :
+// ne détecte qu'une copie littérale, jamais une paraphrase.
+function verifierSituationRevelePerimetre(contenuHTML, contenusImposes) {
+  if (!contenuHTML || !contenusImposes) return null;
+  const $ = cheerio.load(contenuHTML);
+  const $situation = $('p').filter((_, p) => /^Situation d'apprentissage\s*:/i.test($(p).text().trim())).first();
+  if (!$situation.length) return null;
+  const texteNorm = normaliserTexte($situation.text());
+  const termes = contenusImposes.obligatoires.filter((terme) => texteNorm.includes(normaliserTexte(terme)));
+  if (termes.length > 1) {
+    return `La Situation d'apprentissage mentionne déjà ${termes.length} notions du programme de cette séance (${termes.join(', ')}) -- elle doit rester une accroche générique qui ne révèle pas le contenu de la leçon (vérifiez et reformulez avant utilisation).`;
+  }
+  return null;
+}
+
+// Chantier C (lot 4) : UNE SEULE régénération ciblée (même principe que
+// regenererConsignesNonConformes) -- réécrit la seule cellule Traces écrites
+// du Développement (contenu substantiel de l'exposé) pour retirer les
+// notions interdites et couvrir les notions obligatoires manquantes, sans
+// toucher au reste de la fiche (entête, Habiletés/Contenus déjà
+// déterministe, Évaluation...).
+async function regenererPerimetreCultureLitteraire(contenuHTML, verif, contenusImposes) {
+  const $ = cheerio.load(contenuHTML);
+  let $celluleTraces = null;
+  $('tr').each((_, tr) => {
+    if ($celluleTraces) return;
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    $celluleTraces = $tr.children('td').eq(4);
+  });
+  if (!$celluleTraces || !$celluleTraces.length) return { contenuHTML, applique: false };
+  const texteActuel = $celluleTraces.text().trim();
+  if (!texteActuel) return { contenuHTML, applique: false };
+  const reponse = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    messages: [{
+      role: 'user',
+      content: `Voici le texte d'une section de cours (Traces écrites) qui ne respecte pas le périmètre imposé pour cette séance. Corrige-le selon les règles suivantes, SANS changer sa longueur approximative ni son style général :
+${verif.interditsPresents.length ? `- Retire TOUTE mention des notions suivantes, hors périmètre de cette séance : ${verif.interditsPresents.join(', ')}.` : ''}
+${verif.obligatoiresManquants.length ? `- Assure-toi que les notions suivantes, actuellement absentes ou insuffisamment développées, soient explicitement couvertes : ${verif.obligatoiresManquants.join(', ')}.` : ''}
+- Conserve la structure et les notions déjà conformes telles quelles.
+- N'invente aucun fait biographique, historique ou éditorial précis que tu ne connais pas avec certitude.
+
+TEXTE À CORRIGER :
+"${texteActuel}"
+
+Réponds UNIQUEMENT avec le texte corrigé, sans aucun commentaire ni balisage avant ou après.`
+    }]
+  });
+  const texteBrut = (reponse.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  if (!texteBrut) return { contenuHTML, applique: false };
+  const paragraphes = texteBrut.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  $celluleTraces.html(paragraphes.map((l) => `<p>${echapperHtml(l)}</p>`).join(''));
+  return { contenuHTML: $.html($('body').length ? $('body') : $.root()), applique: true };
 }
 
 // Libellé du champ Leçon (entête), calibré sur la fiche de référence
@@ -7374,8 +7940,35 @@ function construireConsigneSituationApprentissageSeance1Lycee(situationFournie, 
 //     connaissances réelles et vérifiées sur l'œuvre/l'auteur/le mouvement
 //     littéraire -- même garde-fou anti-fabrication que partout ailleurs
 //     dans l'application (rester général plutôt qu'inventer un fait incertain).
-function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvre, contenuFourni, situationApprentissage, numeroSeance, intituleOfficielSeance, biographieAuteur, themeOeuvre, approche }) {
+function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvre, contenuFourni, situationApprentissage, numeroSeance, intituleOfficielSeance, biographieAuteur, themeOeuvre, approche, entreesHabiletesCatalogue, contenusImposes }) {
   const contenu = (contenuFourni || '').toString().trim();
+  // Chantier C (lot 4) : périmètre strict (S1/S2 narrative 2nde uniquement) --
+  // cf. construireConsigneContenusImposes/CONTENUS_IMPOSES_CULTURE_LITTERAIRE.
+  const consigneContenusImposes = construireConsigneContenusImposes(contenusImposes);
+  // Chantier B (lot 4) : quand le catalogue officiel couvre cette séance
+  // (2nde uniquement), impose le tableau Habiletés/Contenus EXACT au modèle
+  // -- même principe que la "formule FIXE" déjà utilisée pour la Lecture
+  // méthodique (cf. habiletesLectureMethodique) -- en plus du filet
+  // mécanique qui le réécrit de toute façon après coup
+  // (injecterHabiletesContenusDeterministe) : les deux niveaux de défense
+  // réduisent le risque qu'un tableau absent ou trop différent du format
+  // attendu échappe au filet (qui repère le tableau par son en-tête exact).
+  const consigneHabiletesFixe = entreesHabiletesCatalogue
+    ? `
+
+TABLEAU HABILETÉS ET CONTENUS -- formule FIXE ci-dessous, gravée depuis le programme éducatif officiel (PDF DPFC), OBLIGATOIRE, NE JAMAIS la réinventer, la compléter ni l'adapter au contenu que tu développes par ailleurs dans cette séance :
+${formaterLignesHabiletesContenusPourPrompt(entreesHabiletesCatalogue)}`
+    : '';
+
+  // Chantier E (lot 4) : structure du Développement en 3 étapes numérotées,
+  // chacune avec sa propre durée (somme = 45 mn) et une stratégie d'une
+  // liste fermée -- vérifié mécaniquement après coup (cf.
+  // verifierDureesEtapesDeveloppement), avertissement uniquement si non
+  // conforme (ce point précis n'implique pas de régénération, cf. le lot).
+  const consigneDeveloppementStructureE = `
+
+CONSIGNE ABSOLUE -- STRUCTURE DU DÉVELOPPEMENT EN 3 ÉTAPES (chantier E, lot 4) : organise le Développement de cette séance en EXACTEMENT 3 étapes numérotées (1. 2. 3.), chacune avec sa propre durée en minutes indiquée ENTRE PARENTHÈSES à la fin du titre de l'étape dans les Traces écrites (ex. "1. Les genres en prose (15 mn)") -- la somme des 3 durées doit faire EXACTEMENT 45 (ex. 15 + 15 + 15, ou 20 + 15 + 10 selon ce que justifie le contenu réel de chaque étape). Chaque étape utilise UNE SEULE stratégie pédagogique, choisie EXCLUSIVEMENT dans cette liste fermée : Travail individuel, Travail en groupes, Échange verbal, Brainstorming, Discussion dirigée, Questionnement, Lecture silencieuse -- jamais une autre stratégie, jamais une étape sans stratégie précisée (indique-la entre parenthèses juste après la durée, ex. "1. Les genres en prose (15 mn, Échange verbal)"). La colonne "Stratégies pédagogiques/Plan du cours" de la ligne DÉVELOPPEMENT ne contient JAMAIS le texte complet des Traces écrites -- seulement les titres numérotés des 3 étapes (reproduits à l'identique depuis les Traces écrites, durée et stratégie comprises).`;
+
   const titre = (titreOeuvre || '').toString().trim();
   const auteur = (auteurOeuvre || '').toString().trim();
   const intituleOfficiel = (intituleOfficielSeance || '').toString().trim();
@@ -7561,7 +8154,7 @@ CONSIGNE ABSOLUE -- AUCUN "EXEMPLE :" INVENTÉ : dans les Traces écrites, n'ajo
 
 INSTRUCTIONS SPÉCIFIQUES -- CULTURE LITTÉRAIRE (exposé magistral de l'enseignant sur le contexte historique/littéraire/biographique de l'œuvre) : contrairement à l'Introduction et à la Conclusion, cette séance CONSERVE INTÉGRALEMENT la structure générique du tableau Habiletés/Contenus et du déroulement Présentation/Développement/Évaluation -- ne la remplace par aucune autre structure, aucune section I/II/III.
 
-${consigneContenu}${consigneSituation}${garantiEvaluation}${garantiAntiDuplication}${consigneVerbesAPC}${consigneMiseEnForme}${consigneHarmonisationFormeG}${consigneSupportsDidactiques}${consigneRegistreEvaluation}${consigneFactuelEtRegistreOI}${consigneAntiFabricationH}`;
+${consigneHabiletesFixe}${consigneContenusImposes}${consigneDeveloppementStructureE}${consigneContenu}${consigneSituation}${garantiEvaluation}${garantiAntiDuplication}${consigneVerbesAPC}${consigneMiseEnForme}${consigneHarmonisationFormeG}${consigneSupportsDidactiques}${consigneRegistreEvaluation}${consigneFactuelEtRegistreOI}${consigneAntiFabricationH}`;
 }
 
 // Lecture méthodique, SECOND CYCLE (23/09, corrigé le 25/09) : contrairement
@@ -7690,7 +8283,7 @@ ${sujets}`;
 // d'étude est TOUJOURS fourni par l'enseignant, jamais généré (cf. validation
 // bloquante dans /api/generer-fiche) -- c'est le seul champ non négociable,
 // même en Mode 1 (reste de la séance auto-générée).
-function construireInstructionsIntroductionOeuvreLycee({ genreOeuvre, titreOeuvre, auteurOeuvre, axeEtude, biographieAuteur, themeOeuvre, personnagesOeuvre, lieuxOeuvre, corpusTextesGT, situationApprentissage }) {
+function construireInstructionsIntroductionOeuvreLycee({ genreOeuvre, titreOeuvre, auteurOeuvre, axeEtude, biographieAuteur, themeOeuvre, personnagesOeuvre, lieuxOeuvre, corpusTextesGT, situationApprentissage, contexteHistoriqueLitteraire, paratexteCouvertures, structureOeuvre }) {
   const titre = (titreOeuvre || '').toString().trim();
   const auteur = (auteurOeuvre || '').toString().trim();
   const axe = (axeEtude || '').toString().trim();
@@ -7754,6 +8347,26 @@ RAPPEL FINAL : ta réponse ne contient QUE les parties I à IV en texte libre --
     ? `\nLieux et espace : t'appuyer EXACTEMENT sur cette description fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${lieux}"`
     : '';
 
+  // Chantier D (lot 4) : 3 champs optionnels supplémentaires de la section
+  // II (Guide d'exécution officiel, Séance 3 : "analyser le paratexte... /
+  // analyser la structure externe et interne de l'œuvre / situer l'œuvre
+  // dans son contexte littéraire, historique ou dans un courant littéraire"
+  // -- cf. PDF programme officiel, page 32) -- même règle stricte que
+  // Thème/Personnages ci-dessus : champ vide = bloc ABSENT de la réponse,
+  // jamais un remplissage générique.
+  const contexteHistLitt = (contexteHistoriqueLitteraire || '').toString().trim();
+  const paratexte = (paratexteCouvertures || '').toString().trim();
+  const structure = (structureOeuvre || '').toString().trim();
+  const consigneContexteHistLitt = contexteHistLitt
+    ? `\nContexte historique/littéraire : t'appuyer EXACTEMENT sur ces informations fournies par l'enseignant, sans y ajouter ni en retirer aucun détail : "${contexteHistLitt}"`
+    : '';
+  const consigneParatexte = paratexte
+    ? `\nParatexte (1re et 4e de couverture) : t'appuyer EXACTEMENT sur cette description fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${paratexte}"`
+    : '';
+  const consigneStructureOeuvre = structure
+    ? `\nStructure de l'œuvre : t'appuyer EXACTEMENT sur cette description fournie par l'enseignant, sans y ajouter ni en retirer aucun détail : "${structure}"`
+    : '';
+
   // Chantier D.4/D.5 (05/10, signalements enseignant) : graphie du nom de
   // l'auteur strictement identique à la saisie partout dans la fiche
   // (constaté : "Keita"/"Keïta" mélangés dans une même fiche réelle) ;
@@ -7800,7 +8413,7 @@ ${consigneBibliographie}
 II- Présentation de l'œuvre
 Présente le genre du récit ou de la pièce (roman, pièce de théâtre...) en 1-2 phrases (pas le thème -- traité séparément ci-dessous). CONSIGNE ABSOLUE (chantier I, lot 3) : pas de remplissage générique qui pourrait s'appliquer à n'importe quel roman (interdites : "intrigue complexe avec des personnages nuancés", "structure narrative détaillée et des descriptions enrichies", ou toute formule de ce type qui ne dit rien de spécifique à CETTE œuvre précise) -- limite-toi à nommer le genre et, si tu les connais avec certitude, un ou deux traits réellement distinctifs de cette œuvre précise ; à défaut, une seule phrase brève et factuelle suffit (ex. "Rebelle est un roman.").
 ${consigneTheme}
-${consignePersonnages}${consigneLieux}
+${consignePersonnages}${consigneLieux}${consigneContexteHistLitt}${consigneParatexte}${consigneStructureOeuvre}
 
 III- Axe d'étude
 "${axe}" -- cet axe est fourni par l'enseignant, OBLIGATOIRE, jamais à reformuler ni à remplacer par un autre axe de ton choix, reproduit ici EXACTEMENT comme fourni, mot pour mot, sans reformulation (c'est lui qui sera repris tel quel en Conclusion, à la fin de la séquence).
@@ -8360,7 +8973,16 @@ function limiterGenerationParIp(req, res, next) {
       // des poèmes/textes retenus par l'enseignant, un par ligne : titre,
       // auteur, date -- jamais devinée par le modèle, cf. validation
       // bloquante ci-dessous).
-      corpusTextesGT = ''
+      corpusTextesGT = '',
+      // Chantier D (lot 4) : 3 champs optionnels supplémentaires de la
+      // Séance 3 (Introduction, narrative/théâtrale -- cf. Guide d'exécution
+      // officiel, "analyser le paratexte... la structure externe et
+      // interne... situer l'œuvre dans son contexte littéraire/historique").
+      // Backend prêt à les recevoir dès que le formulaire les enverra (aucun
+      // champ de formulaire ajouté côté frontend dans ce lot, cf. ÉTAT FINAL) --
+      // absence = omis entièrement de la réponse, jamais un remplissage
+      // générique (même règle que themeOeuvre/personnagesOeuvre ci-dessus).
+      contexteHistoriqueLitteraire = '', paratexteCouvertures = '', structureOeuvre = ''
     } = req.body;
     const estOeuvreIntegrale = sousModule === 'oeuvre_integrale';
     // Second cycle (13/09) : catalogue-piloté, jamais la structure fixe
@@ -8807,7 +9429,11 @@ function limiterGenerationParIp(req, res, next) {
           genreOeuvre: genreOeuvreOI, titreOeuvre, auteurOeuvre, axeEtude,
           biographieAuteur: biographieEffective, themeOeuvre: themeEffectif,
           personnagesOeuvre, lieuxOeuvre, corpusTextesGT,
-          situationApprentissage: situationApprentissageOeuvre
+          situationApprentissage: situationApprentissageOeuvre,
+          // Chantier D (lot 4) : 3 champs optionnels (backend uniquement --
+          // cf. ÉTAT FINAL, aucun champ de formulaire ajouté côté frontend
+          // dans ce lot faute de temps) -- rendus seulement si remplis.
+          contexteHistoriqueLitteraire, paratexteCouvertures, structureOeuvre
         });
       } else if (typeSeanceOI === 'conclusion') {
         systemPrompt += construireInstructionsConclusionOeuvreLycee({
@@ -8845,7 +9471,14 @@ function limiterGenerationParIp(req, res, next) {
           titreOeuvre, auteurOeuvre, contenuFourni: contenuLibreCultureLitteraire,
           situationApprentissage: situationApprentissageOeuvre, numeroSeance: seance,
           intituleOfficielSeance: seanceCatalogueOI && seanceCatalogueOI.intitule,
-          biographieAuteur: biographieEffectiveCL, themeOeuvre: themeEffectifCL, approche
+          biographieAuteur: biographieEffectiveCL, themeOeuvre: themeEffectifCL, approche,
+          // Chantier B (lot 4) : formule fixe du tableau Habiletés/Contenus,
+          // gravée depuis le PDF officiel -- 2nde UNIQUEMENT (cf. commentaire
+          // sur le gate profilInfoOI.profil === '2nde' au post-traitement).
+          entreesHabiletesCatalogue: profilInfoOI.profil === '2nde' ? obtenirHabiletesContenusCatalogue(genreOeuvreOI, 'culture_litteraire', seance) : null,
+          // Chantier C (lot 4) : périmètre strict S1/S2 narrative 2nde
+          // (seul cas transmis avec une liste précise par l'enseignant).
+          contenusImposes: profilInfoOI.profil === '2nde' ? obtenirContenusImposes(genreOeuvreOI, 'culture_litteraire', seance) : null
         });
       } else if (typeSeanceOI === 'lecture_methodique') {
         // 23/09, corrigé le 25/09 : Mode "plan fourni par l'enseignant" seul
@@ -9458,6 +10091,28 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         contenuHTML = corrigerCasseLeconSeanceCorps(contenuHTML, leconAfficheeOI, seanceAfficheeOI);
         // Chantier G.3 (lot 3) : crochets littéraux résiduels.
         contenuHTML = nettoyerCrochetsLitteraux(contenuHTML);
+        // Chantier G.4 (lot 4) : équilibre des guillemets dans les colonnes
+        // Activités enseignant/élèves.
+        contenuHTML = corrigerGuillemetsNonFermes(contenuHTML);
+        // Chantier B (lot 4) : tableau Habiletés/Contenus rendu de façon
+        // déterministe depuis le catalogue officiel, jamais laissé au LLM
+        // (cf. commentaire sur HABILETES_CONTENUS_OEUVRE_INTEGRALE) -- pour
+        // Culture littéraire (séances 1/2) et le bloc de construction du
+        // sens (Lecture méthodique/dirigée/Exposé, séances 4-11/4-7-9)
+        // UNIQUEMENT : Introduction/Conclusion n'ont jamais ce tableau (leur
+        // propre structure I/II/III le remplace déjà entièrement). Gate
+        // profilInfoOI.profil === '2nde' INDISPENSABLE : ce catalogue est
+        // gravé depuis le PDF "PROGRAMMES EDUCATIFS DES CLASSES DE SECONDE",
+        // exclusif à la 2nde -- 1ère/Tle ont un programme différent (classes
+        // et œuvres distinctes) pour un même genreOeuvre, jamais couvert ici.
+        {
+          const entreesHabiletesCatalogue = (profilInfoOI && profilInfoOI.profil === '2nde')
+            ? obtenirHabiletesContenusCatalogue(genreOeuvreOI, typeSeanceOI, seance)
+            : null;
+          if (entreesHabiletesCatalogue) {
+            contenuHTML = injecterHabiletesContenusDeterministe(contenuHTML, entreesHabiletesCatalogue);
+          }
+        }
         // Chantier F.5 (lot 2) : tableaux comparatifs écrits en Markdown
         // brut (Traces écrites, S1/S2) -> vrais <table> -- AVANT la
         // restructuration ci-dessous pour que les "|" résiduels ne soient
@@ -9539,6 +10194,15 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           // 2e génération de la fiche entière (cf. le commentaire détaillé
           // sur regenererConsignesNonConformes pour le raisonnement complet).
           const { taux, total, nonConformes } = calculerTauxConsignesSansVerbeTaxonomique(contenuHTML);
+          // Chantier G.1 (lot 4) : journalise TOUT verbe hors liste dès qu'il
+          // est détecté, indépendamment du seuil de 30% ci-dessous (qui ne
+          // déclenche qu'une régénération, pas un simple suivi) -- permet de
+          // repérer les verbes récurrents hors taxonomie pour enrichir la
+          // liste "à valider" dans un futur lot, sans attendre qu'ils
+          // dépassent ce seuil.
+          if (nonConformes.length) {
+            console.log(`📋 Chantier G.1 -- verbe(s) hors taxonomie détecté(s) (${nonConformes.length}/${total}) :`, nonConformes.map((c) => c.split(/\s+/)[0]));
+          }
           if (total > 0 && taux > 0.3) {
             console.log(`⚠️ Chantier E -- ${nonConformes.length}/${total} consigne(s) non conformes (verbe taxonomique manquant), régénération ciblée déclenchée :`, nonConformes);
             try {
@@ -9552,6 +10216,114 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
             if (verif.total > 0 && verif.taux > 0.3) {
               console.log(`⚠️ Chantier E -- encore ${verif.nonConformes.length}/${verif.total} non conforme(s) après régénération, avertissement affiché.`);
               res.write(`data: ${JSON.stringify({ avertissement: `${verif.nonConformes.length} consigne(s) du Développement sur ${verif.total} ne commencent toujours pas par un verbe de la taxonomie DPFC après une tentative de correction automatique -- vérifiez et reformulez-les en consignes d'action avant utilisation.` })}\n\n`);
+            }
+          }
+        }
+        // Chantier E (lot 4) : structure 3 étapes + durées = 45 mn --
+        // détection + avertissement uniquement (cf. commentaire sur
+        // verifierDureesEtapesDeveloppement).
+        if (typeSeanceOI === 'culture_litteraire') {
+          const avertissementDurees = verifierDureesEtapesDeveloppement(contenuHTML);
+          if (avertissementDurees) {
+            res.write(`data: ${JSON.stringify({ avertissement: avertissementDurees })}\n\n`);
+          }
+        }
+        // Chantier F (lot 4) : consigne qui renvoie à un support absent --
+        // UNE SEULE régénération ciblée, journalisée. Scopé à Culture
+        // littéraire : Lecture méthodique a son propre mécanisme de texte
+        // support (texteSupport fourni par l'enseignant, cf.
+        // construireInstructionsLectureMethodiqueLycee) où "ce texte" est un
+        // renvoi légitime, jamais un support absent.
+        if (typeSeanceOI === 'culture_litteraire') {
+          const consignesSansSupport = detecterConsignesSansSupport(contenuHTML);
+          if (consignesSansSupport.length) {
+            console.log(`⚠️ Chantier F -- ${consignesSansSupport.length} consigne(s) renvoyant à un support absent, régénération ciblée déclenchée :`, consignesSansSupport);
+            try {
+              const resultatRegenSupport = await regenererConsignesSansSupport(contenuHTML, consignesSansSupport);
+              contenuHTML = resultatRegenSupport.contenuHTML;
+              console.log(`✅ Chantier F -- régénération ciblée : ${resultatRegenSupport.nbCorrigees}/${consignesSansSupport.length} consigne(s) reformulée(s).`);
+            } catch (e) {
+              console.error('❌ Chantier F -- échec de la régénération ciblée (fiche conservée telle quelle) :', e.message);
+            }
+            const verifSupport = detecterConsignesSansSupport(contenuHTML);
+            if (verifSupport.length) {
+              console.log(`⚠️ Chantier F -- encore ${verifSupport.length} consigne(s) sans support après régénération, avertissement affiché.`);
+              res.write(`data: ${JSON.stringify({ avertissement: `${verifSupport.length} consigne(s) renvoient encore à un support ("cet extrait"/"ce texte"/"ce tableau"/"le corpus") qui n'existe nulle part dans la fiche après une tentative de correction automatique -- vérifiez et corrigez avant utilisation.` })}\n\n`);
+            }
+          }
+        }
+        // Chantier G.2 (lot 4) : corrigé avec alternative ("(ou ...)"/"ou
+        // bien ...") -- UNE SEULE régénération ciblée, journalisée.
+        if (typeSeanceOI === 'culture_litteraire') {
+          const corrigesAvecAlternative = detecterCorrigesAvecAlternative(contenuHTML);
+          if (corrigesAvecAlternative.length) {
+            console.log(`⚠️ Chantier G.2 -- ${corrigesAvecAlternative.length} corrigé(s) avec alternative détecté(s), régénération ciblée déclenchée :`, corrigesAvecAlternative);
+            try {
+              const resultatRegenCorriges = await regenererCorrigesAvecAlternative(contenuHTML, corrigesAvecAlternative);
+              contenuHTML = resultatRegenCorriges.contenuHTML;
+              console.log(`✅ Chantier G.2 -- régénération ciblée : ${resultatRegenCorriges.nbCorrigees}/${corrigesAvecAlternative.length} corrigé(s) reformulé(s).`);
+            } catch (e) {
+              console.error('❌ Chantier G.2 -- échec de la régénération ciblée (fiche conservée telle quelle) :', e.message);
+            }
+            const verifCorriges = detecterCorrigesAvecAlternative(contenuHTML);
+            if (verifCorriges.length) {
+              console.log(`⚠️ Chantier G.2 -- encore ${verifCorriges.length} corrigé(s) avec alternative après régénération, avertissement affiché.`);
+              res.write(`data: ${JSON.stringify({ avertissement: `${verifCorriges.length} corrigé(s) de l'Évaluation proposent encore plusieurs réponses alternatives après une tentative de correction automatique -- vérifiez et ne gardez qu'une seule réponse avant utilisation.` })}\n\n`);
+            }
+          }
+        }
+        // Chantier C (lot 4) : périmètre strict S1/S2 narrative 2nde --
+        // contrôle déterministe + UNE SEULE régénération ciblée (journalisée),
+        // même principe que le chantier E ci-dessus. S'applique indépendamment
+        // de l'approche (contrairement au chantier E, scopé APC uniquement) --
+        // le périmètre officiel du programme n'est pas une règle APC.
+        if (typeSeanceOI === 'culture_litteraire') {
+          const contenusImposesVerif = (profilInfoOI && profilInfoOI.profil === '2nde')
+            ? obtenirContenusImposes(genreOeuvreOI, typeSeanceOI, seance)
+            : null;
+          if (contenusImposesVerif) {
+            let verifPerimetre = verifierPerimetreCultureLitteraire(contenuHTML, contenusImposesVerif);
+            if (verifPerimetre.interditsPresents.length || verifPerimetre.obligatoiresManquants.length) {
+              console.log('⚠️ Chantier C -- périmètre non respecté, régénération ciblée déclenchée :', verifPerimetre);
+              try {
+                const resultatRegenPerimetre = await regenererPerimetreCultureLitteraire(contenuHTML, verifPerimetre, contenusImposesVerif);
+                if (resultatRegenPerimetre.applique) {
+                  contenuHTML = resultatRegenPerimetre.contenuHTML;
+                  // Bug réel trouvé en testant ce chantier : la colonne Plan
+                  // du cours a été construite UNE FOIS depuis les Traces
+                  // écrites AVANT cette régénération (cf.
+                  // construirePlanDepuisTraces, chantier C lot 3) -- sans ce
+                  // nouvel appel, elle resterait affichée avec les anciens
+                  // titres (notion interdite encore visible dans le Plan
+                  // alors qu'elle vient d'être retirée des Traces). Rejoue
+                  // donc la reconstruction pour resynchroniser le Plan sur
+                  // les Traces corrigées.
+                  contenuHTML = construirePlanDepuisTraces(contenuHTML);
+                  console.log('✅ Chantier C -- régénération ciblée du périmètre appliquée (Plan du cours resynchronisé).');
+                }
+              } catch (e) {
+                console.error('❌ Chantier C -- échec de la régénération ciblée (fiche conservée telle quelle) :', e.message);
+              }
+              verifPerimetre = verifierPerimetreCultureLitteraire(contenuHTML, contenusImposesVerif);
+              if (verifPerimetre.interditsPresents.length || verifPerimetre.obligatoiresManquants.length) {
+                console.log('⚠️ Chantier C -- périmètre encore non respecté après régénération, avertissement affiché.', verifPerimetre);
+                const detail = [
+                  verifPerimetre.interditsPresents.length ? `notion(s) hors programme encore présente(s) : ${verifPerimetre.interditsPresents.join(', ')}` : '',
+                  verifPerimetre.obligatoiresManquants.length ? `notion(s) obligatoire(s) encore absente(s) : ${verifPerimetre.obligatoiresManquants.join(', ')}` : ''
+                ].filter(Boolean).join(' ; ');
+                res.write(`data: ${JSON.stringify({ avertissement: `Le périmètre officiel de cette séance n'est toujours pas respecté après une tentative de correction automatique (${detail}) -- vérifiez et corrigez le Développement avant utilisation.` })}\n\n`);
+              }
+            }
+            // Chantier G.3 (lot 4) : situation d'apprentissage rédigée
+            // uniquement à la séance 1 (cf. commentaire sur
+            // construireConsigneSituationApprentissageSeance1Lycee) --
+            // vérifiée ici une seule fois, jamais ré-signalée aux séances
+            // suivantes qui ne font que la réinjecter verbatim.
+            if (parseInt(seance, 10) === 1) {
+              const avertissementSituationPerimetre = verifierSituationRevelePerimetre(contenuHTML, contenusImposesVerif);
+              if (avertissementSituationPerimetre) {
+                res.write(`data: ${JSON.stringify({ avertissement: avertissementSituationPerimetre })}\n\n`);
+              }
             }
           }
         }
