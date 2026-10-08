@@ -5793,10 +5793,16 @@ function corrigerThemeConfonduAvecAuteur(contenuHTML, auteur) {
 // "votre établissement", avec correction de l'article qui précède pour
 // rester grammaticalement correct ("du" -> "de", "au" -> "à", "le" retiré
 // purement et simplement puisque "votre" ne prend jamais d'article).
-// Exige un nom propre (majuscule) juste après "de" -- jamais une expression
-// générique comme "lycée de jeunes filles" (minuscule), qui n'est pas un nom
-// d'établissement inventé.
-const RE_ETABLISSEMENT_INVENTE = /\b(?:(du|au|le)\s+)?((?:lycée|collège)(?:\s+moderne)?)\s+de\s+[A-ZÀ-ÝŒÇ][\p{L}'’-]*(?:\s+[A-ZÀ-ÝŒÇ][\p{L}'’-]*){0,3}/gu;
+// Exige un nom propre (majuscule) juste après la préposition -- jamais une
+// expression générique comme "lycée de jeunes filles" (minuscule), qui n'est
+// pas un nom d'établissement inventé.
+// Chantier 1 (lot 7, bug réel confirmé sur le docx réel fourni : "la
+// médiathèque du lycée d'Abidjan" n'était PAS remplacé) : la préposition
+// reliant "lycée"/"collège" au nom propre n'est pas toujours "de" -- "d'"
+// (élision devant voyelle, "d'Abidjan"), "du" (contraction "de le", ex. "du
+// Plateau") et "des" (contraction "de les", nom propre pluriel) sont tout
+// aussi courants et doivent être couverts de la même façon.
+const RE_ETABLISSEMENT_INVENTE = /\b(?:(du|au|le)\s+)?((?:lycée|collège)(?:\s+moderne)?)\s+(?:(?:de|du|des)\s+|d['’])[A-ZÀ-ÝŒÇ][\p{L}'’-]*(?:\s+[A-ZÀ-ÝŒÇ][\p{L}'’-]*){0,3}/gu;
 
 function corrigerEtablissementInvente(contenuHTML) {
   if (!contenuHTML) return contenuHTML;
@@ -7365,6 +7371,112 @@ function imperatifSingulierVerbeTaxonomique(verbeComplet) {
   return verbe;
 }
 
+// Chantier 4 (lot 7) : deux listes fermées données par l'enseignant pour
+// corriger déterministiquement un infinitif laissé par le modèle au lieu de
+// la forme conjuguée attendue, AVANT le contrôle/la régénération ciblée
+// (chantier E) -- une conversion gratuite qui réduit d'autant les
+// régénérations réellement nécessaires :
+// - verbes ADRESSÉS AUX ÉLÈVES (cognitifs/taxonomiques) -> impératif 2e
+//   personne du SINGULIER ("tu"), ex. "Définir" -> "Définis" ;
+// - actions DU PROFESSEUR (gestion de classe) -> 3e personne du présent,
+//   sans sujet, ex. "Diviser" -> "Divise" -- même orthographe que
+//   l'impératif "tu" pour un verbe du 1er groupe, donc une seule et même
+//   conversion mécanique suffit pour les deux cas.
+const VERBES_ELEVES_INFINITIF_VERS_IMPERATIF = {
+  'définir': 'Définis', 'distinguer': 'Distingue', 'énumérer': 'Énumère', 'citer': 'Cite',
+  'expliquer': 'Explique', 'analyser': 'Analyse', 'relever': 'Relève', 'classer': 'Classe',
+  'présenter': 'Présente', 'comparer': 'Compare', 'déterminer': 'Détermine'
+};
+const VERBES_PROFESSEUR_INFINITIF_VERS_PRESENT = {
+  'diviser': 'Divise', 'distribuer': 'Distribue', 'circuler': 'Circule', 'inviter': 'Invite'
+};
+// Formes (infinitif ET déjà conjuguées) des actions du professeur -- à
+// exclure du décompte "X consignes sur Y" (chantier E), qui ne doit compter
+// QUE les vraies consignes adressées aux élèves. "demande"/"demander" ajoutés
+// (lot 7) : c'est le verbe de remplacement utilisé par
+// corrigerVerbeProfesseurErroneAvantCitationVouvoiement ci-dessus -- une
+// ligne qu'il vient de corriger en introduction du professeur ne doit
+// jamais, elle non plus, être comptée comme une consigne élève manquante.
+const VERBES_PROFESSEUR_TOUTES_FORMES = new Set([
+  ...Object.keys(VERBES_PROFESSEUR_INFINITIF_VERS_PRESENT),
+  ...Object.values(VERBES_PROFESSEUR_INFINITIF_VERS_PRESENT).map((v) => v.toLowerCase()),
+  'demande', 'demander'
+]);
+
+// Chantier 4 (lot 7) : applique les deux conversions ci-dessus à chaque
+// ligne de la colonne Activités de l'enseignant du Développement dont le
+// premier mot est un infinitif de l'une des deux listes -- jamais aux
+// lignes déjà correctement conjuguées (no-op, idempotent).
+function corrigerInfinitifsConsignesDeveloppement(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    const $enseignant = $tr.children('td').eq(2);
+    if (!$enseignant.length) return;
+    $enseignant.find('p').each((_, p) => {
+      const $p = $(p);
+      const texte = $p.text();
+      const m = texte.match(/^(\s*-?\s*)([A-ZÉÈÀÎ][a-zéèàîïôûâêç]+)(.*)$/s);
+      if (!m) return;
+      const [, prefixe, premierMot, reste] = m;
+      // Bug réel trouvé en testant ce chantier : normaliserTexte() retire
+      // les accents ("Définir" -> "definir"), alors que les clés des deux
+      // tables ci-dessus les conservent ("définir") -- comparaison toujours
+      // fausse pour tout verbe accentué (Définir/Énumérer/Déterminer...),
+      // ne fonctionnant QUE par coïncidence pour les verbes sans accent
+      // (Distinguer/Citer/Diviser/Distribuer/Circuler/Inviter/Analyser...).
+      // Simple minuscule, accents conservés, pour comparer avec les clés
+      // telles qu'écrites.
+      const motMinuscule = premierMot.toLowerCase();
+      const remplacement = VERBES_ELEVES_INFINITIF_VERS_IMPERATIF[motMinuscule] || VERBES_PROFESSEUR_INFINITIF_VERS_PRESENT[motMinuscule];
+      if (!remplacement) return;
+      $p.text(`${prefixe}${remplacement}${reste}`);
+      modifie = true;
+    });
+  });
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
+// Chantier 4 (lot 7, bug réel confirmé sur S2 : "- Identifie les trois
+// sous-genres du roman : « Nommez les trois sous-genres... »") : une ligne
+// commence par un verbe déjà conjugué à l'impératif "tu" (normalement
+// adressé aux élèves) mais cite, entre guillemets, une parole du professeur
+// au vouvoiement ("Nommez...") -- signe que la ligne est en réalité une
+// introduction DU PROFESSEUR mal étiquetée avec un verbe élève. Remplace ce
+// verbe de tête par "Demande", convention déjà utilisée ailleurs dans la
+// même colonne pour ce type de ligne (ex. "Demande : « Quelle est... »").
+function corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  const formesEleves = new Set(Object.values(VERBES_ELEVES_INFINITIF_VERS_IMPERATIF).map((v) => v.toLowerCase()));
+  TOUS_VERBES_TAXONOMIQUES.forEach((v) => formesEleves.add(imperatifSingulierVerbeTaxonomique(v).toLowerCase()));
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    const $enseignant = $tr.children('td').eq(2);
+    if (!$enseignant.length) return;
+    $enseignant.find('p').each((_, p) => {
+      const $p = $(p);
+      const texte = $p.text();
+      const m = texte.match(/^(\s*-?\s*)([A-ZÉÈÀÎ][a-zéèàîïôûâêç]+)(\s[^:]*:\s*«\s*[A-ZÉÈÀÎ][a-zéèàûô]*ez\b.*)$/s);
+      if (!m) return;
+      const [, prefixe, premierMot, reste] = m;
+      if (!formesEleves.has(premierMot.toLowerCase())) return;
+      $p.text(`${prefixe}Demande${reste}`);
+      modifie = true;
+    });
+  });
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
 function calculerTauxConsignesSansVerbeTaxonomique(contenuHTML) {
   if (!contenuHTML) return { taux: 0, total: 0, nonConformes: [] };
   const $ = cheerio.load(contenuHTML);
@@ -7379,7 +7491,12 @@ function calculerTauxConsignesSansVerbeTaxonomique(contenuHTML) {
     if (!colonneEnseignant.length) return;
     colonneEnseignant.find('p').each((_, p) => {
       const texte = $(p).text().trim().replace(/^-\s*/, '');
-      if (texte) consignes.push(texte);
+      // Chantier 4 (lot 7) : exclut les actions du professeur (liste fermée
+      // diviser/distribuer/circuler/inviter, infinitif ou déjà conjuguée) --
+      // ce ne sont jamais de vraies consignes aux élèves, elles ne doivent
+      // donc jamais entrer dans le compteur "X consignes sur Y" ni dans son
+      // dénominateur.
+      if (texte && !VERBES_PROFESSEUR_TOUTES_FORMES.has(normaliserTexte(texte.split(/\s+/)[0]))) consignes.push(texte);
     });
   });
   const nonConformes = consignes.filter((texte) => !motifDebutVerbe.test(texte));
@@ -7460,7 +7577,16 @@ const CONTENUS_IMPOSES_CULTURE_LITTERAIRE = {
     },
     s2: {
       obligatoires: ["roman d'aventure", 'épistolaire', 'science-fiction', 'philosophique', 'drolatique', 'étiologique', 'didactique'],
-      interdits: ['policier', 'historique', 'psychologique', 'conte de fées', 'conte populaire', 'autobiographie', 'biographie', 'mémoires']
+      // Chantier 5a (lot 7, bug réel confirmé sur S2) : "historique" seul
+      // était un faux positif -- il apparaît légitimement dans la propre
+      // définition officielle de l'épopée ("contexte historique ou
+      // légendaire", cf. HABILETES_CONTENUS_OEUVRE_INTEGRALE), un genre
+      // OBLIGATOIRE de cette même séance. Le terme réellement interdit est
+      // le sous-genre "roman historique" (hors programme pour S2), jamais
+      // la simple mention d'un contexte historique -- même principe que
+      // "conte de fées"/"conte populaire" ci-dessous, déjà des phrases
+      // spécifiques plutôt que des mots isolés.
+      interdits: ['policier', 'roman historique', 'psychologique', 'conte de fées', 'conte populaire', 'autobiographie', 'biographie', 'mémoires']
     }
   }
 };
@@ -7474,12 +7600,25 @@ function obtenirContenusImposes(genreOeuvre, typeSeanceOeuvre, numeroSeance) {
   return null;
 }
 
-function construireConsigneContenusImposes(contenusImposes) {
+function construireConsigneContenusImposes(contenusImposes, numeroSeance) {
   if (!contenusImposes) return '';
+  // Chantier 7 (lot 7, prompt-only -- AUCUN contrôle mécanique) : S2 exige
+  // de traiter l'habileté "Présenter les auteurs de quelques œuvres..." du
+  // catalogue officiel (cf. HABILETES_CONTENUS_OEUVRE_INTEGRALE.narrative.s2)
+  // par au moins une consigne élève, jamais seulement par le tableau
+  // Habiletés/Contenus -- sans jamais inventer de fait biographique
+  // (s'appuie sur la recherche documentaire déjà annoncée dans les
+  // Supports). Non vérifiable mécaniquement (aucun moyen fiable de
+  // distinguer une vraie consigne de ce type d'une autre sans comprendre son
+  // sens) -- prompt-only, explicitement signalé comme tel en ÉTAT FINAL.
+  const consigneHabiletePresenter = Number(numeroSeance) === 2
+    ? `
+CONSIGNE -- HABILETÉ "PRÉSENTER" (chantier 7, lot 7) : le tableau Habiletés/Contenus de cette séance comporte l'habileté "Présenter les auteurs de quelques œuvres narratives...". Inclus donc, dans le Développement, AU MOINS une consigne élève du type "Présente l'auteur de l'œuvre que tu as recherchée" (ou formulation équivalente), explicitement rattachée à la recherche documentaire déjà annoncée dans les Supports didactiques -- SANS jamais inventer toi-même un fait biographique précis sur un auteur réel que tu ne connais pas avec certitude : laisse l'élève présenter ce qu'il a trouvé lui-même.`
+    : '';
   return `
 
 CONTENUS IMPOSÉS (chantier C, lot 4, périmètre strict de CETTE séance) : le Développement et les Traces écrites ne portent QUE sur les notions suivantes, TOUTES obligatoires (assure-toi que chacune apparaisse explicitement) : ${contenusImposes.obligatoires.join(', ')}. N'introduis JAMAIS, même en passant ou à titre d'exemple, l'une des notions suivantes -- hors programme pour CETTE séance précise, même si elle te semble thématiquement proche : ${contenusImposes.interdits.join(', ')}.
-GUIDE D'EXÉCUTION (programme officiel) : évite de transformer cette séance en cours magistral -- illustre chaque notion par un COURT EXTRAIT (composé pour la séance, avec la mention "Extraits composés pour la séance.") plutôt qu'une définition seule, et mentionne dans la colonne "Supports didactiques" qu'une recherche documentaire préalable des élèves (au moins une semaine avant) est supposée avoir eu lieu.`;
+GUIDE D'EXÉCUTION (programme officiel) : évite de transformer cette séance en cours magistral -- illustre chaque notion par un COURT EXTRAIT (composé pour la séance, avec la mention "Extraits composés pour la séance.") plutôt qu'une définition seule, et mentionne dans la colonne "Supports didactiques" qu'une recherche documentaire préalable des élèves (au moins une semaine avant) est supposée avoir eu lieu.${consigneHabiletePresenter}`;
 }
 
 // Chantier C (lot 4) : scanne UNIQUEMENT la colonne Activités de l'enseignant
@@ -7651,14 +7790,19 @@ Réponds UNIQUEMENT avec un tableau JSON, sans aucun texte avant ni après, au f
   return { contenuHTML: $.html($('body').length ? $('body') : $.root()), nbCorrigees };
 }
 
-// Chantier E (lot 4) : vérifie que le Développement est structuré en 3
-// étapes numérotées (titres détectés par PATTERN_TITRE_SECTION_DOCX, même
-// source que construirePlanDepuisTraces) dont les durées -- "(15 mn)" en fin
-// de titre -- totalisent 45. Détection + avertissement uniquement (le lot ne
-// demande pas de régénération pour ce point précis, contrairement aux
-// chantiers C/F/G.2 ci-dessus) -- jamais un échec silencieux : un
-// avertissement explicite plutôt qu'une fiche non conforme présentée comme
-// fiable.
+// Chantier 5b (lot 7, bug réel confirmé sur S2) : PATTERN_TITRE_SECTION_DOCX
+// est VOLONTAIREMENT large (accepte aussi bien "1." que "I-1)", pour
+// construirePlanDepuisTraces qui doit capturer TOUS les niveaux de titre).
+// Réutilisé tel quel ici, il capturait donc aussi les sous-titres ("I-1)
+// Roman d'aventure :", "II-2) Conte drolatique :"...) en plus des 3 vrais
+// titres d'étape ("1. Les sous-genres du roman (15 mn, Échange verbal)") --
+// le Développement semblait alors structuré en 12 "étapes" au lieu de 3, et
+// cet avertissement se déclenchait à tort sur une fiche pourtant conforme.
+// Motif dédié, strict : UNIQUEMENT un chiffre arabe en tête ("1." jamais
+// "I-1)"), ET une durée "(X mn" obligatoire dans le même titre -- exactement
+// la forme des 3 titres d'étape réels, jamais celle d'un sous-titre.
+const PATTERN_TITRE_ETAPE_DEVELOPPEMENT = /^\d+\.\s*\S.*\(\d+\s*mn\b/;
+
 function verifierDureesEtapesDeveloppement(contenuHTML) {
   if (!contenuHTML) return null;
   const $ = cheerio.load(contenuHTML);
@@ -7669,7 +7813,7 @@ function verifierDureesEtapesDeveloppement(contenuHTML) {
     const premiereColonne = $tds.eq(0).text();
     if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
     titres = $tds.eq(4).children('p')
-      .filter((_, p) => PATTERN_TITRE_SECTION_DOCX.test($(p).text().trim()))
+      .filter((_, p) => PATTERN_TITRE_ETAPE_DEVELOPPEMENT.test($(p).text().trim()))
       .map((_, p) => $(p).text().trim())
       .get();
   });
@@ -7688,6 +7832,41 @@ function verifierDureesEtapesDeveloppement(contenuHTML) {
   return null;
 }
 
+// Chantier 6 (lot 7, bug réel confirmé sur S2 : "Précise le temps
+// disponible : « Vous avez 5 minutes pour répondre »" alors que la durée
+// réelle de l'Évaluation, forcée par forcerDureesConstantes, est de 10 mn) :
+// remplace déterministiquement le nombre de minutes annoncé par la durée
+// RÉELLE lue sur la cellule "Moments didactiques / Durée" de cette même
+// ligne -- jamais une valeur codée en dur séparément, pour rester
+// automatiquement synchronisé avec forcerDureesConstantes quelle que soit
+// la valeur qu'il impose. Appelée APRÈS forcerDureesConstantes.
+function corrigerDureeAnnonceeEvaluation(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const $premiereColonne = $tr.children('td').first();
+    if (!$premiereColonne.length || !/[ÉE]VALUATION/i.test($premiereColonne.text())) return;
+    const dureeMatch = $premiereColonne.text().match(/(\d+)\s*mn/i);
+    if (!dureeMatch) return;
+    const dureeReelle = dureeMatch[1];
+    const $enseignant = $tr.children('td').eq(2);
+    if (!$enseignant.length) return;
+    $enseignant.find('p').each((_, p) => {
+      const $p = $(p);
+      const texte = $p.text();
+      const nouveauTexte = texte.replace(/(vous\s+avez\s+)\d+(\s*minutes?)/i, `$1${dureeReelle}$2`);
+      if (nouveauTexte !== texte) {
+        $p.text(nouveauTexte);
+        modifie = true;
+      }
+    });
+  });
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
 // Chantier G.3 (lot 4) : la Situation d'apprentissage de Culture littéraire
 // (rédigée à la séance 1, cf. construireConsigneSituationApprentissageSeance1Lycee,
 // puis réinjectée verbatim aux séances suivantes) ne doit pas déjà révéler
@@ -7695,17 +7874,200 @@ function verifierDureesEtapesDeveloppement(contenuHTML) {
 // rester une accroche générique, jamais une annonce du contenu de la leçon.
 // Même limite que verifierSituationRevelantContenuOeuvre (Introduction) :
 // ne détecte qu'une copie littérale, jamais une paraphrase.
+// Chantier 2 (lot 7) : comparaison par sous-chaîne EXACTE (normaliserTexte
+// seul) ne détectait pas un terme révélé au pluriel ou avec un accord
+// différent -- bug réel confirmé sur le S2 fourni, dont la Situation cite
+// littéralement "romans d'aventure, épistolaires, de science-fiction,
+// contes philosophiques, drolatiques, étiologiques, didactiques" (7 des 7
+// notions obligatoires de la séance, toutes au pluriel/accordées) sans
+// déclencher le contrôle. Construit, pour chaque terme, un motif qui
+// autorise un "s" final optionnel sur CHAQUE mot du terme (le seul type
+// d'accord présent dans cette liste : pluriel simple en -s, aucune forme
+// irrégulière) -- jamais une paraphrase, qui reste hors de portée d'un
+// contrôle déterministe (limite déjà assumée ailleurs dans l'application).
+function construireMotifTermeAccordInsensible(terme) {
+  const mots = normaliserTexte(terme)
+    .split(/\s+/)
+    .map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`\\b${mots.map((m) => `${m}s?`).join('\\s+')}`, '');
+}
+
+function texteContientTermeAccordInsensible(texteNormalise, terme) {
+  return construireMotifTermeAccordInsensible(terme).test(texteNormalise);
+}
+
 function verifierSituationRevelePerimetre(contenuHTML, contenusImposes) {
   if (!contenuHTML || !contenusImposes) return null;
   const $ = cheerio.load(contenuHTML);
   const $situation = $('p').filter((_, p) => /^Situation d'apprentissage\s*:/i.test($(p).text().trim())).first();
   if (!$situation.length) return null;
   const texteNorm = normaliserTexte($situation.text());
-  const termes = contenusImposes.obligatoires.filter((terme) => texteNorm.includes(normaliserTexte(terme)));
+  const termes = contenusImposes.obligatoires.filter((terme) => texteContientTermeAccordInsensible(texteNorm, terme));
   if (termes.length > 1) {
-    return `La Situation d'apprentissage mentionne déjà ${termes.length} notions du programme de cette séance (${termes.join(', ')}) -- elle doit rester une accroche générique qui ne révèle pas le contenu de la leçon (vérifiez et reformulez avant utilisation).`;
+    return { avertissement: `La Situation d'apprentissage mentionne déjà ${termes.length} notions du programme de cette séance (${termes.join(', ')}) -- elle doit rester une accroche générique qui ne révèle pas le contenu de la leçon (vérifiez et reformulez avant utilisation).`, termes };
   }
   return null;
+}
+
+// Chantier 2 (lot 7) : UNE SEULE régénération ciblée de la seule Situation
+// d'apprentissage (jamais le reste de la fiche) -- même principe que les
+// autres régénérations ciblées de cette application. Demande une accroche
+// générique qui ne cite plus les notions précises de cette séance, sans
+// changer le cadre (lieu, personnages) déjà posé.
+async function regenererSituationRevelatrice(contenuHTML, termes) {
+  const $ = cheerio.load(contenuHTML);
+  const $situation = $('p').filter((_, p) => /^Situation d'apprentissage\s*:/i.test($(p).text().trim())).first();
+  if (!$situation.length) return { contenuHTML, applique: false };
+  const texteActuel = $situation.text().replace(/^Situation d'apprentissage\s*:\s*/i, '').trim();
+  const reponse = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: `Voici une Situation d'apprentissage qui révèle déjà trop de notions précises du programme de la séance (elle cite explicitement : ${termes.join(', ')}), alors qu'elle doit rester une accroche générale qui amène vers la découverte de la séance sans en dévoiler le contenu. Réécris-la pour qu'elle garde le même cadre (lieu, personnages, situation de départ) mais SANS mentionner aucune de ces notions précises ni aucun terme proche -- reste générale sur le sujet (ex. "les genres littéraires en prose" sans énumérer lesquels).
+
+SITUATION À CORRIGER :
+"${texteActuel}"
+
+Réponds UNIQUEMENT avec le texte corrigé de la situation, sans aucun commentaire ni balisage avant ou après, sans répéter "Situation d'apprentissage :".`
+    }]
+  });
+  const texteBrut = (reponse.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  if (!texteBrut) return { contenuHTML, applique: false };
+  $situation.html(`<strong>Situation d'apprentissage :</strong> ${echapperHtml(texteBrut)}`);
+  return { contenuHTML: $.html($('body').length ? $('body') : $.root()), applique: true };
+}
+
+// Chantier 3 (lot 7) : "Supports didactiques" promet parfois des éléments
+// "(voir Développement)" (ex. "Extraits composés pour la séance (voir
+// Développement)", "Tableau comparatif des sous-genres (voir
+// Développement)") -- bug réel confirmé sur le S2 fourni : NI les extraits
+// NI le tableau comparatif promis ne figurent réellement dans les Traces
+// écrites du Développement (seulement des définitions par sous-genre, sans
+// tableau ni mention "Extraits composés pour la séance."). Repère la
+// cellule "Supports didactiques" (1re cellule de la table Supports/
+// Bibliographie) et vérifie, pour chaque ligne "... (voir Développement)",
+// que l'élément promis existe RÉELLEMENT dans la cellule Traces écrites de
+// la ligne DÉVELOPPEMENT : un "extraits" promis exige la mention exacte
+// "Extraits composés pour la séance." ; un "tableau comparatif" promis
+// exige un <table> réellement présent dans cette cellule.
+function detecterSupportsPromisAbsents(contenuHTML) {
+  if (!contenuHTML) return null;
+  const $ = cheerio.load(contenuHTML);
+  let $supportsCell = null;
+  $('table').each((_, table) => {
+    if ($supportsCell) return;
+    const $table = $(table);
+    const premiereCell = $table.find('tr').first().children('td, th').first();
+    if (/^supports\s+didactiques/.test(normaliserTexte(premiereCell.text()))) {
+      $supportsCell = premiereCell;
+    }
+  });
+  if (!$supportsCell || !$supportsCell.length) return null;
+  const lignesPromesses = $supportsCell.children('p').toArray()
+    .map((p) => $(p).text().trim())
+    .filter((t) => /voir\s+d[ée]veloppement/i.test(t));
+  if (!lignesPromesses.length) return null;
+
+  let $tracesCell = null;
+  $('tr').each((_, tr) => {
+    if ($tracesCell) return;
+    const $tr = $(tr);
+    // Bug réel trouvé en testant ce chantier : sans ce garde-fou sur le
+    // nombre de colonnes (même garde que construirePlanDepuisTraces/
+    // forcerDureesConstantes ailleurs dans ce fichier), la ligne "Supports
+    // didactiques" elle-même matchait à tort -- son texte concaténé contient
+    // littéralement "voir Développement" (issu des lignes de promesse), que
+    // /D[ÉE]VELOPPEMENT/i, non ancré, détecte comme un faux positif.
+    const $tds = $tr.children('td');
+    if ($tds.length < 5) return;
+    const premiereColonne = $tds.first().text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    $tracesCell = $tds.eq(4);
+  });
+  if (!$tracesCell || !$tracesCell.length) return null;
+  const texteTraces = $tracesCell.text();
+
+  const ligneExtraits = lignesPromesses.find((l) => /\bextraits?\b/i.test(l));
+  const ligneTableau = lignesPromesses.find((l) => /tableau\s+comparatif/i.test(l));
+  const extraitsPresents = !ligneExtraits || /extraits?\s+compos[ée]s?\s+pour\s+la\s+s[ée]ance/i.test(texteTraces);
+  const tableauPresent = !ligneTableau || $tracesCell.find('table').length > 0;
+
+  const absentes = [];
+  if (ligneExtraits && !extraitsPresents) absentes.push({ ligne: ligneExtraits, type: 'extraits' });
+  if (ligneTableau && !tableauPresent) absentes.push({ ligne: ligneTableau, type: 'tableau' });
+  return absentes.length ? absentes : null;
+}
+
+// Chantier 3 (lot 7) : UNE SEULE régénération ciblée de la cellule Traces
+// écrites du Développement, pour PRODUIRE les éléments promis et absents --
+// jamais une fabrication de fait nouveau : la consigne exige explicitement
+// de ne réutiliser QUE les notions déjà développées dans le texte existant
+// (déjà sourcées depuis le catalogue officiel au niveau du tableau
+// Habiletés/Contenus et/ou fournies par l'enseignant), jamais une
+// caractéristique ou un fait inventé pour l'occasion. Placée dans le
+// pipeline APRÈS la régénération du chantier C (qui aplatit la cellule via
+// .text(), cf. commentaire sur regenererPerimetreCultureLitteraire) pour
+// qu'un tableau nouvellement ajouté ici ne soit jamais écrasé par cette
+// régénération antérieure -- jamais l'inverse.
+async function regenererTracesSupportsAbsents(contenuHTML, promessesAbsentes) {
+  const $ = cheerio.load(contenuHTML);
+  let $tracesCell = null;
+  $('tr').each((_, tr) => {
+    if ($tracesCell) return;
+    const $tr = $(tr);
+    // Même garde-fou que detecterSupportsPromisAbsents ci-dessus.
+    const $tds = $tr.children('td');
+    if ($tds.length < 5) return;
+    const premiereColonne = $tds.first().text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    $tracesCell = $tds.eq(4);
+  });
+  if (!$tracesCell || !$tracesCell.length) return { contenuHTML, applique: false };
+  const texteActuel = $tracesCell.text().trim();
+  if (!texteActuel) return { contenuHTML, applique: false };
+  const demandes = promessesAbsentes.map((p) => {
+    if (p.type === 'tableau') {
+      return `- Un tableau comparatif (balises HTML <table><tr><th>...</th></tr><tr><td>...</td></tr></table>) couvrant chaque genre/sous-genre déjà traité dans le texte ci-dessous, avec des colonnes de caractéristiques DÉJÀ MENTIONNÉES ci-dessous -- jamais une nouvelle caractéristique inventée.`;
+    }
+    return `- De courts extraits (2 à 4 phrases chacun, un par genre/sous-genre déjà traité), précédés de la mention exacte "Extraits composés pour la séance." -- jamais présentés comme des extraits d'œuvres réelles existantes.`;
+  }).join('\n');
+  const reponse = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 3000,
+    messages: [{
+      role: 'user',
+      content: `Voici le contenu actuel des Traces écrites d'une séance de cours. La colonne "Supports didactiques" de cette même fiche promet les éléments suivants, absents du texte ci-dessous -- ajoute-les À LA FIN du texte, SANS modifier ni retirer le contenu déjà présent, et SANS inventer aucun fait, caractéristique ou exemple nouveau qui ne soit pas déjà dans le texte ci-dessous :
+${demandes}
+
+TEXTE ACTUEL DES TRACES ÉCRITES :
+"${texteActuel}"
+
+Réponds UNIQUEMENT avec le texte HTML complet des Traces écrites (texte existant reproduit tel quel, PUIS les ajouts demandés), sans aucun commentaire avant ou après. Chaque paragraphe entre balises <p>...</p>, sauf le tableau éventuel, en <table>...</table>.`
+    }]
+  });
+  const texteBrut = (reponse.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  if (!texteBrut) return { contenuHTML, applique: false };
+  $tracesCell.html(texteBrut);
+  return { contenuHTML: $.html($('body').length ? $('body') : $.root()), applique: true };
+}
+
+// Chantier 3 (lot 7) : retire de "Supports didactiques" toute ligne de
+// promesse qui reste non tenue après la régénération ci-dessus -- jamais
+// une promesse laissée affichée sans son contenu réel.
+function retirerLignesSupportPromesses(contenuHTML, lignesARetirer) {
+  if (!contenuHTML || !lignesARetirer || !lignesARetirer.length) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  $('p').each((_, p) => {
+    const $p = $(p);
+    if (lignesARetirer.includes($p.text().trim())) {
+      $p.remove();
+      modifie = true;
+    }
+  });
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
 }
 
 // Chantier C (lot 4) : UNE SEULE régénération ciblée (même principe que
@@ -8034,7 +8396,7 @@ function construireInstructionsCultureLitteraireLycee({ titreOeuvre, auteurOeuvr
   const contenu = (contenuFourni || '').toString().trim();
   // Chantier C (lot 4) : périmètre strict (S1/S2 narrative 2nde uniquement) --
   // cf. construireConsigneContenusImposes/CONTENUS_IMPOSES_CULTURE_LITTERAIRE.
-  const consigneContenusImposes = construireConsigneContenusImposes(contenusImposes);
+  const consigneContenusImposes = construireConsigneContenusImposes(contenusImposes, numeroSeance);
   // Chantier B (lot 4) : quand le catalogue officiel couvre cette séance
   // (2nde uniquement), impose le tableau Habiletés/Contenus EXACT au modèle
   // -- même principe que la "formule FIXE" déjà utilisée pour la Lecture
@@ -10225,6 +10587,10 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // Chantier F (lot 3) : durées constantes 5/45/10 mn, quelle que soit
         // la durée écrite par le modèle.
         contenuHTML = forcerDureesConstantes(contenuHTML);
+        // Chantier 6 (lot 7) : synchronise "Vous avez N minutes" sur la
+        // durée réelle de l'Évaluation -- APRÈS forcerDureesConstantes, qui
+        // vient de fixer cette durée.
+        contenuHTML = corrigerDureeAnnonceeEvaluation(contenuHTML);
         // Chantier C.5 (05/10) : caractères invisibles + accents manquants
         // courants, même scope strict.
         contenuHTML = nettoyerCaracteresInvisiblesEtAccents(contenuHTML);
@@ -10277,6 +10643,15 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
               res.write(`data: ${JSON.stringify({ avertissement: `Référence de ligne non trouvée automatiquement pour ${resultatReferencesLycee.nonLocalisees.length > 1 ? 'les citations suivantes' : 'la citation suivante'} : ${listeCitationsLycee} -- vérifiez/ajoutez la référence de ligne manuellement.` })}\n\n`);
             }
           }
+        }
+        if (typeSeanceOI === 'culture_litteraire') {
+          // Chantier 4 (lot 7) : corrige d'abord les infinitifs laissés par
+          // le modèle (déterministe, gratuit), puis le bug réel du verbe
+          // professeur erroné -- AVANT le contrôle/la régénération du
+          // chantier E ci-dessous, pour qu'une simple conversion mécanique
+          // n'ait jamais besoin de déclencher un appel réel.
+          contenuHTML = corrigerInfinitifsConsignesDeveloppement(contenuHTML);
+          contenuHTML = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuHTML);
         }
         if (typeSeanceOI === 'culture_litteraire' && approcheNormalisee === 'APC') {
           // Chantier E (lot 3, remplace le choix du lot 2 qui n'implémentait
@@ -10408,15 +10783,64 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
                 res.write(`data: ${JSON.stringify({ avertissement: `Le périmètre officiel de cette séance n'est toujours pas respecté après une tentative de correction automatique (${detail}) -- vérifiez et corrigez le Développement avant utilisation.` })}\n\n`);
               }
             }
-            // Chantier G.3 (lot 4) : situation d'apprentissage rédigée
-            // uniquement à la séance 1 (cf. commentaire sur
-            // construireConsigneSituationApprentissageSeance1Lycee) --
-            // vérifiée ici une seule fois, jamais ré-signalée aux séances
-            // suivantes qui ne font que la réinjecter verbatim.
-            if (parseInt(seance, 10) === 1) {
-              const avertissementSituationPerimetre = verifierSituationRevelePerimetre(contenuHTML, contenusImposesVerif);
-              if (avertissementSituationPerimetre) {
-                res.write(`data: ${JSON.stringify({ avertissement: avertissementSituationPerimetre })}\n\n`);
+            // Chantier G.3 (lot 4), gate retiré (lot 7) : restreindre ce
+            // contrôle à la séance 1 supposait que la Situation n'est JAMAIS
+            // rédigée librement par le modèle à une autre séance -- faux en
+            // pratique (bug réel confirmé : une génération de la Séance 2
+            // seule, sans situationApprentissageOeuvre transmise par le
+            // frontend -- cf. injecterSituationApprentissage, no-op si ce
+            // paramètre est vide --, laisse le modèle rédiger sa propre
+            // situation, qui peut alors révéler le contenu de CETTE séance).
+            // Vérifié désormais à chaque séance de Culture littéraire,
+            // jamais seulement à la première.
+            {
+              const resultatSituationPerimetre = verifierSituationRevelePerimetre(contenuHTML, contenusImposesVerif);
+              if (resultatSituationPerimetre) {
+                console.log(`⚠️ Chantier 2 (lot 7) -- situation révèle ${resultatSituationPerimetre.termes.length} notion(s), régénération ciblée déclenchée :`, resultatSituationPerimetre.termes);
+                try {
+                  const resultatRegenSituation = await regenererSituationRevelatrice(contenuHTML, resultatSituationPerimetre.termes);
+                  if (resultatRegenSituation.applique) {
+                    contenuHTML = resultatRegenSituation.contenuHTML;
+                    console.log('✅ Chantier 2 (lot 7) -- régénération ciblée de la Situation appliquée.');
+                  }
+                } catch (e) {
+                  console.error('❌ Chantier 2 (lot 7) -- échec de la régénération ciblée (fiche conservée telle quelle) :', e.message);
+                }
+                const verifSituation = verifierSituationRevelePerimetre(contenuHTML, contenusImposesVerif);
+                if (verifSituation) {
+                  res.write(`data: ${JSON.stringify({ avertissement: verifSituation.avertissement })}\n\n`);
+                }
+              }
+            }
+          }
+          // Chantier 3 (lot 7) : supports promis "(voir Développement)" mais
+          // absents des Traces écrites -- UNE SEULE régénération ciblée,
+          // puis retrait de la promesse non tenue + avertissement si elle
+          // persiste. APRÈS le chantier C ci-dessus (qui aplatit la cellule
+          // Traces via .text() -- cf. commentaire sur
+          // regenererPerimetreCultureLitteraire -- jamais avant, pour qu'un
+          // tableau ajouté ici ne soit jamais écrasé). Universel (toute
+          // Culture littéraire, pas seulement narrative/2nde) : le mécanisme
+          // ne dépend d'aucun catalogue, seulement de la cohérence interne
+          // Supports <-> Traces de CETTE fiche.
+          {
+            let promessesAbsentes = detecterSupportsPromisAbsents(contenuHTML);
+            if (promessesAbsentes) {
+              console.log(`⚠️ Chantier 3 -- support(s) promis absent(s) des Traces, régénération ciblée déclenchée :`, promessesAbsentes.map((p) => p.type));
+              try {
+                const resultatRegenSupports = await regenererTracesSupportsAbsents(contenuHTML, promessesAbsentes);
+                if (resultatRegenSupports.applique) {
+                  contenuHTML = resultatRegenSupports.contenuHTML;
+                  console.log('✅ Chantier 3 -- régénération ciblée des Traces (supports) appliquée.');
+                }
+              } catch (e) {
+                console.error('❌ Chantier 3 -- échec de la régénération ciblée (fiche conservée telle quelle) :', e.message);
+              }
+              promessesAbsentes = detecterSupportsPromisAbsents(contenuHTML);
+              if (promessesAbsentes) {
+                console.log('⚠️ Chantier 3 -- support(s) encore absent(s) après régénération, ligne(s) retirée(s) et avertissement affiché.', promessesAbsentes.map((p) => p.type));
+                contenuHTML = retirerLignesSupportPromesses(contenuHTML, promessesAbsentes.map((p) => p.ligne));
+                res.write(`data: ${JSON.stringify({ avertissement: `${promessesAbsentes.map((p) => (p.type === 'tableau' ? 'le tableau comparatif' : 'les extraits')).join(' et ')} promis dans les Supports didactiques n'a/ont pas pu être produit(s) après une tentative de correction automatique -- la ligne de promesse correspondante a été retirée des Supports. Ajoutez le contenu manuellement si nécessaire.` })}\n\n`);
               }
             }
           }
@@ -11148,6 +11572,15 @@ app.get('/api/fiche/:id', async (req, res) => {
     // Chantier 2 (lot 6) : idem pour un établissement inventé déjà figé dans
     // le contenu enregistré.
     contenuAffiche = corrigerEtablissementInvente(contenuAffiche);
+    // Chantiers 4 et 6 (lot 7) : mêmes raisonnement -- corrections purement
+    // mécaniques (aucun appel Anthropic), donc sans risque ni coût à
+    // appliquer aussi aux fiches déjà enregistrées. Les chantiers 2 (G.3) et
+    // 3 (supports), qui impliquent une régénération ciblée par appel réel,
+    // restent volontairement réservés à la génération (même choix déjà fait
+    // pour le chantier C, lot 5) -- jamais rejoués à chaque téléchargement.
+    contenuAffiche = corrigerInfinitifsConsignesDeveloppement(contenuAffiche);
+    contenuAffiche = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuAffiche);
+    contenuAffiche = corrigerDureeAnnonceeEvaluation(contenuAffiche);
     const ficheAffichee = fiche.toObject ? fiche.toObject() : { ...fiche };
     ficheAffichee.contenu = contenuAffiche;
     res.json(ficheAffichee);
@@ -11234,6 +11667,10 @@ app.post('/api/fiche/:id/pdf', async (req, res) => {
     contenuExport = hoisterTableauxLargesDesCellules(contenuExport);
     // Chantier 2 (lot 6) : établissement inventé déjà figé dans le contenu.
     contenuExport = corrigerEtablissementInvente(contenuExport);
+    // Chantiers 4 et 6 (lot 7) : corrections mécaniques, sans appel Anthropic.
+    contenuExport = corrigerInfinitifsConsignesDeveloppement(contenuExport);
+    contenuExport = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuExport);
+    contenuExport = corrigerDureeAnnonceeEvaluation(contenuExport);
     const pdfBuffer = await genererPdfDepuisHtml(contenuExport, landscape);
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -11268,6 +11705,10 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
     contenuExport = hoisterTableauxLargesDesCellules(contenuExport);
     // Chantier 2 (lot 6) : établissement inventé déjà figé dans le contenu.
     contenuExport = corrigerEtablissementInvente(contenuExport);
+    // Chantiers 4 et 6 (lot 7) : corrections mécaniques, sans appel Anthropic.
+    contenuExport = corrigerInfinitifsConsignesDeveloppement(contenuExport);
+    contenuExport = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuExport);
+    contenuExport = corrigerDureeAnnonceeEvaluation(contenuExport);
     const docxBuffer = await genererDocxDepuisHtml(contenuExport, landscape, fiche.estOeuvreIntegraleSecondCycle);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
