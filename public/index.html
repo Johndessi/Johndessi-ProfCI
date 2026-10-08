@@ -547,6 +547,23 @@ textarea { resize: vertical; min-height: 90px; }
               <textarea id="oiLieuxOeuvreLycee" style="min-height:50px"></textarea>
             </div>
           </div>
+          <div id="oiGroupeContexteParatexteStructureLycee" style="display:none">
+            <p style="font-size:12px;color:var(--gris2);margin-bottom:10px">
+              3 champs optionnels et indépendants (programme officiel 2nde, Leçon 1) : sans eux, la sous-partie correspondante est simplement omise de la fiche -- jamais de remplissage générique.
+            </p>
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Contexte historique/littéraire ou courant littéraire (optionnel)</label>
+              <textarea id="oiContexteHistoriqueLitteraireLycee" style="min-height:60px"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Paratexte -- 1re et 4e de couverture (optionnel)</label>
+              <textarea id="oiParatexteCouverturesLycee" style="min-height:60px"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Structure externe et interne de l'œuvre (optionnel)</label>
+              <textarea id="oiStructureOeuvreLycee" style="min-height:60px"></textarea>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1312,6 +1329,15 @@ function changerSeanceOeuvreLycee() {
   document.getElementById('oiGroupeCorpusGTLycee').style.display = (estIntroOuConclusion && estPoetique) ? 'block' : 'none';
   document.getElementById('oiGroupeSituationApprentissageLycee').style.display = (type === 'introduction') ? 'block' : 'none';
   document.getElementById('oiGroupeBioThemePersoLieuxLycee').style.display = (type === 'introduction' && !estPoetique) ? 'block' : 'none';
+  // Chantier D (lot 5, formulaire ajouté lot 6) : 3 champs optionnels
+  // gravés depuis le Guide d'exécution officiel du programme 2nde -- vérifié
+  // UNIQUEMENT pour la Leçon 1 (narrative) dans le PDF source, jamais pour
+  // la Leçon 2 (théâtrale, genre non poétique lui aussi mais programme
+  // distinct non vérifié) -- condition volontairement plus stricte que
+  // "!estPoetique" seul.
+  const estLecon1 = lecon && Number(lecon.numeroLecon) === 1;
+  document.getElementById('oiGroupeContexteParatexteStructureLycee').style.display =
+    (type === 'introduction' && !estPoetique && estLecon1) ? 'block' : 'none';
 
   if (type === 'introduction') {
     const champSituation = document.getElementById('oiSituationApprentissageLycee');
@@ -1449,6 +1475,14 @@ async function genererFicheOeuvreIntegraleLycee() {
       champs.themeOeuvre = document.getElementById('oiThemeOeuvreLycee').value.trim();
       champs.personnagesOeuvre = document.getElementById('oiPersonnagesOeuvreLycee').value.trim();
       champs.lieuxOeuvre = document.getElementById('oiLieuxOeuvreLycee').value.trim();
+      // Chantier D (lot 5/6) : 3 champs optionnels, Leçon 1 (narrative)
+      // UNIQUEMENT -- cf. commentaire sur changerSeanceOeuvreLycee (même
+      // condition que l'affichage des champs).
+      if (leconCourante && Number(leconCourante.numeroLecon) === 1) {
+        champs.contexteHistoriqueLitteraire = document.getElementById('oiContexteHistoriqueLitteraireLycee').value.trim();
+        champs.paratexteCouvertures = document.getElementById('oiParatexteCouverturesLycee').value.trim();
+        champs.structureOeuvre = document.getElementById('oiStructureOeuvreLycee').value.trim();
+      }
       // Optionnel : si vide, le serveur en propose une (cf. server.js
       // construireConsigneAxeEtudeSituationOeuvreLycee) ; si fournie, elle
       // est reproduite mot pour mot, jamais reformulée.

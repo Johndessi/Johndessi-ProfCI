@@ -5617,6 +5617,65 @@ function construirePlanDepuisTraces(contenuHTML) {
   return $.html($('body').length ? $('body') : $.root());
 }
 
+// Chantier 1 (lot 6) : un tableau imbriqué dans une cellule (ex. tableau
+// comparatif converti depuis du Markdown brut, chantier B lot 3/4) devient
+// ILLISIBLE dès qu'il a plus de 3 colonnes -- sa largeur se divise alors
+// entre le nombre de colonnes à l'intérieur d'une cellule Traces écrites
+// déjà étroite, ce qui force chaque mot à se couper lettre par lettre en
+// rendu LibreOffice (confirmé par l'enseignant sur le docx réel fourni : un
+// vrai tableau à 7 colonnes -- Sous-genre/Intrigue/Personnages/Cadre
+// spatio-temporel/Merveilleux/Tonalité/Dénouement -- imbriqué dans la
+// cellule). Les tableaux de 3 colonnes ou moins restent imbriqués (assez de
+// place pour rester lisibles). Sort le tableau de la cellule et l'insère en
+// PLEINE LARGEUR juste après le tableau du Déroulement (DÉROULEMENT étant
+// TOUJOURS le tableau top-level qui contient la cellule concernée), avec son
+// titre (le <p> qui précède immédiatement le tableau dans la cellule, s'il
+// ressemble à un titre de section -- cf. PATTERN_TITRE_SECTION_DOCX) --
+// remplace le tout, dans la cellule, par la mention fixe demandée par
+// l'enseignant. Fonction GÉNÉRIQUE, indépendante de l'origine du tableau
+// imbriqué (Markdown fraîchement converti à la génération, OU déjà stocké
+// tel quel depuis une fiche existante) -- doit donc être appelée à la fois
+// à la génération ET à l'export (docx/pdf/aperçu), même raisonnement que le
+// chantier B du lot 4 (convertirTableauxMarkdownEnHtml).
+function hoisterTableauxLargesDesCellules(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  const aHoister = [];
+
+  $('td').each((_, td) => {
+    const $td = $(td);
+    const $tableImbriquee = $td.children('table').first();
+    if (!$tableImbriquee.length) return;
+    const nbColonnes = $tableImbriquee.find('tr').first().children('th, td').length;
+    if (nbColonnes <= 3) return;
+    const $tableParente = $td.closest('table');
+    if (!$tableParente.length || $tableParente.is($tableImbriquee)) return;
+    let titre = '';
+    const $precedent = $tableImbriquee.prev('p');
+    if ($precedent.length && PATTERN_TITRE_SECTION_DOCX.test($precedent.text().trim())) {
+      titre = $precedent.text().trim();
+      $precedent.remove();
+    }
+    const tableHtmlExtrait = $.html($tableImbriquee);
+    $tableImbriquee.replaceWith('<p>Voir tableau comparatif ci-dessous.</p>');
+    aHoister.push({ $tableParente, titre, tableHtmlExtrait });
+    modifie = true;
+  });
+
+  // Insertion différée (après la boucle $('td').each) : modifier le DOM
+  // pendant qu'on itère dessus (ajouter des tableaux top-level) risquerait
+  // de faire revisiter des nœuds déjà traités ou d'en sauter -- jamais sûr
+  // avec cheerio/htmlparser2 sur une collection déjà capturée.
+  aHoister.forEach(({ $tableParente, titre, tableHtmlExtrait }) => {
+    const titreHtml = titre ? `<p data-docx-titre="1" style="margin:10px 0 4px 0;font-weight:bold">${echapperHtml(titre)}</p>` : '';
+    $tableParente.after(`${titreHtml}${tableHtmlExtrait}`);
+  });
+
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
 // Chantier F (lot 3, bug réel confirmé : S1 utilise 5/45/10 mn, S2 utilise
 // 5/50/5 mn pour les 3 mêmes phases) : durées non fiables si laissées au
 // choix du modèle d'une séance à l'autre. Forcées déterministiquement à
@@ -5724,6 +5783,37 @@ function corrigerThemeConfonduAvecAuteur(contenuHTML, auteur) {
 // simple filet) : un avertissement explicite si la Situation d'apprentissage
 // contient un extrait substantiel du thème, de l'axe ou des personnages déjà
 // connus, pour que l'enseignant vérifie avant usage.
+// Chantier 2 (lot 6) : établissement scolaire inventé dans la Situation
+// d'apprentissage -- malgré la consigne de prompt déjà en place (chantier H,
+// lot 3 : "jamais un nom propre d'établissement inventé"), un cas réel
+// confirmé persiste (docx fourni par l'enseignant : "la bibliothèque du
+// lycée de Yamoussoukro"). Remplacement DÉTERMINISTE après génération,
+// jamais laissé à la seule consigne de prompt : toute occurrence de
+// "lycée"/"collège"(/"moderne" éventuel) + "de" + un nom propre devient
+// "votre établissement", avec correction de l'article qui précède pour
+// rester grammaticalement correct ("du" -> "de", "au" -> "à", "le" retiré
+// purement et simplement puisque "votre" ne prend jamais d'article).
+// Exige un nom propre (majuscule) juste après "de" -- jamais une expression
+// générique comme "lycée de jeunes filles" (minuscule), qui n'est pas un nom
+// d'établissement inventé.
+const RE_ETABLISSEMENT_INVENTE = /\b(?:(du|au|le)\s+)?((?:lycée|collège)(?:\s+moderne)?)\s+de\s+[A-ZÀ-ÝŒÇ][\p{L}'’-]*(?:\s+[A-ZÀ-ÝŒÇ][\p{L}'’-]*){0,3}/gu;
+
+function corrigerEtablissementInvente(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  const $situation = $('p').filter((_, p) => /^Situation d'apprentissage\s*:/i.test($(p).text().trim())).first();
+  if (!$situation.length) return contenuHTML;
+  const htmlOriginal = $situation.html();
+  const htmlCorrige = htmlOriginal.replace(RE_ETABLISSEMENT_INVENTE, (match, article) => {
+    if (/^du$/i.test(article || '')) return 'de votre établissement';
+    if (/^au$/i.test(article || '')) return 'à votre établissement';
+    return 'votre établissement';
+  });
+  if (htmlCorrige === htmlOriginal) return contenuHTML;
+  $situation.html(htmlCorrige);
+  return $.html($('body').length ? $('body') : $.root());
+}
+
 function verifierSituationRevelantContenuOeuvre(contenuHTML, { theme, axe, personnages }) {
   if (!contenuHTML) return null;
   const $ = cheerio.load(contenuHTML);
@@ -10039,6 +10129,10 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       contenuHTML = injecterActiviteEntete(contenuHTML, activiteAffichee);
       contenuHTML = nettoyerCellulePresentationRituelle(contenuHTML);
       contenuHTML = nettoyerPlaceholdersNonExecutes(contenuHTML);
+      // Chantier 2 (lot 6) : établissement inventé dans la Situation
+      // d'apprentissage -- universel (toute activité, 1er et 2nd cycle),
+      // jamais un échec silencieux côté prompt seul.
+      contenuHTML = corrigerEtablissementInvente(contenuHTML);
       if (estOeuvreIntegrale && !profilInfoOI) {
         contenuHTML = injecterChampEntete(contenuHTML, 'Compétence', COMPETENCE_OEUVRE_INTEGRALE);
         contenuHTML = injecterChampEntete(contenuHTML, 'Leçon', leconAfficheeOI);
@@ -10373,6 +10467,15 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
             }
           }
         }
+        // Chantier 1 (lot 6) : tableaux de plus de 3 colonnes sortis des
+        // cellules -- APRÈS tout ce qui précède (en particulier les
+        // régénérations ciblées des chantiers C/F/G.2, qui opèrent sur le
+        // texte brut des Traces écrites et ne doivent jamais voir un
+        // placeholder "Voir tableau comparatif ci-dessous." à la place du
+        // vrai contenu pendant qu'elles travaillent), mais AVANT le style
+        // final (ci-dessous), qui doit aussi s'appliquer au tableau
+        // désormais déplacé en pleine largeur.
+        contenuHTML = hoisterTableauxLargesDesCellules(contenuHTML);
         // Chantier F.1 (lot 2) : police + interligne écran/PDF -- en tout
         // dernier, une fois le HTML définitivement structuré par tout ce qui
         // précède (aucune étape ultérieure ne reparse ni ne réécrit
@@ -11036,7 +11139,15 @@ app.get('/api/fiche/:id', async (req, res) => {
     // 2e envoi) : tableau Markdown encore brut ("|...|") dans l'aperçu HTML.
     // Fonction idempotente et auto-gated (no-op si aucun "|" détecté) --
     // sans risque à appliquer systématiquement, pour tout type de fiche.
-    const contenuAffiche = convertirTableauxMarkdownEnHtml(fiche.contenu);
+    let contenuAffiche = convertirTableauxMarkdownEnHtml(fiche.contenu);
+    // Chantier 1 (lot 6) : même raisonnement -- une fiche déjà enregistrée
+    // avec un tableau large imbriqué (illisible, cf. commentaire sur
+    // hoisterTableauxLargesDesCellules) ne rejouait jamais cette correction
+    // non plus, puisqu'elle n'était câblée qu'au pipeline de génération.
+    contenuAffiche = hoisterTableauxLargesDesCellules(contenuAffiche);
+    // Chantier 2 (lot 6) : idem pour un établissement inventé déjà figé dans
+    // le contenu enregistré.
+    contenuAffiche = corrigerEtablissementInvente(contenuAffiche);
     const ficheAffichee = fiche.toObject ? fiche.toObject() : { ...fiche };
     ficheAffichee.contenu = contenuAffiche;
     res.json(ficheAffichee);
@@ -11117,7 +11228,12 @@ app.post('/api/fiche/:id/pdf', async (req, res) => {
     // Chantier B (lot 4) : voir commentaire identique sur GET /api/fiche/:id --
     // le PDF téléchargé relit fiche.contenu tel quel, sans jamais rejouer la
     // conversion Markdown -> tableau. Idempotent, sans risque.
-    const contenuExport = convertirTableauxMarkdownEnHtml(fiche.contenu);
+    let contenuExport = convertirTableauxMarkdownEnHtml(fiche.contenu);
+    // Chantier 1 (lot 6) : même raisonnement -- rejoue le sorting des
+    // tableaux larges hors cellule (cf. hoisterTableauxLargesDesCellules).
+    contenuExport = hoisterTableauxLargesDesCellules(contenuExport);
+    // Chantier 2 (lot 6) : établissement inventé déjà figé dans le contenu.
+    contenuExport = corrigerEtablissementInvente(contenuExport);
     const pdfBuffer = await genererPdfDepuisHtml(contenuExport, landscape);
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -11144,7 +11260,14 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
     // jamais à l'export. Donc toute fiche déjà enregistrée avec ce bug restait
     // bloquée dessus pour toujours, même après correction du chantier B au
     // lot 3. Fonction idempotente et auto-gated (no-op si aucun "|" détecté).
-    const contenuExport = convertirTableauxMarkdownEnHtml(fiche.contenu);
+    let contenuExport = convertirTableauxMarkdownEnHtml(fiche.contenu);
+    // Chantier 1 (lot 6) : preuve demandée par l'enseignant sur CE docx réel
+    // (tableau à 7 colonnes imbriqué dans la cellule Traces, illisible en
+    // LibreOffice) -- rejoue le sorting hors cellule à l'export, même
+    // raisonnement que ci-dessus pour convertirTableauxMarkdownEnHtml.
+    contenuExport = hoisterTableauxLargesDesCellules(contenuExport);
+    // Chantier 2 (lot 6) : établissement inventé déjà figé dans le contenu.
+    contenuExport = corrigerEtablissementInvente(contenuExport);
     const docxBuffer = await genererDocxDepuisHtml(contenuExport, landscape, fiche.estOeuvreIntegraleSecondCycle);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
