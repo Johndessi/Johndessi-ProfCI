@@ -1181,6 +1181,78 @@ function echapperHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+// Chantier 1 (lot 8) : bug bloquant confirmé sur le docx réel S1 joint --
+// une régénération ciblée (chantier 3, lot 7 : regenererTracesSupportsAbsents)
+// injectait la réponse brute du modèle SANS AUCUNE validation
+// ($tracesCell.html(texteBrut)) : réponse renvoyée comme un unique
+// paragraphe entouré de guillemets anglais, avec les sauts de ligne entre
+// lignes d'un tableau transmis comme des "\n" littéraux (2 caractères,
+// backslash+n) plutôt que de vrais retours à la ligne -- jamais de <p> ni
+// de vraie structure. Nettoyage commun à toute régénération ciblée qui
+// réinjecte une réponse brute du modèle dans une cellule : retire les
+// guillemets englobants et convertit les "\n" littéraux en vrais retours à
+// la ligne, PUIS vérifie que le résultat est exploitable -- si ce n'est
+// toujours pas le cas après nettoyage, REJETTE (garde l'appelant informé
+// via rejete:true, qui doit alors conserver le contenuHTML d'origine et
+// avertir, jamais injecter un résultat encore corrompu).
+// exigerSautDeLigne : réservé aux régénérations dont la réponse attendue
+// est TOUJOURS composée de plusieurs lignes/paragraphes (ex. chantier 3 :
+// texte existant + tableau/extraits ajoutés à la fin) -- jamais pour une
+// régénération dont une réponse légitime peut tenir en un seul paragraphe
+// (ex. chantier C, périmètre), qui rejetterait alors à tort des réponses
+// par ailleurs correctes.
+function nettoyerTexteBrutRegenere(texteBrut, { exigerSautDeLigne = false } = {}) {
+  let texte = (texteBrut || '').toString();
+  texte = texte.replace(/\\n/g, '\n').trim();
+  const PAIRES_GUILLEMETS_ENGLOBANTS = [['"', '"'], ["'", "'"], ['«', '»'], ['“', '”']];
+  for (const [ouvrant, fermant] of PAIRES_GUILLEMETS_ENGLOBANTS) {
+    if (texte.startsWith(ouvrant) && texte.endsWith(fermant) && texte.length > ouvrant.length + fermant.length) {
+      texte = texte.slice(ouvrant.length, texte.length - fermant.length).trim();
+      break;
+    }
+  }
+  const commenceParGuillemet = /^["'«“]/.test(texte);
+  const contientNLitteral = /\\n/.test(texte);
+  const aucunSautDeLigne = exigerSautDeLigne && !/\n/.test(texte);
+  if (commenceParGuillemet || contientNLitteral || aucunSautDeLigne) {
+    return { texte: null, rejete: true };
+  }
+  return { texte, rejete: false };
+}
+
+// Chantier 1 (lot 8) : "restaurer les sauts de ligne" (explicitement
+// demandé, pas seulement convertir les "\n" littéraux en vrais retours à la
+// ligne) -- un vrai "\n" posé tel quel dans un $cellule.html(texte) RESTE
+// un simple espace blanc pour un navigateur/convertisseur docx (aucune
+// balise de bloc), donc toujours fusionné avec le texte voisin : exactement
+// le bug réel observé (ex. "(18 mn)a) Le roman"). Si le texte nettoyé
+// contient déjà de vraies balises HTML de bloc (<p>/<table>/<br>), on fait
+// confiance au modèle d'avoir respecté la consigne et on l'injecte tel
+// quel ; sinon (texte brut), chaque ligne devient un <p> séparé -- seule
+// façon de rendre un saut de ligne réellement visible.
+function insererTexteRegenereDansCellule($cellule, texteNettoye) {
+  if (/<(p|table|br)[\s>]/i.test(texteNettoye)) {
+    $cellule.html(texteNettoye);
+    return;
+  }
+  const lignes = texteNettoye.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  $cellule.html(lignes.map((l) => `<p>${echapperHtml(l)}</p>`).join(''));
+}
+
+// Chantier 1 (lot 8), artefact indépendant du bug ci-dessus : le modèle
+// peut aussi écrire lui-même un "\n" littéral DANS le texte généré
+// d'origine, hors de toute régénération ciblée (bug réel confirmé sur le
+// docx S1 joint : corrigé de la consigne 3 de l'Évaluation). Balayage
+// global de la fiche entière, en toute fin de pipeline (génération ET les
+// 3 routes d'export, même raisonnement que hoisterTableauxLargesDesCellules
+// ci-dessous) : remplace par un <br> -- jamais un nouveau <p>, pour ne pas
+// scinder un texte qui reste par ailleurs un seul bloc logique (ex. un
+// corrigé continu sur plusieurs lignes).
+function corrigerRetoursLigneLitterauxDansFiche(contenuHTML) {
+  if (!contenuHTML || !contenuHTML.includes('\\n')) return contenuHTML;
+  return contenuHTML.replace(/\\n/g, '<br>');
+}
+
 // Remplacement déterministe d'un champ de l'entête vertical (Compétence/
 // Activité/Leçon/Séance...) : une consigne explicite donnée au modèle n'est
 // pas toujours respectée (cf. injecterActiviteEntete, découvert sur le champ
@@ -5557,6 +5629,52 @@ function convertirTableauxMarkdownEnHtml(contenuHTML) {
       return;
     }
 
+    // Chemin SECONDAIRE (lot 8) : un tableau comparatif régénéré (cf.
+    // nettoyerTexteBrutRegenere/insererTexteRegenereDansCellule) peut être
+    // composé de <p> frères pipe-délimités SANS aucune ligne de séparation
+    // Markdown ("|---|---|") -- le modèle n'a jamais reçu la consigne d'en
+    // écrire une (la consigne demande de vraies balises <table>, jamais du
+    // Markdown), donc RE_LIGNE_SEPARATION_MARKDOWN ci-dessus ne matche
+    // jamais ce cas. Retenu seulement si au moins 2 lignes consécutives ont
+    // chacune au moins 2 "|" (3 cellules ou plus) ET le MÊME nombre de
+    // cellules que la première -- jamais une seule ligne isolée avec un
+    // "|" accidentel, pour éviter tout faux positif sur du texte libre.
+    let debutSansSeparateur = -1;
+    let nbCellulesAttendu = -1;
+    for (let i = 0; i < paragraphes.length - 1; i++) {
+      const texteLigne = $(paragraphes[i]).text();
+      if ((texteLigne.match(/\|/g) || []).length < 2) continue;
+      const nbCellules = ligneMarkdownVersCellules(texteLigne).length;
+      if (nbCellules < 3) continue;
+      const texteSuivante = $(paragraphes[i + 1]).text();
+      if ((texteSuivante.match(/\|/g) || []).length < 2) continue;
+      if (ligneMarkdownVersCellules(texteSuivante).length !== nbCellules) continue;
+      debutSansSeparateur = i;
+      nbCellulesAttendu = nbCellules;
+      break;
+    }
+    if (debutSansSeparateur !== -1) {
+      let finSansSeparateur = debutSansSeparateur;
+      while (finSansSeparateur + 1 < paragraphes.length) {
+        const texteSuivante = $(paragraphes[finSansSeparateur + 1]).text();
+        if ((texteSuivante.match(/\|/g) || []).length < 2) break;
+        if (ligneMarkdownVersCellules(texteSuivante).length !== nbCellulesAttendu) break;
+        finSansSeparateur++;
+      }
+      const lignesTableau = paragraphes.slice(debutSansSeparateur, finSansSeparateur + 1).map((p) => $(p).text().trim());
+      const entetes = ligneMarkdownVersCellules(lignesTableau[0]);
+      const theadHtml = `<tr>${entetes.map((c) => `<th style="border:1px solid #000;padding:4px;">${echapperHtml(c)}</th>`).join('')}</tr>`;
+      const tbodyHtml = lignesTableau.slice(1).map((ligne) => {
+        const cellules = ligneMarkdownVersCellules(ligne);
+        return `<tr>${cellules.map((c) => `<td style="border:1px solid #000;padding:4px;">${echapperHtml(c)}</td>`).join('')}</tr>`;
+      }).join('');
+      const tableHtml = `<table style="width:100%;border-collapse:collapse;">${theadHtml}${tbodyHtml}</table>`;
+      $(paragraphes[debutSansSeparateur]).before(tableHtml);
+      for (let i = debutSansSeparateur; i <= finSansSeparateur; i++) $(paragraphes[i]).remove();
+      modifie = true;
+      return;
+    }
+
     // Repli (cas plus rare : tout le Markdown dans un seul bloc de texte
     // séparé par de vrais retours à la ligne, ex. texte collé sans <p>).
     const texteBrut = $td.text();
@@ -7316,10 +7434,10 @@ ${listeParNiveau}
 RÈGLES :
 1) Tableau Habiletés : UN SEUL verbe par niveau, dans l'ordre N1 -> N2 -> N3 -> N4 (jamais un autre ordre, jamais deux verbes du même niveau, jamais un niveau absent si tu as une consigne de ce niveau ailleurs dans la fiche). CHAQUE cellule Habiletés contient le verbe SUIVI d'un complément précis (ex. "Identifier les genres en prose et leurs caractéristiques distinctives") -- JAMAIS le verbe seul isolé sans complément (ex. jamais une cellule réduite à "Identifier").
 2) Tout verbe utilisé dans une consigne du Développement doit aussi figurer dans le tableau Habiletés -- jamais un verbe qui n'y apparaît pas (ex. ne jamais utiliser "Synthétisez" dans une consigne si "synthétiser" n'est pas dans la liste ci-dessus ET dans Habiletés). RÉCIPROQUEMENT (chantier H.1, lot 2) : chaque verbe que tu places dans le tableau Habiletés doit être concrètement exercé par AU MOINS une consigne du Développement ou de l'Évaluation -- jamais un verbe du tableau qui reste sans consigne correspondante nulle part dans la fiche.
-3) CHAQUE consigne que tu rédiges pour l'enseignant, SANS AUCUNE EXCEPTION (toutes les consignes du Développement ET les 3 de l'Évaluation), doit COMMENCER par un verbe de cette liste, à l'IMPÉRATIF, 2e PERSONNE DU SINGULIER (ex. "Identifie", "Cite", "Relève", "Justifie" -- jamais l'infinitif "Identifier", jamais le pluriel "Identifiez"). Le verbe doit rester OBSERVABLE : ce que l'élève fait concrètement (identifier, citer, relever, classer...), jamais une question ni une formulation qui décrit l'action de l'ENSEIGNANT ("Demande...", "Pose la question...").
-TROIS EXEMPLES CONFORMES : "Identifie le genre de chaque extrait proposé." / "Cite deux caractéristiques du roman policier." / "Distingue le conte de fées du conte populaire à partir de leurs éléments magiques."
-DEUX EXEMPLES INTERDITS, à ne jamais reproduire sous cette forme : "Qu'est-ce qui différencie un roman des mémoires ?" (une question, jamais une consigne d'action) ; "Relève la notion centrale : « Pourquoi est-il important de connaître les genres littéraires ? »" -- MÊME SI "Relève" est ici un verbe de la liste à la bonne personne, cette phrase reste interdite : elle décrit ce que FAIT l'enseignant (il relève une notion) et cache en réalité une question adressée aux élèves ("Pourquoi...?") derrière un deux-points -- une vraie consigne d'action commence par un verbe qui décrit ce que l'ÉLÈVE doit faire lui-même, jamais une reformulation déguisée d'une question.
-4) ÉVALUATION -- exactement 3 consignes, dans cet ordre de complexité croissante : la 1re consigne utilise un verbe de niveau N1 ou N2, la 2e un verbe de niveau N3, la 3e un verbe de niveau N4 (traiter une situation). Ne teste JAMAIS une notion qui n'a pas été réellement développée dans cette séance précise, même si elle semble proche.
+3) (Chantier 3, lot 8) Dans la colonne Activités de l'enseignant du Développement, TOUTE consigne adressée aux ÉLÈVES doit avoir le format EXACT "Demande : « Verbe-impératif-tu ... »" (le verbe cité, à l'intérieur des guillemets, choisi dans la liste ci-dessus, à l'IMPÉRATIF 2e PERSONNE DU SINGULIER -- "Identifie", "Cite", "Relève", "Justifie", jamais l'infinitif "Identifier" ni le vouvoiement "Identifiez") -- SAUF si c'est une vraie question posée aux élèves, qui reste alors "Demande : « Qu'est-ce que... ? »" (verbe remplacé par la question entière, jamais les deux mélangés dans la même ligne). Les actions DU PROFESSEUR lui-même (gestion de classe : distribuer, circuler, diviser la classe...) restent à la 3e personne du présent, SANS guillemets ni "Demande" (ex. "Distribue un extrait à chaque groupe.", "Circule parmi les groupes.").
+TROIS EXEMPLES CONFORMES : "Demande : « Identifie le genre de chaque extrait proposé. »" / "Demande : « Cite deux caractéristiques du roman policier. »" / "Distribue un extrait différent à chaque groupe."
+DEUX EXEMPLES INTERDITS, à ne jamais reproduire sous cette forme : "Identifie le genre de chaque extrait proposé." SANS le préfixe "Demande : «...»" (consigne élève jamais nue) ; "Explique le roman d'aventure : « Qu'est-ce qui caractérise un roman d'aventure ? »" -- verbe de tête ET question citée dans la même ligne, ambigu (le verbe "Explique" devient alors superflu, seule la question compte : "Demande : « Qu'est-ce qui caractérise un roman d'aventure ? »").
+4) ÉVALUATION -- exactement 3 consignes, dans cet ordre de complexité croissante : la 1re consigne utilise un verbe de niveau N1 ou N2, la 2e un verbe de niveau N3, la 3e un verbe de niveau N4 (traiter une situation). Ne teste JAMAIS une notion qui n'a pas été réellement développée dans cette séance précise, même si elle semble proche. (Chantier 6, lot 8) Les 3 consignes doivent toutes être traitables dans la durée totale de 10 mn impartie à l'Évaluation : la réponse attendue à CHAQUE consigne, y compris la 3e (niveau 4), tient en AU PLUS 3 PHRASES -- jamais une production écrite longue (ex. "environ 80 mots"), jamais une consigne "écris/rédige la suite de l'extrait" ou toute autre tâche de rédaction créative étendue. La consigne 4 (traiter une situation) reste une tâche d'ANALYSE courte portant sur un extrait déjà fourni (justifier, comparer, relever des indices...), jamais une tâche de PRODUCTION d'un nouveau texte.
 5) (Chantier H.4, lot 2) Une consigne qui demande de comparer, distinguer ou différencier plusieurs éléments vient TOUJOURS APRÈS que ces éléments ont été présentés/définis individuellement plus haut dans le Développement -- jamais une comparaison portant sur une notion pas encore introduite à ce stade de la fiche.`;
 }
 
@@ -7385,7 +7503,11 @@ function imperatifSingulierVerbeTaxonomique(verbeComplet) {
 const VERBES_ELEVES_INFINITIF_VERS_IMPERATIF = {
   'définir': 'Définis', 'distinguer': 'Distingue', 'énumérer': 'Énumère', 'citer': 'Cite',
   'expliquer': 'Explique', 'analyser': 'Analyse', 'relever': 'Relève', 'classer': 'Classe',
-  'présenter': 'Présente', 'comparer': 'Compare', 'déterminer': 'Détermine'
+  'présenter': 'Présente', 'comparer': 'Compare', 'déterminer': 'Détermine',
+  // 'proposer' ajouté (chantier 3, lot 8, bug réel confirmé sur S2 : "-
+  // Proposer des présentations orales d'auteurs." resté à l'infinitif,
+  // absent des 11 verbes ci-dessus).
+  'proposer': 'Propose'
 };
 const VERBES_PROFESSEUR_INFINITIF_VERS_PRESENT = {
   'diviser': 'Divise', 'distribuer': 'Distribue', 'circuler': 'Circule', 'inviter': 'Invite'
@@ -7402,6 +7524,36 @@ const VERBES_PROFESSEUR_TOUTES_FORMES = new Set([
   ...Object.values(VERBES_PROFESSEUR_INFINITIF_VERS_PRESENT).map((v) => v.toLowerCase()),
   'demande', 'demander'
 ]);
+
+// Toutes les formes d'impératif "tu" valides pour une consigne élève
+// (verbes du référentiel VERBES_ELEVES_INFINITIF_VERS_IMPERATIF + tous les
+// verbes de la taxonomie DPFC, cf. TOUS_VERBES_TAXONOMIQUES) -- extrait en
+// constante partagée (lot 8) pour éviter de recalculer le même Set dans
+// chaque fonction qui doit reconnaître une consigne élève déjà conforme
+// (corrigerVerbeProfesseurErroneAvantCitationVouvoiement,
+// corrigerConsigneAmbigueAvecQuestionEnGuillemets,
+// envelopperConsignesElevesDansDemande).
+const FORMES_TU_IMPERATIF_ELEVES = new Set(Object.values(VERBES_ELEVES_INFINITIF_VERS_IMPERATIF).map((v) => v.toLowerCase()));
+TOUS_VERBES_TAXONOMIQUES.forEach((v) => FORMES_TU_IMPERATIF_ELEVES.add(imperatifSingulierVerbeTaxonomique(v).toLowerCase()));
+
+// Vouvoiement (2e personne du pluriel) -> impératif "tu" pour chaque verbe
+// de la taxonomie DPFC (chantier 3, lot 8, bug réel confirmé sur S1 :
+// "Demande : « Déterminez l'intrigue... »", "Demande : « Analysez votre
+// extrait... »" -- une consigne déjà au format "Demande : «...»" mais dont
+// le verbe cité reste au vouvoiement). Construit depuis l'infinitif (jamais
+// l'inverse) : le vouvoiement d'un verbe du 1er groupe (-er) est son
+// radical + "ez" (jamais de changement de voyelle, contrairement au tu-
+// singulier -- cf. EXCEPTIONS_IMPERATIF_SINGULIER), celui d'un verbe du 2e
+// groupe (-ir) est son radical + "issez".
+const VERBES_TAXONOMIQUES_FORME_VOUS_VERS_TU = new Map();
+TOUS_VERBES_TAXONOMIQUES.forEach((v) => {
+  const base = v.toLowerCase();
+  let formeVous = null;
+  if (/ir$/.test(base)) formeVous = base.slice(0, -2) + 'issez';
+  else if (/er$/.test(base)) formeVous = base.slice(0, -2) + 'ez';
+  if (!formeVous) return;
+  VERBES_TAXONOMIQUES_FORME_VOUS_VERS_TU.set(formeVous, imperatifSingulierVerbeTaxonomique(v));
+});
 
 // Chantier 4 (lot 7) : applique les deux conversions ci-dessus à chaque
 // ligne de la colonne Activités de l'enseignant du Développement dont le
@@ -7454,8 +7606,6 @@ function corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuHTML) {
   if (!contenuHTML) return contenuHTML;
   const $ = cheerio.load(contenuHTML);
   let modifie = false;
-  const formesEleves = new Set(Object.values(VERBES_ELEVES_INFINITIF_VERS_IMPERATIF).map((v) => v.toLowerCase()));
-  TOUS_VERBES_TAXONOMIQUES.forEach((v) => formesEleves.add(imperatifSingulierVerbeTaxonomique(v).toLowerCase()));
   $('tr').each((_, tr) => {
     const $tr = $(tr);
     const premiereColonne = $tr.children('td').first().text();
@@ -7468,7 +7618,7 @@ function corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuHTML) {
       const m = texte.match(/^(\s*-?\s*)([A-ZÉÈÀÎ][a-zéèàîïôûâêç]+)(\s[^:]*:\s*«\s*[A-ZÉÈÀÎ][a-zéèàûô]*ez\b.*)$/s);
       if (!m) return;
       const [, prefixe, premierMot, reste] = m;
-      if (!formesEleves.has(premierMot.toLowerCase())) return;
+      if (!FORMES_TU_IMPERATIF_ELEVES.has(premierMot.toLowerCase())) return;
       $p.text(`${prefixe}Demande${reste}`);
       modifie = true;
     });
@@ -7477,11 +7627,168 @@ function corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuHTML) {
   return $.html($('body').length ? $('body') : $.root());
 }
 
+// Chantier 3 (lot 8, bug réel confirmé sur S1) : coordination mixte --
+// "Définis un roman et énumérer ses caractéristiques principales." : le 1er
+// verbe est déjà conjugué à l'impératif "tu", mais le 2e (après "et") reste
+// à l'infinitif. Corrige UNIQUEMENT le verbe coordonné (jamais le 1er,
+// déjà traité par corrigerInfinitifsConsignesDeveloppement s'il en avait
+// besoin) -- liste fermée VERBES_ELEVES_INFINITIF_VERS_IMPERATIF, jamais de
+// conjugaison inventée pour un verbe hors de cette liste.
+function corrigerCoordinationVerbeEleveNonConjugue(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    const $enseignant = $tr.children('td').eq(2);
+    if (!$enseignant.length) return;
+    $enseignant.find('p').each((_, p) => {
+      const $p = $(p);
+      const texte = $p.text();
+      const nouveauTexte = texte.replace(/\bet\s+([a-zéèàîïôûâêç]+(?:er|ir))\b/g, (correspondance, infinitif) => {
+        const remplacement = VERBES_ELEVES_INFINITIF_VERS_IMPERATIF[infinitif.toLowerCase()];
+        return remplacement ? `et ${remplacement.toLowerCase()}` : correspondance;
+      });
+      if (nouveauTexte === texte) return;
+      $p.text(nouveauTexte);
+      modifie = true;
+    });
+  });
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
+// Chantier 3 (lot 8, bug réel confirmé sur S2 : "- Explique le roman
+// d'aventure : « Qu'est-ce qui caractérise un roman d'aventure ? »") :
+// forme ambiguë -- un verbe élève déjà conjugué, suivi d'un complément,
+// puis d'une question entre guillemets. Impossible de savoir si la
+// consigne demande d'EXPLIQUER (verbe de tête) ou de RÉPONDRE à la question
+// citée : supprime le verbe et son complément ambigus, ne garde que la
+// question, au format canonique "Demande : « ... »".
+function corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    const $enseignant = $tr.children('td').eq(2);
+    if (!$enseignant.length) return;
+    $enseignant.find('p').each((_, p) => {
+      const $p = $(p);
+      const texte = $p.text();
+      const m = texte.match(/^(\s*-?\s*)([A-ZÉÈÀÎ][a-zéèàîïôûâêç]+)\s[^:?»]*:\s*«\s*([^»]*\?)\s*»\s*$/s);
+      if (!m) return;
+      const [, prefixe, premierMot, question] = m;
+      if (!FORMES_TU_IMPERATIF_ELEVES.has(premierMot.toLowerCase())) return;
+      $p.text(`${prefixe}Demande : « ${question.trim()} »`);
+      modifie = true;
+    });
+  });
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
+// Chantier 3 (lot 8, bug réel confirmé sur S1 : "Demande : « Déterminez
+// l'intrigue... »", "Demande : « Analysez votre extrait... »") : une
+// consigne déjà au format canonique "Demande : « ... »" mais dont le(s)
+// verbe(s) cité(s) restent au vouvoiement -- jamais le "Demande
+// <complément> : «...»" du chantier 4 (lot 7), qui cite une parole RÉELLE
+// du professeur au vouvoiement, volontairement conservée telle quelle.
+function corrigerVouvoiementDansConsigneDemande(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    const $enseignant = $tr.children('td').eq(2);
+    if (!$enseignant.length) return;
+    $enseignant.find('p').each((_, p) => {
+      const $p = $(p);
+      const texte = $p.text();
+      if (!/^\s*-?\s*Demande\s*:\s*«/.test(texte)) return;
+      const nouveauTexte = texte.replace(/\b([A-ZÉÈÀÎ][a-zéèàîïôûâêç]*ez)\b/g, (mot) => {
+        const forme = VERBES_TAXONOMIQUES_FORME_VOUS_VERS_TU.get(mot.toLowerCase());
+        return forme ? forme.charAt(0).toUpperCase() + forme.slice(1) : mot;
+      });
+      if (nouveauTexte === texte) return;
+      $p.text(nouveauTexte);
+      modifie = true;
+    });
+  });
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
+// Chantier 3 (lot 8) : format canonique explicitement demandé -- "toute
+// consigne aux élèves doit avoir le format « Demande : « Verbe-impératif-
+// tu … » »", les actions du professeur restant à la 3e personne sans
+// guillemets. Enveloppe donc TOUTE ligne qui n'est pas une action du
+// professeur (VERBES_PROFESSEUR_TOUTES_FORMES, exclue explicitement) et
+// pas encore au format "Demande :" -- y COMPRIS une ligne dont le verbe
+// n'est pas encore à l'impératif "tu" correct (vouvoiement, infinitif
+// resté hors des listes fermées des 4 correctifs ci-dessus) : par
+// élimination (même principe que l'ancien calculerTauxConsignesSansVerbeTaxonomique,
+// avant ce lot), toute ligne de cette colonne qui n'est pas une action du
+// professeur EST une consigne élève, quel que soit l'état de son verbe --
+// le chantier E (régénération ciblée, cf. plus bas) reste chargé de
+// corriger un verbe encore fautif à l'intérieur des guillemets après
+// enveloppement, exactement comme il corrige déjà une citation vouvoiement
+// (corrigerVouvoiementDansConsigneDemande). Exécutée en DERNIER parmi les
+// correctifs mécaniques de consignes (après les 4 fonctions ci-dessus),
+// pour qu'une ligne qu'elles viennent de corriger (coordination, infinitif,
+// forme ambiguë) soit déjà grammaticalement correcte avant d'être
+// enveloppée.
+function envelopperConsignesElevesDansDemande(contenuHTML) {
+  if (!contenuHTML) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    const $enseignant = $tr.children('td').eq(2);
+    if (!$enseignant.length) return;
+    $enseignant.find('p').each((_, p) => {
+      const $p = $(p);
+      const texte = $p.text();
+      const m = texte.match(/^(\s*-?\s*)([A-ZÉÈÀÎ][a-zéèàîïôûâêç]+)(.*)$/s);
+      if (!m) return;
+      const [, prefixe, premierMot, reste] = m;
+      const motMinuscule = premierMot.toLowerCase();
+      if (motMinuscule === 'demande') return;
+      if (VERBES_PROFESSEUR_TOUTES_FORMES.has(motMinuscule)) return;
+      $p.text(`${prefixe}Demande : « ${premierMot}${reste} »`);
+      modifie = true;
+    });
+  });
+  if (!modifie) return contenuHTML;
+  return $.html($('body').length ? $('body') : $.root());
+}
+
+// Chantier 3 (lot 8, bug réel confirmé sur S2 : encore 9/14 malgré le
+// chantier 4 du lot 7, qui comparait le DÉBUT de chaque ligne à un verbe de
+// la taxonomie -- peu fiable dès que les styles de consigne se mélangent,
+// cf. chantiers ci-dessus). Restructuré pour ne compter QUE les lignes déjà
+// au format canonique "Demande : « ... »" (ou "Demande <complément> : «
+// ... »", chantier 4 lot 7) -- toute ligne d'action du professeur (3e
+// personne, sans guillemets) n'entre plus du tout dans ce compteur, qu'elle
+// soit exclue ou non par VERBES_PROFESSEUR_TOUTES_FORMES (elle ne matche
+// simplement jamais /^Demande\b/). Une consigne citée est conforme si elle
+// commence par un verbe taxonomique à l'impératif "tu", OU si c'est une
+// vraie question (le professeur peut légitimement poser une question orale
+// sans impératif, cf. chantier 3 : "Qu'est-ce qui caractérise...?").
 function calculerTauxConsignesSansVerbeTaxonomique(contenuHTML) {
   if (!contenuHTML) return { taux: 0, total: 0, nonConformes: [] };
   const $ = cheerio.load(contenuHTML);
   const formes = TOUS_VERBES_TAXONOMIQUES.map(imperatifSingulierVerbeTaxonomique).map((r) => r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const motifDebutVerbe = new RegExp(`^(?:${formes.join('|')})\\b`, 'i');
+  const motifVerbeTu = new RegExp(`^(?:${formes.join('|')})\\b`, 'i');
+  const motifQuestion = /^(?:Qu['’]|Quel|Quelle|Quels|Quelles|Comment|Pourquoi|O[uù]|Quand|Combien)\b.*\?\s*$/i;
   const consignes = [];
   $('tr').each((_, tr) => {
     const $tr = $(tr);
@@ -7491,15 +7798,12 @@ function calculerTauxConsignesSansVerbeTaxonomique(contenuHTML) {
     if (!colonneEnseignant.length) return;
     colonneEnseignant.find('p').each((_, p) => {
       const texte = $(p).text().trim().replace(/^-\s*/, '');
-      // Chantier 4 (lot 7) : exclut les actions du professeur (liste fermée
-      // diviser/distribuer/circuler/inviter, infinitif ou déjà conjuguée) --
-      // ce ne sont jamais de vraies consignes aux élèves, elles ne doivent
-      // donc jamais entrer dans le compteur "X consignes sur Y" ni dans son
-      // dénominateur.
-      if (texte && !VERBES_PROFESSEUR_TOUTES_FORMES.has(normaliserTexte(texte.split(/\s+/)[0]))) consignes.push(texte);
+      const m = texte.match(/^Demande\b[^:]*:\s*«\s*(.*)»\s*$/s);
+      if (!m) return;
+      consignes.push({ texte, citation: m[1].trim() });
     });
   });
-  const nonConformes = consignes.filter((texte) => !motifDebutVerbe.test(texte));
+  const nonConformes = consignes.filter((c) => !motifVerbeTu.test(c.citation) && !motifQuestion.test(c.citation)).map((c) => c.texte);
   return {
     taux: consignes.length ? nonConformes.length / consignes.length : 0,
     total: consignes.length,
@@ -7530,7 +7834,7 @@ async function regenererConsignesNonConformes(contenuHTML, nonConformes) {
     max_tokens: 1024,
     messages: [{
       role: 'user',
-      content: `Voici des consignes pédagogiques destinées à des élèves qui ne respectent pas la règle suivante : chaque consigne doit COMMENCER par un verbe à l'impératif, 2e personne du SINGULIER, choisi EXCLUSIVEMENT dans cette liste : ${listeVerbes}. Reformule CHACUNE des consignes ci-dessous pour qu'elle commence par un de ces verbes à l'impératif singulier, SANS EN CHANGER LE SENS ni le contenu (même notion, mêmes éléments demandés) -- seule la formulation change. Jamais une question, jamais un verbe à une autre personne.
+      content: `Voici des consignes pédagogiques destinées à des élèves, toutes au format "Demande : « ... »", dont le texte entre guillemets ne respecte pas la règle suivante : il doit COMMENCER par un verbe à l'impératif, 2e personne du SINGULIER, choisi EXCLUSIVEMENT dans cette liste (sauf s'il s'agit déjà d'une vraie question, qui reste autorisée telle quelle) : ${listeVerbes}. Reformule CHACUNE des consignes ci-dessous en conservant EXACTEMENT le préfixe "Demande : «" et le guillemet fermant "»" finaux, pour que le texte entre guillemets commence par un de ces verbes à l'impératif singulier, SANS EN CHANGER LE SENS ni le contenu (même notion, mêmes éléments demandés) -- seule la formulation change. Jamais un verbe à une autre personne (vouvoiement interdit).
 
 CONSIGNES À REFORMULER :
 ${listeConsignes}
@@ -7576,7 +7880,14 @@ const CONTENUS_IMPOSES_CULTURE_LITTERAIRE = {
       interdits: ['sous-genre', 'autobiographie', 'mémoires', 'biographie']
     },
     s2: {
-      obligatoires: ["roman d'aventure", 'épistolaire', 'science-fiction', 'philosophique', 'drolatique', 'étiologique', 'didactique'],
+      // 'nouvelle'/'épopée' ajoutés (chantier 5, lot 8, bug réel confirmé
+      // sur S2) : le catalogue officiel (HABILETES_CONTENUS_OEUVRE_INTEGRALE.
+      // narrative.s2, "- nouvelle ; - épopée...") les liste au MÊME niveau
+      // que les sous-genres du roman/conte -- absents à tort de cette
+      // liste jusqu'ici, alors que c'est elle qui pilote déjà le contrôle
+      // obligatoires du chantier C ci-dessous (le gérant avait simplement
+      // oublié ces deux lignes lors de la construction initiale, lot 5).
+      obligatoires: ["roman d'aventure", 'épistolaire', 'science-fiction', 'philosophique', 'drolatique', 'étiologique', 'didactique', 'nouvelle', 'épopée'],
       // Chantier 5a (lot 7, bug réel confirmé sur S2) : "historique" seul
       // était un faux positif -- il apparaît légitimement dans la propre
       // définition officielle de l'épopée ("contexte historique ou
@@ -7702,6 +8013,141 @@ Réponds UNIQUEMENT avec un tableau JSON, sans aucun texte avant ni après, au f
     nbCorrigees++;
   });
   return { contenuHTML: $.html($('body').length ? $('body') : $.root()), nbCorrigees };
+}
+
+// Chantier 4 (lot 8, bug réel confirmé sur S1, consigne 2 de l'Évaluation) :
+// variante du chantier G.2 ci-dessus -- l'alternative n'est pas "(ou ...)"
+// à l'intérieur d'un même paragraphe, mais une ligne "OU" ISOLÉE dans son
+// propre <p>, entre deux paragraphes de réponse concurrents (jamais
+// détectée par detecterCorrigesAvecAlternative, qui ne scanne que le texte
+// de CHAQUE <p> pris séparément). Retourne, pour chaque occurrence, le
+// texte des deux paragraphes voisins, à fusionner en une seule réponse.
+function detecterCorrigesAvecAlternativeIsolee(contenuHTML) {
+  if (!contenuHTML) return [];
+  const $ = cheerio.load(contenuHTML);
+  const trouves = [];
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/[ÉE]VALUATION/i.test(premiereColonne)) return;
+    const $traces = $tr.children('td').eq(4);
+    if (!$traces.length) return;
+    const paragraphes = $traces.children('p').toArray();
+    for (let i = 1; i < paragraphes.length - 1; i++) {
+      if (!/^OU$/i.test($(paragraphes[i]).text().trim())) continue;
+      trouves.push({ avant: $(paragraphes[i - 1]).text().trim(), apres: $(paragraphes[i + 1]).text().trim() });
+    }
+  });
+  return trouves;
+}
+
+async function regenererCorrigesAvecAlternativeIsolee(contenuHTML, groupes) {
+  const $ = cheerio.load(contenuHTML);
+  const listeGroupes = groupes.map((g, i) => `${i + 1}. "${g.avant}" OU "${g.apres}"`).join('\n');
+  const reponse = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: `Voici des paires de réponses alternatives ("réponse A" OU "réponse B") pour une même consigne, alors qu'une consigne ne doit avoir QU'UNE SEULE réponse défendable. Pour CHAQUE paire ci-dessous, choisis UNE SEULE des deux réponses (la plus pertinente), SANS alternative, sans changer le sens général.
+
+PAIRES À FUSIONNER :
+${listeGroupes}
+
+Réponds UNIQUEMENT avec un tableau JSON, sans aucun texte avant ni après, au format exact :
+[{"avant": "texte exact de la 1re réponse", "apres": "texte exact de la 2e réponse", "corrigee": "texte de la réponse unique retenue"}]`
+    }]
+  });
+  const texteBrut = (reponse.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+  const correspondance = texteBrut.match(/\[[\s\S]*\]/);
+  if (!correspondance) return { contenuHTML, nbCorrigees: 0 };
+  let paires;
+  try {
+    paires = JSON.parse(correspondance[0]);
+  } catch (e) {
+    return { contenuHTML, nbCorrigees: 0 };
+  }
+  let nbCorrigees = 0;
+  $('tr').each((_, tr) => {
+    const $tr = $(tr);
+    const premiereColonne = $tr.children('td').first().text();
+    if (!/[ÉE]VALUATION/i.test(premiereColonne)) return;
+    const $traces = $tr.children('td').eq(4);
+    if (!$traces.length) return;
+    const paragraphes = $traces.children('p').toArray();
+    for (let i = paragraphes.length - 2; i >= 1; i--) {
+      if (!/^OU$/i.test($(paragraphes[i]).text().trim())) continue;
+      const avant = $(paragraphes[i - 1]).text().trim();
+      const apres = $(paragraphes[i + 1]).text().trim();
+      const paire = paires.find((x) => x && x.avant === avant && x.apres === apres);
+      if (!paire || typeof paire.corrigee !== 'string' || !paire.corrigee.trim()) continue;
+      $(paragraphes[i - 1]).text(paire.corrigee.trim());
+      $(paragraphes[i]).remove();
+      $(paragraphes[i + 1]).remove();
+      nbCorrigees++;
+    }
+  });
+  if (!nbCorrigees) return { contenuHTML, nbCorrigees: 0 };
+  return { contenuHTML: $.html($('body').length ? $('body') : $.root()), nbCorrigees };
+}
+
+// Chantier 4 (lot 8, bug réel confirmé sur S1 : "Extrait 1 (novel) : «...»"
+// et "...et implicitly il réussira...") : mots anglais isolés dans le corps
+// de la fiche -- liste FERMÉE (jamais une détection générique de mots
+// "non français", trop de faux positifs avec les noms propres/emprunts
+// légitimes), limitée aux occurrences RÉELLEMENT confirmées. Avertissement
+// seul (pas de régénération -- un mot isolé ne justifie pas un appel réel,
+// l'enseignant corrige lui-même en un instant une fois signalé).
+const MOTS_ANGLAIS_ISOLES_INTERDITS = ['novel', 'implicitly'];
+function detecterMotsAnglaisIsolesDansFiche(contenuHTML) {
+  if (!contenuHTML) return [];
+  const $ = cheerio.load(contenuHTML);
+  const texte = $('body').length ? $('body').text() : $.root().text();
+  const trouves = [];
+  MOTS_ANGLAIS_ISOLES_INTERDITS.forEach((mot) => {
+    if (new RegExp(`\\b${mot}\\b`, 'i').test(texte)) trouves.push(mot);
+  });
+  return trouves;
+}
+
+// Chantier 6 (lot 8, bug réel confirmé sur S1 : consigne 3 de l'Évaluation
+// demande d'"écrire la suite de l'Extrait 4" en "environ 80 mots", alors
+// que les 3 consignes de l'Évaluation doivent toutes se traiter dans les
+// 10 mn totales impartie -- cf. règle de prompt 4 ci-dessus). Détection
+// mécanique en complément : repère le bloc de texte qui suit l'en-tête
+// "CONSIGNE 3" dans la cellule Traces écrites de la ligne ÉVALUATION,
+// jusqu'au prochain en-tête "Réponses attendues"/"Critères d'évaluation"
+// (ou la fin de la cellule), et y cherche soit une consigne "écrire la
+// suite" (production créative étendue, jamais une tâche d'analyse),
+// soit une longueur en mots explicitement demandée au-delà de ce qu'une
+// réponse en 3 phrases permet.
+function detecterConsigne3EvaluationIrrealisable(contenuHTML) {
+  if (!contenuHTML) return null;
+  const $ = cheerio.load(contenuHTML);
+  let $traces = null;
+  $('tr').each((_, tr) => {
+    if ($traces) return;
+    const $tr = $(tr);
+    const $tds = $tr.children('td');
+    if ($tds.length < 5) return;
+    const premiereColonne = $tds.first().text();
+    if (!/[ÉE]VALUATION/i.test(premiereColonne)) return;
+    $traces = $tds.eq(4);
+  });
+  if (!$traces || !$traces.length) return null;
+  const paragraphes = $traces.children('p').toArray().map((p) => $(p).text().trim());
+  const indexConsigne3 = paragraphes.findIndex((t) => /^consigne\s*3\b/i.test(t));
+  if (indexConsigne3 === -1) return null;
+  const indexFin = paragraphes.findIndex((t, i) => i > indexConsigne3 && /^(r[ée]ponses?\s+attendues?|crit[èe]res?\s+d['’]?[ée]valuation)/i.test(t));
+  const blocConsigne3 = paragraphes.slice(indexConsigne3, indexFin === -1 ? paragraphes.length : indexFin).join(' ');
+  if (/[ée]cri(?:s|re|t|vez)\s+la\s+suite|r[ée]dige(?:r|z)?\s+la\s+suite|continue(?:r|z)?\s+l['’]histoire/i.test(blocConsigne3)) {
+    return `La consigne 3 de l'Évaluation demande d'"écrire la suite" d'un extrait -- une tâche de production écrite étendue, incompatible avec les 10 mn imparties à l'Évaluation entière (3 consignes). Reformulez-la en tâche d'analyse courte (justifier, comparer, relever des indices...) sur l'extrait déjà fourni, avec une réponse attendue en au plus 3 phrases.`;
+  }
+  const matchLongueur = blocConsigne3.match(/(\d+)\s*mots/i);
+  if (matchLongueur && parseInt(matchLongueur[1], 10) > 30) {
+    return `La consigne 3 de l'Évaluation demande une production écrite d'environ ${matchLongueur[1]} mots -- incompatible avec les 10 mn imparties à l'Évaluation entière (3 consignes) ; la réponse attendue doit tenir en au plus 3 phrases. Réduisez la longueur demandée ou reformulez en tâche d'analyse courte.`;
+  }
+  return null;
 }
 
 // Chantier F (lot 4) : une consigne qui renvoie à "cet extrait"/"ce texte"/
@@ -7832,6 +8278,49 @@ function verifierDureesEtapesDeveloppement(contenuHTML) {
   return null;
 }
 
+// Chantier 2 (lot 8, bug réel confirmé sur le docx S1 joint : 18+17+15 =
+// 50 mn au lieu de 45) : verifierDureesEtapesDeveloppement ci-dessus ne
+// fait qu'avertir, jamais corriger. Répartition déterministe demandée :
+// 15+15+15 (jamais une répartition proportionnelle inventée -- la seule
+// valeur fixe sans ambiguïté). Réécrit UNIQUEMENT le nombre de minutes
+// dans chaque titre d'étape des Traces écrites (le reste du titre, donc
+// toute mention de stratégie éventuelle, est conservé mot pour mot), PUIS
+// resynchronise le Plan du cours sur ces titres corrigés (même mécanisme
+// que le chantier C, lot 3/5 : construirePlanDepuisTraces). No-op (et
+// donc jamais d'invention) si les 3 titres ne sont pas tous détectés par
+// PATTERN_TITRE_ETAPE_DEVELOPPEMENT (ex. une étape dont le titre ne porte
+// qu'une durée seule, sans aucun intitulé ni stratégie) -- ce cas reste
+// laissé à l'avertissement générique de verifierDureesEtapesDeveloppement
+// ci-dessus ("ne semble pas structuré en exactement 3 étapes..."), jamais
+// une étape renommée ou une stratégie inventée pour forcer la correction.
+function corrigerDureesEtapesDeveloppementVers15x3(contenuHTML) {
+  if (!contenuHTML) return { contenuHTML, applique: false };
+  const $ = cheerio.load(contenuHTML);
+  let modifie = false;
+  $('tr').each((_, tr) => {
+    const $tds = $(tr).children('td');
+    if ($tds.length < 5) return;
+    const premiereColonne = $tds.eq(0).text();
+    if (!/D[ÉE]VELOPPEMENT/i.test(premiereColonne)) return;
+    const $titresP = $tds.eq(4).children('p').filter((_, p) => PATTERN_TITRE_ETAPE_DEVELOPPEMENT.test($(p).text().trim()));
+    if ($titresP.length !== 3) return;
+    const durees = $titresP.map((_, p) => {
+      const m = $(p).text().trim().match(/\((\d+)\s*mn\b/i);
+      return m ? parseInt(m[1], 10) : null;
+    }).get();
+    if (durees.some((d) => d === null) || durees.reduce((a, b) => a + b, 0) === 45) return;
+    $titresP.each((_, p) => {
+      const $p = $(p);
+      $p.text($p.text().replace(/\(\d+(\s*mn\b)/i, '(15$1'));
+    });
+    modifie = true;
+  });
+  if (!modifie) return { contenuHTML, applique: false };
+  let nouveauContenuHTML = $.html($('body').length ? $('body') : $.root());
+  nouveauContenuHTML = construirePlanDepuisTraces(nouveauContenuHTML);
+  return { contenuHTML: nouveauContenuHTML, applique: true };
+}
+
 // Chantier 6 (lot 7, bug réel confirmé sur S2 : "Précise le temps
 // disponible : « Vous avez 5 minutes pour répondre »" alors que la durée
 // réelle de l'Évaluation, forcée par forcerDureesConstantes, est de 10 mn) :
@@ -7951,7 +8440,20 @@ Réponds UNIQUEMENT avec le texte corrigé de la situation, sans aucun commentai
 // la ligne DÉVELOPPEMENT : un "extraits" promis exige la mention exacte
 // "Extraits composés pour la séance." ; un "tableau comparatif" promis
 // exige un <table> réellement présent dans cette cellule.
-function detecterSupportsPromisAbsents(contenuHTML) {
+// contenusImposes (lot 8, chantier 5) : paramètre optionnel, le catalogue
+// officiel de la séance (ex. CONTENUS_IMPOSES_CULTURE_LITTERAIRE.narrative.s2)
+// -- étend la détection ci-dessus, limitée aux lignes "(voir Développement)",
+// aux lignes DÉCLARATIVES des Supports ("- Extraits de nouvelles", jamais
+// suivie de "(voir Développement)"), bug réel confirmé sur le S2 joint :
+// cette ligne promet des extraits de "nouvelle", un sous-genre absent des
+// Traces écrites, mais /voir\s+d[ée]veloppement/i ne la reconnaît jamais
+// comme une promesse -- la fonction retournait donc null (aucune promesse
+// détectée) sans même examiner son contenu. Pourquoi ce cas précis
+// échappait déjà au chantier C (périmètre) au lot 7 : le catalogue
+// CONTENUS_IMPOSES_CULTURE_LITTERAIRE.narrative.s2.obligatoires lui-même
+// omettait encore 'nouvelle'/'épopée' à cette date (corrigé plus haut,
+// lot 8) -- deux lacunes indépendantes et cumulatives.
+function detecterSupportsPromisAbsents(contenuHTML, contenusImposes) {
   if (!contenuHTML) return null;
   const $ = cheerio.load(contenuHTML);
   let $supportsCell = null;
@@ -7964,10 +8466,8 @@ function detecterSupportsPromisAbsents(contenuHTML) {
     }
   });
   if (!$supportsCell || !$supportsCell.length) return null;
-  const lignesPromesses = $supportsCell.children('p').toArray()
-    .map((p) => $(p).text().trim())
-    .filter((t) => /voir\s+d[ée]veloppement/i.test(t));
-  if (!lignesPromesses.length) return null;
+  const toutesLesLignes = $supportsCell.children('p').toArray().map((p) => $(p).text().trim());
+  const lignesPromesses = toutesLesLignes.filter((t) => /voir\s+d[ée]veloppement/i.test(t));
 
   let $tracesCell = null;
   $('tr').each((_, tr) => {
@@ -7996,6 +8496,20 @@ function detecterSupportsPromisAbsents(contenuHTML) {
   const absentes = [];
   if (ligneExtraits && !extraitsPresents) absentes.push({ ligne: ligneExtraits, type: 'extraits' });
   if (ligneTableau && !tableauPresent) absentes.push({ ligne: ligneTableau, type: 'tableau' });
+
+  if (contenusImposes && Array.isArray(contenusImposes.obligatoires)) {
+    const texteTracesNormalise = normaliserTexte(texteTraces);
+    const lignesDeclaratives = toutesLesLignes.filter((l) => /\bextraits?\b/i.test(l) && !lignesPromesses.includes(l));
+    lignesDeclaratives.forEach((ligne) => {
+      const ligneNormalisee = normaliserTexte(ligne);
+      const termesManquants = contenusImposes.obligatoires.filter((terme) => {
+        const termeNormalise = normaliserTexte(terme);
+        return ligneNormalisee.includes(termeNormalise) && !texteTracesNormalise.includes(termeNormalise);
+      });
+      if (termesManquants.length) absentes.push({ ligne, type: 'extraits-terme', termes: termesManquants });
+    });
+  }
+
   return absentes.length ? absentes : null;
 }
 
@@ -8030,6 +8544,15 @@ async function regenererTracesSupportsAbsents(contenuHTML, promessesAbsentes) {
     if (p.type === 'tableau') {
       return `- Un tableau comparatif (balises HTML <table><tr><th>...</th></tr><tr><td>...</td></tr></table>) couvrant chaque genre/sous-genre déjà traité dans le texte ci-dessous, avec des colonnes de caractéristiques DÉJÀ MENTIONNÉES ci-dessous -- jamais une nouvelle caractéristique inventée.`;
     }
+    if (p.type === 'extraits-terme') {
+      // Chantier 5 (lot 8) : ici, le support promis (ex. "Extraits de
+      // nouvelles") nomme un genre/sous-genre ENTIÈREMENT absent du texte
+      // ci-dessous (jamais seulement son extrait) -- demande donc la même
+      // structure complète que les genres déjà traités (définition +
+      // caractéristiques + extrait), jamais un simple extrait isolé sans
+      // contexte.
+      return `- Une courte sous-section sur "${p.termes.join('", "')}" (brève définition + 2 à 4 caractéristiques, dans le même format que les genres/sous-genres déjà traités ci-dessous), suivie d'un court extrait (2 à 4 phrases) précédé de la mention exacte "Extraits composés pour la séance." -- jamais présenté comme un extrait d'une œuvre réelle existante.`;
+    }
     return `- De courts extraits (2 à 4 phrases chacun, un par genre/sous-genre déjà traité), précédés de la mention exacte "Extraits composés pour la séance." -- jamais présentés comme des extraits d'œuvres réelles existantes.`;
   }).join('\n');
   const reponse = await anthropic.messages.create({
@@ -8048,8 +8571,27 @@ Réponds UNIQUEMENT avec le texte HTML complet des Traces écrites (texte exista
   });
   const texteBrut = (reponse.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
   if (!texteBrut) return { contenuHTML, applique: false };
-  $tracesCell.html(texteBrut);
-  return { contenuHTML: $.html($('body').length ? $('body') : $.root()), applique: true };
+  // Garde-fou chantier 1 (lot 8) : la réponse attendue ici est TOUJOURS
+  // composée du texte existant SUIVI d'un ajout (tableau et/ou extraits) --
+  // jamais un seul paragraphe sans aucun saut de ligne. Rejette et conserve
+  // le contenuHTML d'origine si le nettoyage ne suffit pas à obtenir un
+  // résultat exploitable (l'appelant détecte alors toujours la promesse
+  // non tenue et avertit, cf. site d'appel chantier 3).
+  const { texte: texteNettoye, rejete } = nettoyerTexteBrutRegenere(texteBrut, { exigerSautDeLigne: true });
+  if (rejete) {
+    console.error('❌ Chantier 1 (lot 8) -- réponse brute de regenererTracesSupportsAbsents rejetée (format invalide après nettoyage), original conservé.');
+    return { contenuHTML, applique: false };
+  }
+  insererTexteRegenereDansCellule($tracesCell, texteNettoye);
+  let nouveauContenuHTML = $.html($('body').length ? $('body') : $.root());
+  // Un tableau comparatif demandé peut être revenu en Markdown brut
+  // (" | a | b | ") plutôt qu'en vraies balises <table> malgré la consigne
+  // -- relance donc tout de suite la même conversion que celle déjà
+  // programmée en fin de pipeline, pour qu'il soit capturé AVANT le
+  // hoisting final des tableaux larges (cf. hoisterTableauxLargesDesCellules,
+  // lot 6, qui s'exécute après toutes les régénérations ciblées).
+  nouveauContenuHTML = convertirTableauxMarkdownEnHtml(nouveauContenuHTML);
+  return { contenuHTML: nouveauContenuHTML, applique: true };
 }
 
 // Chantier 3 (lot 7) : retire de "Supports didactiques" toute ligne de
@@ -8108,9 +8650,19 @@ Réponds UNIQUEMENT avec le texte corrigé, sans aucun commentaire ni balisage a
   });
   const texteBrut = (reponse.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
   if (!texteBrut) return { contenuHTML, applique: false };
-  const paragraphes = texteBrut.split(/\n+/).map((l) => l.trim()).filter(Boolean);
-  $celluleTraces.html(paragraphes.map((l) => `<p>${echapperHtml(l)}</p>`).join(''));
-  return { contenuHTML: $.html($('body').length ? $('body') : $.root()), applique: true };
+  // Même nettoyage que le chantier 3 (cf. nettoyerTexteBrutRegenere), mais
+  // SANS exiger de saut de ligne : une correction de périmètre légitime
+  // peut tenir en un seul paragraphe -- l'exiger rejetterait alors à tort
+  // des réponses par ailleurs correctes.
+  const { texte: texteNettoye, rejete } = nettoyerTexteBrutRegenere(texteBrut, { exigerSautDeLigne: false });
+  if (rejete) {
+    console.error('❌ Chantier 1 (lot 8) -- réponse brute de regenererPerimetreCultureLitteraire rejetée (format invalide après nettoyage), original conservé.');
+    return { contenuHTML, applique: false };
+  }
+  insererTexteRegenereDansCellule($celluleTraces, texteNettoye);
+  let nouveauContenuHTML = $.html($('body').length ? $('body') : $.root());
+  nouveauContenuHTML = convertirTableauxMarkdownEnHtml(nouveauContenuHTML);
+  return { contenuHTML: nouveauContenuHTML, applique: true };
 }
 
 // Libellé du champ Leçon (entête), calibré sur la fiche de référence
@@ -10653,45 +11205,18 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           contenuHTML = corrigerInfinitifsConsignesDeveloppement(contenuHTML);
           contenuHTML = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuHTML);
         }
-        if (typeSeanceOI === 'culture_litteraire' && approcheNormalisee === 'APC') {
-          // Chantier E (lot 3, remplace le choix du lot 2 qui n'implémentait
-          // QUE l'avertissement) : contrôle déterministe sur la règle 3) de
-          // construireConsigneVerbesTaxonomiquesAPC -- cf. commentaire sur
-          // calculerTauxConsignesSansVerbeTaxonomique. Une régénération
-          // CIBLÉE (cf. regenererConsignesNonConformes) sur les seules
-          // consignes fautives, UNE SEULE fois, journalisée -- jamais une
-          // 2e génération de la fiche entière (cf. le commentaire détaillé
-          // sur regenererConsignesNonConformes pour le raisonnement complet).
-          const { taux, total, nonConformes } = calculerTauxConsignesSansVerbeTaxonomique(contenuHTML);
-          // Chantier G.1 (lot 4) : journalise TOUT verbe hors liste dès qu'il
-          // est détecté, indépendamment du seuil de 30% ci-dessous (qui ne
-          // déclenche qu'une régénération, pas un simple suivi) -- permet de
-          // repérer les verbes récurrents hors taxonomie pour enrichir la
-          // liste "à valider" dans un futur lot, sans attendre qu'ils
-          // dépassent ce seuil.
-          if (nonConformes.length) {
-            console.log(`📋 Chantier G.1 -- verbe(s) hors taxonomie détecté(s) (${nonConformes.length}/${total}) :`, nonConformes.map((c) => c.split(/\s+/)[0]));
-          }
-          if (total > 0 && taux > 0.3) {
-            console.log(`⚠️ Chantier E -- ${nonConformes.length}/${total} consigne(s) non conformes (verbe taxonomique manquant), régénération ciblée déclenchée :`, nonConformes);
-            try {
-              const resultatRegen = await regenererConsignesNonConformes(contenuHTML, nonConformes);
-              contenuHTML = resultatRegen.contenuHTML;
-              console.log(`✅ Chantier E -- régénération ciblée : ${resultatRegen.nbCorrigees}/${nonConformes.length} consigne(s) reformulée(s).`);
-            } catch (e) {
-              console.error('❌ Chantier E -- échec de la régénération ciblée (fiche conservée telle quelle) :', e.message);
-            }
-            const verif = calculerTauxConsignesSansVerbeTaxonomique(contenuHTML);
-            if (verif.total > 0 && verif.taux > 0.3) {
-              console.log(`⚠️ Chantier E -- encore ${verif.nonConformes.length}/${verif.total} non conforme(s) après régénération, avertissement affiché.`);
-              res.write(`data: ${JSON.stringify({ avertissement: `${verif.nonConformes.length} consigne(s) du Développement sur ${verif.total} ne commencent toujours pas par un verbe de la taxonomie DPFC après une tentative de correction automatique -- vérifiez et reformulez-les en consignes d'action avant utilisation.` })}\n\n`);
-            }
-          }
-        }
-        // Chantier E (lot 4) : structure 3 étapes + durées = 45 mn --
-        // détection + avertissement uniquement (cf. commentaire sur
-        // verifierDureesEtapesDeveloppement).
+        // Chantier 2 (lot 8) : structure 3 étapes + durées = 45 mn --
+        // correction déterministe (15+15+15) si les 3 titres d'étape sont
+        // bien identifiés, PUIS avertissement générique si la structure
+        // reste non conforme après coup (ex. moins de 3 titres détectables
+        // -- jamais une invention, cf. commentaire sur
+        // corrigerDureesEtapesDeveloppementVers15x3).
         if (typeSeanceOI === 'culture_litteraire') {
+          const resultatCorrigeDurees = corrigerDureesEtapesDeveloppementVers15x3(contenuHTML);
+          if (resultatCorrigeDurees.applique) {
+            contenuHTML = resultatCorrigeDurees.contenuHTML;
+            console.log('✅ Chantier 2 (lot 8) -- durées des 3 étapes du Développement corrigées en 15+15+15 (Plan resynchronisé).');
+          }
           const avertissementDurees = verifierDureesEtapesDeveloppement(contenuHTML);
           if (avertissementDurees) {
             res.write(`data: ${JSON.stringify({ avertissement: avertissementDurees })}\n\n`);
@@ -10721,6 +11246,57 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
             }
           }
         }
+        if (typeSeanceOI === 'culture_litteraire') {
+          // Chantier 3 (lot 8) : coordination mixte, forme ambiguë avec
+          // question citée, vouvoiement résiduel dans une consigne déjà au
+          // format "Demande :", puis mise au format canonique -- dans cet
+          // ordre précis (cf. commentaire sur envelopperConsignesElevesDansDemande).
+          // APRÈS le chantier F ci-dessus (qui détecte/reformule encore des
+          // consignes par correspondance de texte EXACTE avant tout
+          // enveloppement -- jamais après, sous peine de ne plus jamais
+          // matcher le texte brut que ses propres régénérations attendent).
+          contenuHTML = corrigerCoordinationVerbeEleveNonConjugue(contenuHTML);
+          contenuHTML = corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuHTML);
+          contenuHTML = corrigerVouvoiementDansConsigneDemande(contenuHTML);
+          contenuHTML = envelopperConsignesElevesDansDemande(contenuHTML);
+        }
+        if (typeSeanceOI === 'culture_litteraire' && approcheNormalisee === 'APC') {
+          // Chantier E (lot 3, remplace le choix du lot 2 qui n'implémentait
+          // QUE l'avertissement) : contrôle déterministe sur la règle 3) de
+          // construireConsigneVerbesTaxonomiquesAPC -- cf. commentaire sur
+          // calculerTauxConsignesSansVerbeTaxonomique. Une régénération
+          // CIBLÉE (cf. regenererConsignesNonConformes) sur les seules
+          // consignes fautives, UNE SEULE fois, journalisée -- jamais une
+          // 2e génération de la fiche entière (cf. le commentaire détaillé
+          // sur regenererConsignesNonConformes pour le raisonnement complet).
+          // APRÈS le chantier 3 (lot 8) ci-dessus : calculerTauxConsignesSansVerbeTaxonomique
+          // ne compte désormais que les lignes déjà au format "Demande :".
+          const { taux, total, nonConformes } = calculerTauxConsignesSansVerbeTaxonomique(contenuHTML);
+          // Chantier G.1 (lot 4) : journalise TOUT verbe hors liste dès qu'il
+          // est détecté, indépendamment du seuil de 30% ci-dessous (qui ne
+          // déclenche qu'une régénération, pas un simple suivi) -- permet de
+          // repérer les verbes récurrents hors taxonomie pour enrichir la
+          // liste "à valider" dans un futur lot, sans attendre qu'ils
+          // dépassent ce seuil.
+          if (nonConformes.length) {
+            console.log(`📋 Chantier G.1 -- verbe(s) hors taxonomie détecté(s) (${nonConformes.length}/${total}) :`, nonConformes.map((c) => (c.match(/«\s*(\S+)/) || [])[1] || c.split(/\s+/)[0]));
+          }
+          if (total > 0 && taux > 0.3) {
+            console.log(`⚠️ Chantier E -- ${nonConformes.length}/${total} consigne(s) non conformes (verbe taxonomique manquant), régénération ciblée déclenchée :`, nonConformes);
+            try {
+              const resultatRegen = await regenererConsignesNonConformes(contenuHTML, nonConformes);
+              contenuHTML = resultatRegen.contenuHTML;
+              console.log(`✅ Chantier E -- régénération ciblée : ${resultatRegen.nbCorrigees}/${nonConformes.length} consigne(s) reformulée(s).`);
+            } catch (e) {
+              console.error('❌ Chantier E -- échec de la régénération ciblée (fiche conservée telle quelle) :', e.message);
+            }
+            const verif = calculerTauxConsignesSansVerbeTaxonomique(contenuHTML);
+            if (verif.total > 0 && verif.taux > 0.3) {
+              console.log(`⚠️ Chantier E -- encore ${verif.nonConformes.length}/${verif.total} non conforme(s) après régénération, avertissement affiché.`);
+              res.write(`data: ${JSON.stringify({ avertissement: `${verif.nonConformes.length} consigne(s) du Développement sur ${verif.total} ne commencent toujours pas par un verbe de la taxonomie DPFC après une tentative de correction automatique -- vérifiez et reformulez-les en consignes d'action avant utilisation.` })}\n\n`);
+            }
+          }
+        }
         // Chantier G.2 (lot 4) : corrigé avec alternative ("(ou ...)"/"ou
         // bien ...") -- UNE SEULE régénération ciblée, journalisée.
         if (typeSeanceOI === 'culture_litteraire') {
@@ -10739,6 +11315,38 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
               console.log(`⚠️ Chantier G.2 -- encore ${verifCorriges.length} corrigé(s) avec alternative après régénération, avertissement affiché.`);
               res.write(`data: ${JSON.stringify({ avertissement: `${verifCorriges.length} corrigé(s) de l'Évaluation proposent encore plusieurs réponses alternatives après une tentative de correction automatique -- vérifiez et ne gardez qu'une seule réponse avant utilisation.` })}\n\n`);
             }
+          }
+          // Chantier 4 (lot 8) : variante "OU" isolée entre deux
+          // paragraphes (cf. detecterCorrigesAvecAlternativeIsolee).
+          const corrigesAvecAlternativeIsolee = detecterCorrigesAvecAlternativeIsolee(contenuHTML);
+          if (corrigesAvecAlternativeIsolee.length) {
+            console.log(`⚠️ Chantier 4 (lot 8) -- ${corrigesAvecAlternativeIsolee.length} corrigé(s) avec "OU" isolé détecté(s), régénération ciblée déclenchée :`, corrigesAvecAlternativeIsolee);
+            try {
+              const resultatRegenIsolee = await regenererCorrigesAvecAlternativeIsolee(contenuHTML, corrigesAvecAlternativeIsolee);
+              contenuHTML = resultatRegenIsolee.contenuHTML;
+              console.log(`✅ Chantier 4 (lot 8) -- régénération ciblée : ${resultatRegenIsolee.nbCorrigees}/${corrigesAvecAlternativeIsolee.length} corrigé(s) fusionné(s).`);
+            } catch (e) {
+              console.error('❌ Chantier 4 (lot 8) -- échec de la régénération ciblée (fiche conservée telle quelle) :', e.message);
+            }
+            const verifIsolee = detecterCorrigesAvecAlternativeIsolee(contenuHTML);
+            if (verifIsolee.length) {
+              console.log(`⚠️ Chantier 4 (lot 8) -- encore ${verifIsolee.length} "OU" isolé après régénération, avertissement affiché.`);
+              res.write(`data: ${JSON.stringify({ avertissement: `${verifIsolee.length} corrigé(s) de l'Évaluation proposent encore deux réponses séparées par "OU" après une tentative de correction automatique -- vérifiez et ne gardez qu'une seule réponse avant utilisation.` })}\n\n`);
+            }
+          }
+          // Chantier 4 (lot 8) : mots anglais isolés -- avertissement seul.
+          const motsAnglais = detecterMotsAnglaisIsolesDansFiche(contenuHTML);
+          if (motsAnglais.length) {
+            console.log(`⚠️ Chantier 4 (lot 8) -- mot(s) anglais isolé(s) détecté(s), avertissement affiché :`, motsAnglais);
+            res.write(`data: ${JSON.stringify({ avertissement: `Mot(s) anglais détecté(s) dans la fiche (${motsAnglais.join(', ')}) -- vérifiez et corrigez avant utilisation.` })}\n\n`);
+          }
+          // Chantier 6 (lot 8) : consigne 3 de l'Évaluation irréalisable en
+          // 10 mn -- avertissement seul (règle de prompt 4 ci-dessus en 1re
+          // ligne de défense).
+          const avertissementConsigne3 = detecterConsigne3EvaluationIrrealisable(contenuHTML);
+          if (avertissementConsigne3) {
+            console.log('⚠️ Chantier 6 (lot 8) -- consigne 3 de l\'Évaluation irréalisable en 10 mn, avertissement affiché.');
+            res.write(`data: ${JSON.stringify({ avertissement: avertissementConsigne3 })}\n\n`);
           }
         }
         // Chantier C (lot 4) : périmètre strict S1/S2 narrative 2nde --
@@ -10824,7 +11432,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           // ne dépend d'aucun catalogue, seulement de la cohérence interne
           // Supports <-> Traces de CETTE fiche.
           {
-            let promessesAbsentes = detecterSupportsPromisAbsents(contenuHTML);
+            let promessesAbsentes = detecterSupportsPromisAbsents(contenuHTML, contenusImposesVerif);
             if (promessesAbsentes) {
               console.log(`⚠️ Chantier 3 -- support(s) promis absent(s) des Traces, régénération ciblée déclenchée :`, promessesAbsentes.map((p) => p.type));
               try {
@@ -10836,11 +11444,16 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
               } catch (e) {
                 console.error('❌ Chantier 3 -- échec de la régénération ciblée (fiche conservée telle quelle) :', e.message);
               }
-              promessesAbsentes = detecterSupportsPromisAbsents(contenuHTML);
+              promessesAbsentes = detecterSupportsPromisAbsents(contenuHTML, contenusImposesVerif);
               if (promessesAbsentes) {
                 console.log('⚠️ Chantier 3 -- support(s) encore absent(s) après régénération, ligne(s) retirée(s) et avertissement affiché.', promessesAbsentes.map((p) => p.type));
                 contenuHTML = retirerLignesSupportPromesses(contenuHTML, promessesAbsentes.map((p) => p.ligne));
-                res.write(`data: ${JSON.stringify({ avertissement: `${promessesAbsentes.map((p) => (p.type === 'tableau' ? 'le tableau comparatif' : 'les extraits')).join(' et ')} promis dans les Supports didactiques n'a/ont pas pu être produit(s) après une tentative de correction automatique -- la ligne de promesse correspondante a été retirée des Supports. Ajoutez le contenu manuellement si nécessaire.` })}\n\n`);
+                const libellesPromesses = promessesAbsentes.map((p) => {
+                  if (p.type === 'tableau') return 'le tableau comparatif';
+                  if (p.type === 'extraits-terme') return `les extraits (${p.termes.join(', ')})`;
+                  return 'les extraits';
+                });
+                res.write(`data: ${JSON.stringify({ avertissement: `${libellesPromesses.join(' et ')} promis dans les Supports didactiques n'a/ont pas pu être produit(s) après une tentative de correction automatique -- la ligne de promesse correspondante a été retirée des Supports. Ajoutez le contenu manuellement si nécessaire.` })}\n\n`);
               }
             }
           }
@@ -10900,6 +11513,10 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         // final (ci-dessous), qui doit aussi s'appliquer au tableau
         // désormais déplacé en pleine largeur.
         contenuHTML = hoisterTableauxLargesDesCellules(contenuHTML);
+        // Chantier 1 (lot 8) : balayage final des "\n" littéraux
+        // éventuellement écrits par le modèle lui-même (hors toute
+        // régénération ciblée, déjà nettoyée à sa propre source ci-dessus).
+        contenuHTML = corrigerRetoursLigneLitterauxDansFiche(contenuHTML);
         // Chantier F.1 (lot 2) : police + interligne écran/PDF -- en tout
         // dernier, une fois le HTML définitivement structuré par tout ce qui
         // précède (aucune étape ultérieure ne reparse ni ne réécrit
@@ -11569,6 +12186,9 @@ app.get('/api/fiche/:id', async (req, res) => {
     // hoisterTableauxLargesDesCellules) ne rejouait jamais cette correction
     // non plus, puisqu'elle n'était câblée qu'au pipeline de génération.
     contenuAffiche = hoisterTableauxLargesDesCellules(contenuAffiche);
+    // Chantier 1 (lot 8) : idem pour un "\n" littéral déjà figé dans une
+    // fiche enregistrée avant ce correctif.
+    contenuAffiche = corrigerRetoursLigneLitterauxDansFiche(contenuAffiche);
     // Chantier 2 (lot 6) : idem pour un établissement inventé déjà figé dans
     // le contenu enregistré.
     contenuAffiche = corrigerEtablissementInvente(contenuAffiche);
@@ -11580,6 +12200,11 @@ app.get('/api/fiche/:id', async (req, res) => {
     // pour le chantier C, lot 5) -- jamais rejoués à chaque téléchargement.
     contenuAffiche = corrigerInfinitifsConsignesDeveloppement(contenuAffiche);
     contenuAffiche = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuAffiche);
+    // Chantier 3 (lot 8) : même raisonnement, correctifs purement mécaniques.
+    contenuAffiche = corrigerCoordinationVerbeEleveNonConjugue(contenuAffiche);
+    contenuAffiche = corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuAffiche);
+    contenuAffiche = corrigerVouvoiementDansConsigneDemande(contenuAffiche);
+    contenuAffiche = envelopperConsignesElevesDansDemande(contenuAffiche);
     contenuAffiche = corrigerDureeAnnonceeEvaluation(contenuAffiche);
     const ficheAffichee = fiche.toObject ? fiche.toObject() : { ...fiche };
     ficheAffichee.contenu = contenuAffiche;
@@ -11665,11 +12290,19 @@ app.post('/api/fiche/:id/pdf', async (req, res) => {
     // Chantier 1 (lot 6) : même raisonnement -- rejoue le sorting des
     // tableaux larges hors cellule (cf. hoisterTableauxLargesDesCellules).
     contenuExport = hoisterTableauxLargesDesCellules(contenuExport);
+    // Chantier 1 (lot 8) : "\n" littéral déjà figé dans une fiche
+    // enregistrée avant ce correctif.
+    contenuExport = corrigerRetoursLigneLitterauxDansFiche(contenuExport);
     // Chantier 2 (lot 6) : établissement inventé déjà figé dans le contenu.
     contenuExport = corrigerEtablissementInvente(contenuExport);
     // Chantiers 4 et 6 (lot 7) : corrections mécaniques, sans appel Anthropic.
     contenuExport = corrigerInfinitifsConsignesDeveloppement(contenuExport);
     contenuExport = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuExport);
+    // Chantier 3 (lot 8) : correctifs mécaniques de format des consignes.
+    contenuExport = corrigerCoordinationVerbeEleveNonConjugue(contenuExport);
+    contenuExport = corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuExport);
+    contenuExport = corrigerVouvoiementDansConsigneDemande(contenuExport);
+    contenuExport = envelopperConsignesElevesDansDemande(contenuExport);
     contenuExport = corrigerDureeAnnonceeEvaluation(contenuExport);
     const pdfBuffer = await genererPdfDepuisHtml(contenuExport, landscape);
 
@@ -11703,11 +12336,19 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
     // LibreOffice) -- rejoue le sorting hors cellule à l'export, même
     // raisonnement que ci-dessus pour convertirTableauxMarkdownEnHtml.
     contenuExport = hoisterTableauxLargesDesCellules(contenuExport);
+    // Chantier 1 (lot 8) : "\n" littéral déjà figé dans une fiche
+    // enregistrée avant ce correctif.
+    contenuExport = corrigerRetoursLigneLitterauxDansFiche(contenuExport);
     // Chantier 2 (lot 6) : établissement inventé déjà figé dans le contenu.
     contenuExport = corrigerEtablissementInvente(contenuExport);
     // Chantiers 4 et 6 (lot 7) : corrections mécaniques, sans appel Anthropic.
     contenuExport = corrigerInfinitifsConsignesDeveloppement(contenuExport);
     contenuExport = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuExport);
+    // Chantier 3 (lot 8) : correctifs mécaniques de format des consignes.
+    contenuExport = corrigerCoordinationVerbeEleveNonConjugue(contenuExport);
+    contenuExport = corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuExport);
+    contenuExport = corrigerVouvoiementDansConsigneDemande(contenuExport);
+    contenuExport = envelopperConsignesElevesDansDemande(contenuExport);
     contenuExport = corrigerDureeAnnonceeEvaluation(contenuExport);
     const docxBuffer = await genererDocxDepuisHtml(contenuExport, landscape, fiche.estOeuvreIntegraleSecondCycle);
 
