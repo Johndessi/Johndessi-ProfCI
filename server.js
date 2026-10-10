@@ -10053,7 +10053,9 @@ const SCHEMA_OUTIL_CORRECTIONS_FICHE_JSON = {
             extrait: { type: 'string' }, corrige: { type: 'string' }
           }
         }
-      }
+      },
+      supports: { type: 'array', items: { type: 'string' } },
+      bibliographie: { type: 'array', items: { type: 'string' } }
     }
   }
 };
@@ -10077,9 +10079,10 @@ RÈGLES STRICTES :
 1) "situation" (champ racine) : 4 à 6 phrases, ancrée dans le quotidien ivoirien, pose un problème SANS JAMAIS nommer ni la notion de cette séance, ni sa réponse. Mots/expressions INTERDITS dans la situation (révéleraient la notion à l'avance) : ${interditsTexte}. Si tu évoques l'activité du cours, le nom exact est "Étude de l'œuvre intégrale" -- JAMAIS "Lecture".
 2) "presentation" et chaque partie de "developpement" : le champ "enseignant" est un tableau d'actions. type="demande" = une consigne/question adressée aux ÉLÈVES -- "texte" commence directement par le verbe à l'impératif tu (ou par une vraie question), JAMAIS par une action de l'enseignant lui-même ("Fait...", "Écrit...", "Distribue...", "Lit...", "Divise...", "Circule...", "Invite...", "Présente...", "Annonce...") -- un tel geste est TOUJOURS type="action". N'écris JAMAIS "Demande :" ni de guillemets dans "texte" -- le code les ajoute automatiquement pour type="demande". Si "texte" cite une parole entre guillemets, reste au tutoiement de bout en bout (jamais "votre"/"vous" mélangé à un verbe "tu").
 3) "developpement" : EXACTEMENT 3 parties. "titre" = le seul sujet de la partie (jamais de numéro, durée ou stratégie dans ce champ -- le code les ajoute). "traces" = le contenu réellement appris, détaillé et structuré en AU MOINS 2 blocs (titre/paragraphe/liste/extrait) -- jamais un unique bloc fourre-tout.
-4) "evaluation.consignes" : EXACTEMENT 3, niveaux croissants -- la 1re "N1" ou "N2", la 2e "N3", la 3e "N4". Chaque "extrait" (si fourni) doit être un texte NOUVEAU, jamais un extrait déjà utilisé dans "developpement[].traces". Chaque "corrige" : UNE SEULE réponse défendable, jamais "ou"/"on peut aussi"/"bonus"/une note/un commentaire méta -- juste la réponse elle-même. La consigne N4 ("Traiter une situation") doit être traitable avec les SEULS contenus vus dans cette séance précise (jamais un genre/notion hors de la liste ci-dessus), et sa réponse attendue doit être courte (quelques phrases), jamais une production longue ni un chiffre de pages inventé.
-5) Jamais "en vers" pour un genre en prose (roman, conte, nouvelle, épopée en prose) -- cette séance porte exclusivement sur la prose.
-6) Jamais de mot anglais, jamais de chiffre de pages inventé pour un texte que tu décris.
+4) "evaluation.consignes" : EXACTEMENT 3, niveaux croissants -- la 1re "N1" ou "N2", la 2e "N3", la 3e "N4". Chaque "extrait" (si fourni) doit être un texte NOUVEAU, jamais un extrait déjà utilisé dans "developpement[].traces", et ne doit JAMAIS être recopié une 2e fois dans "enonce" -- "enonce" pose la consigne, "extrait" porte SEUL le texte à lire. Chaque "corrige" : UNE SEULE réponse défendable, jamais "ou"/"on peut aussi"/"bonus"/une note/un commentaire méta -- juste la réponse elle-même. La consigne N4 ("Traiter une situation") doit porter sur un texte/une situation ENTIÈREMENT décrit(e) dans "enonce" ou fourni(e) dans "extrait" -- jamais un renvoi à "ces textes"/"ces récits"/"ci-dessus"/un support externe non fourni ; son verbe n'est JAMAIS "Propose"/"Imagine"/"Donne ton avis"/"Choisis" (réponse non unique), mais "Détermine"/"Analyse"/"Classe"/"Justifie" à partir de ce qui est décrit. Réponse attendue courte (quelques phrases), jamais une production longue ni un chiffre de pages inventé.
+5) "en vers" est INTERDIT dans "situation" et dans chaque "enonce" (cette évaluation porte exclusivement sur la prose) -- mais RESTE AUTORISÉ dans "developpement[].traces" si c'est un fait exact sur le genre décrit (ex. l'épopée existe "en prose ou en vers").
+6) Jamais de mot anglais (ex. "the", "and", "with", "of", "for", "which", "example", "imagine"/"imagined") nulle part dans la fiche. Jamais de chiffre de pages inventé pour un texte que tu décris. Jamais d'extrait attribué à une œuvre réelle nommée (ex. "extrait du conte X") -- un extrait composé pour la séance reste anonyme, jamais signé ni titré.
+7) "supports" et "bibliographie" : AU MOINS 2 entrées chacun. Chaque entrée de "bibliographie" doit identifier un titre précis ET un auteur/traducteur/collection réels -- JAMAIS une entrée générique ("manuels scolaires...", "collectifs et traduits", "ouvrages divers").
 
 Remplis l'outil "soumettre_fiche" avec ces champs.`;
 }
@@ -10100,18 +10103,91 @@ async function genererFicheJSONCultureLitteraire({ leconCatalogue, seanceCatalog
 
 // --- Validation sémantique du JSON (avant rendu) ----------------------------
 const VERBES_3E_PERSONNE_INTERDITS_DANS_DEMANDE = /^(Fait|Écrit|Distribue|Lit|Divise|Circule|Invite|Présente\s+le|Annonce|Accorde|Ramasse|Pose|Salue|Répond)\b/;
-const EN_WORDS_RE_LOT9 = /\b(the|and|of|with|which|because|should|answer|student|teacher|expected)\b/i;
+// Lot 10 (bug réel confirmé sur S2, _7.docx) : liste élargie -- "imagined"
+// laissé au milieu d'une phrase française par le modèle n'était pas
+// détecté par la liste initiale (lot 9). Frontières personnalisées
+// ([A-Za-zÀ-ÿ] au lieu de \b) : \b considère les lettres accentuées comme
+// non alphanumériques, donc \bfor\b matchait à tort "forêt" (faux positif
+// réel rencontré en reconstituant la fixture S2 défectueuse -- "près de la
+// forêt" contient bien "for" suivi de "êt", jamais détecté comme un mot
+// séparé avec cette frontière correcte). "imagine" (sans -d) est VOLONTAIREMENT
+// absent de cette liste malgré son orthographe anglaise identique : c'est
+// aussi la 3e personne du singulier du verbe français "imaginer" ("un
+// troisième livre imagine un monde...", tout à fait correct) -- seul
+// "imagined" (participe passé anglais, jamais une forme française) est un
+// indice fiable de contamination anglaise (faux positif réel rencontré en
+// rejouant les fixtures lot 9 existantes).
+const EN_WORDS_RE_LOT9 = /(?<![A-Za-zÀ-ÿ])(the|and|of|with|which|because|should|answer|student|teacher|expected|imagined|for|example|like|from|about|your|into|also)(?![A-Za-zÀ-ÿ])/i;
 const MOTIFS_CORRIGE_INTERDIT_LOT9 = [
   { re: /(?<![A-Za-zÀ-ÿ])OU(?![A-Za-zÀ-ÿ])/, message: '« OU » (majuscules) -- réponse non unique' },
   { re: /on peut aussi|également adapt|bonus|accepté|accepte aussi|préférable|plusieurs réponses|exemple pour l'extrait/i, message: 'corrigé à réponses multiples / méta-commentaire' },
   { re: /l['’]élève doit|sans justification\b.{0,20}\.|note\s*:/i, message: 'méta-texte dans le corrigé' }
 ];
+// Lot 10 (bug réel confirmé sur S1, _6.docx) : "Lis" (impératif tu de
+// "lire", 3e groupe irrégulier -ir/-er) n'était jamais reconnu --
+// imperatifSingulierVerbeTaxonomique ne sait conjuguer que les verbes en
+// -er/-ir réguliers (cf. son propre commentaire), donc jamais "lire" même
+// s'il était ajouté à la taxonomie. Table dédiée, verbes irréguliers
+// seulement -- jamais une tentative de généraliser la règle -er/-ir.
+const VERBES_TU_IMPERATIF_IRREGULIERS_LOT10 = { lire: 'lis' };
 function texteCommenceParVerbeTuImperatifOuQuestion(texte) {
   const brut = (texte || '').trim();
   if (/\?\s*$/.test(brut)) return true;
   const premierMot = (brut.split(/\s+/)[0] || '').toLowerCase().replace(/[.,;:!?»]+$/, '');
-  return TOUS_VERBES_TAXONOMIQUES.some((v) => imperatifSingulierVerbeTaxonomique(v).toLowerCase() === premierMot);
+  if (TOUS_VERBES_TAXONOMIQUES.some((v) => imperatifSingulierVerbeTaxonomique(v).toLowerCase() === premierMot)) return true;
+  return Object.values(VERBES_TU_IMPERATIF_IRREGULIERS_LOT10).some((forme) => forme === premierMot);
 }
+// Lot 10 (bug réel confirmé sur S1 "heroïque" ×2, S2 "tradionnels") : table
+// fermée de fautes fréquentes -- correction DÉTERMINISTE (jamais une
+// régénération ciblée pour une simple faute de frappe connue, qui
+// consommerait sans raison l'unique tentative de régénération réservée aux
+// non-conformités réellement sémantiques). Appliquée sur toute chaîne du
+// JSON AVANT validation, pour que ces fautes ne déclenchent jamais de
+// régénération et n'atteignent jamais la fiche rendue.
+const FAUTES_ORTHOGRAPHE_FREQUENTES_LOT10 = [
+  { motif: /\bheroïque(s?)\b/g, correction: 'héroïque$1' },
+  { motif: /\btradionnel(s?)\b/g, correction: 'traditionnel$1' }
+];
+function corrigerOrthographeValeur(valeur) {
+  if (typeof valeur !== 'string') return valeur;
+  let corrigee = valeur;
+  FAUTES_ORTHOGRAPHE_FREQUENTES_LOT10.forEach(({ motif, correction }) => { corrigee = corrigee.replace(motif, correction); });
+  return corrigee;
+}
+function corrigerOrthographeFicheJSON(valeur) {
+  if (Array.isArray(valeur)) return valeur.map(corrigerOrthographeFicheJSON);
+  if (valeur && typeof valeur === 'object') {
+    const copie = {};
+    Object.keys(valeur).forEach((cle) => { copie[cle] = corrigerOrthographeFicheJSON(valeur[cle]); });
+    return copie;
+  }
+  return corrigerOrthographeValeur(valeur);
+}
+// Lot 10 (bug réel confirmé sur S1, _6.docx, consigne 2 : "Lis cet extrait
+// du conte ivoirien Anansi l'Araignée : « Anansi voulait... »") : un extrait
+// composé pour la séance ne doit JAMAIS être présenté comme une citation
+// VERBATIM tirée d'une œuvre réelle nommée -- seule la mention neutre
+// "Extraits composés pour la séance." est autorisée (cf.
+// rendreFicheJSONEnHTML). Motif volontairement limité à "extrait(s) du/de
+// la/de l'/des/d' <genre> <Mot capitalisé> ... : «" -- la citation entre
+// guillemets juste après est ce qui distingue une fabrication présentée
+// comme authentique d'une simple mention pédagogique légitime d'une œuvre
+// réelle (ex. "Projette ou lit un extrait du conte Le Petit Chaperon
+// Rouge." sans citation inventée qui suit -- jamais signalé).
+const MOTIF_ATTRIBUTION_EXTRAIT_FICTIVE_LOT10 = /\bextraits?\s+(?:du|de\s+l['’]|de\s+la|des|d['’])\s+(?:conte|roman|nouvelle|[ée]pop[ée]e|œuvre|livre|r[ée]cit)s?\s+(?:[a-zéèàîïôûâêç]+\s+)?[A-ZÉÈÀÎ][^.]{0,60}:\s*«/;
+// Lot 10 (bug réel confirmé sur S1, consigne 3 : "Analyse et classe deux
+// récits en prose découverts à la bibliothèque" sans aucun extrait fourni
+// -- l'élève ne peut matériellement pas répondre) : toute consigne qui
+// renvoie à un texte externe par une formule de ce type DOIT avoir un
+// "extrait" rempli ; sinon la consigne est inexécutable.
+const MOTIF_REFERENCE_TEXTE_NON_FOURNI_LOT10 = /\bces\s+(?:textes?|r[ée]cits?)\b|\bd[ée]couverts?\s+(?:à|a)\s+la\s+biblioth[èe]que\b|\bci-dessus\b/i;
+// Lot 10 (bug réel confirmé sur S2, consigne 3 : "Propose... un sous-genre
+// de conte et une nouvelle... en justifiant pourquoi chacun répondrait à
+// un besoin différent" -- corrigé = un exemple de réponse parmi d'autres,
+// jamais LA réponse unique) : ces 4 verbes d'ouverture produisent par
+// construction une tâche à réponses multiples, quel que soit le reste de
+// l'énoncé -- jamais autorisés en tête de la consigne N4.
+const VERBES_N4_REPONSE_NON_UNIQUE_LOT10 = /^(Propose|Imagine|Donne\s+ton\s+avis|Choisis)\b/i;
 function validerFicheJSON(ficheJSON, seanceCatalogue) {
   const erreurs = [];
   const ajoute = (section, message) => erreurs.push({ section, message });
@@ -10158,6 +10234,14 @@ function validerFicheJSON(ficheJSON, seanceCatalogue) {
     if (c.extrait && c.extrait.trim() && texteTracesConcatene.includes(normaliserTexte(c.extrait.trim()))) {
       ajoute(section, "extrait d'évaluation identique à un extrait déjà utilisé dans le développement");
     }
+    // Lot 10 : consigne inexécutable (renvoi à un texte non fourni) et
+    // consigne N4 à réponse non unique.
+    if (MOTIF_REFERENCE_TEXTE_NON_FOURNI_LOT10.test(c.enonce || '') && !(c.extrait && c.extrait.trim())) {
+      ajoute(section, `consigne non autonome -- renvoie à un texte non fourni ("extrait" vide) : "${(c.enonce || '').slice(0, 80)}"`);
+    }
+    if (c.niveau === 'N4' && VERBES_N4_REPONSE_NON_UNIQUE_LOT10.test((c.enonce || '').trim())) {
+      ajoute(section, `consigne N4 à réponse non unique (verbe d'ouverture interdit pour ce niveau) : "${(c.enonce || '').slice(0, 80)}"`);
+    }
   });
 
   const texteComplet = JSON.stringify(ficheJSON);
@@ -10165,16 +10249,39 @@ function validerFicheJSON(ficheJSON, seanceCatalogue) {
     const trouves = texteComplet.match(new RegExp(EN_WORDS_RE_LOT9.source, 'gi')) || [];
     ajoute('global', `mot(s) anglais détecté(s) : ${[...new Set(trouves.map((m) => m.toLowerCase()))].join(', ')}`);
   }
-  if (/\ben\s+vers\b/i.test(texteComplet)) ajoute('global', '"en vers" mentionné (séance exclusivement en prose)');
+  // Lot 10 : "en vers" n'est interdit que dans la situation et les énoncés
+  // (cette évaluation porte sur la prose) -- jamais dans les Traces du
+  // développement, où c'est parfois un fait exact (l'épopée existe "en
+  // prose ou en vers") -- bug réel confirmé sur S1 (faux positif).
+  const texteSituationEtEnonces = [ficheJSON.situation, ...consignes.map((c) => c.enonce)].filter(Boolean).join(' ');
+  if (/\ben\s+vers\b/i.test(texteSituationEtEnonces)) ajoute('global', '"en vers" mentionné dans la situation ou un énoncé (séance exclusivement en prose)');
   if (/\d+\s*pages?\b/i.test(texteComplet)) ajoute('global', 'nombre de pages inventé détecté');
   if (/activit[ée]\s+est\s+la\s+lecture|notre\s+activit[ée][^.?!]{0,20}[:»]?\s*lecture\b/i.test(texteComplet)) {
     ajoute('global', 'activité nommée "Lecture" au lieu de "Étude de l\'œuvre intégrale"');
+  }
+  if (MOTIF_ATTRIBUTION_EXTRAIT_FICTIVE_LOT10.test(texteComplet)) {
+    ajoute('global', "un extrait est attribué à une œuvre réelle nommée (ex. « extrait du conte X ») -- utilisez une attribution neutre (\"Extraits composés pour la séance.\"), jamais un titre/auteur précis non vérifiable");
   }
   const notionsInterdites = (seanceCatalogue.notions_interdites_dans_situation || []);
   const situationNormalisee = normaliserTexte(ficheJSON.situation || '');
   notionsInterdites.forEach((n) => {
     const nNormalise = normaliserTexte(n);
     if (nNormalise && situationNormalisee.includes(nNormalise)) ajoute('situation', `la situation mentionne la notion interdite "${n}"`);
+  });
+
+  // Lot 10 (bug réel confirmé sur S1 ET S2 : Supports/Bibliographie vides
+  // sur S1 ; sur S2, "Contes d'Afrique, collectifs et traduits" et "Manuels
+  // scolaires de littérature générale, 2nde" -- aucun titre/auteur
+  // identifiable) : au moins 2 entrées chacun, aucune entrée générique.
+  const supports = (ficheJSON.supports || []).filter((s) => s && s.trim());
+  const bibliographie = (ficheJSON.bibliographie || []).filter((b) => b && b.trim());
+  if (supports.length < 2) ajoute('global', `supports didactiques insuffisants (${supports.length}, attendu au moins 2)`);
+  if (bibliographie.length < 2) ajoute('global', `bibliographie insuffisante (${bibliographie.length}, attendu au moins 2)`);
+  const MOTIF_BIBLIOGRAPHIE_GENERIQUE_LOT10 = /manuels?\s+scolaires?|collectifs?\s+et\s+traduits?|ouvrages?\s+divers|anthologies?\s+diverses?/i;
+  bibliographie.forEach((entree) => {
+    if (MOTIF_BIBLIOGRAPHIE_GENERIQUE_LOT10.test(entree)) {
+      ajoute('global', `entrée de bibliographie trop générique (ni titre ni auteur identifiable) : "${entree}"`);
+    }
   });
 
   return { valide: erreurs.length === 0, erreurs };
@@ -10191,7 +10298,7 @@ ${detailErreurs}
 FICHE ACTUELLE (pour contexte) :
 ${JSON.stringify(ficheJSON)}
 
-Remplis l'outil "soumettre_corrections" avec UNIQUEMENT : "situation" si elle est fautive ; "developpement_corrige" (un élément par partie fautive, avec son "index" 0/1/2 et TOUS ses champs réécrits) ; "consignes_corrigees" (un élément par consigne fautive, avec son "index" 0/1/2 et TOUS ses champs réécrits).`;
+Remplis l'outil "soumettre_corrections" avec UNIQUEMENT les champs concernés par les sections fautives listées : "situation" si elle est fautive ; "developpement_corrige" (un élément par partie fautive, avec son "index" 0/1/2 et TOUS ses champs réécrits) ; "consignes_corrigees" (un élément par consigne fautive, avec son "index" 0/1/2 et TOUS ses champs réécrits) ; "supports" et/ou "bibliographie" (tableau complet corrigé) si l'un d'eux est signalé. Une non-conformité "global" (mot anglais, faute d'orthographe, extrait attribué à une œuvre réelle, "en vers" interdit...) peut se trouver n'importe où dans la fiche ci-dessus -- repère-la toi-même et corrige-la via le champ correspondant (situation, la bonne partie du développement, la bonne consigne, supports ou bibliographie).`;
   const reponse = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 4096,
@@ -10216,6 +10323,8 @@ Remplis l'outil "soumettre_corrections" avec UNIQUEMENT : "situation" si elle es
       ficheCorrigee.evaluation.consignes[c.index] = corrigee;
     }
   });
+  if (Array.isArray(corrections.supports)) ficheCorrigee.supports = corrections.supports;
+  if (Array.isArray(corrections.bibliographie)) ficheCorrigee.bibliographie = corrections.bibliographie;
   return ficheCorrigee;
 }
 
@@ -10297,7 +10406,11 @@ function rendreFicheJSONEnHTML(ficheJSON, contexte) {
   consignes.forEach((c, j) => {
     tracesEvaluation += `<p>Consigne ${j + 1} (Niveau ${c.niveau} : ${libelleNiveauTaxonomiqueLot9(c.niveau)})</p>`;
     tracesEvaluation += `<p>${echapperHtml(c.enonce || '')}</p>`;
-    if (c.extrait && c.extrait.trim()) tracesEvaluation += `<p>Extrait :</p><p>« ${echapperHtml(c.extrait)} »</p>`;
+    // Lot 10 (défaut g, bug réel confirmé sur S2) : si l'extrait est déjà
+    // recopié dans l'énoncé, ne jamais l'afficher une 2e fois sur une ligne
+    // "Extrait :" séparée.
+    const extraitDejaDansEnonce = c.extrait && c.extrait.trim() && normaliserTexte(c.enonce || '').includes(normaliserTexte(c.extrait.trim()).slice(0, 40));
+    if (c.extrait && c.extrait.trim() && !extraitDejaDansEnonce) tracesEvaluation += `<p>Extrait :</p><p>« ${echapperHtml(c.extrait)} »</p>`;
     tracesEvaluation += `<p>Réponse attendue : ${echapperHtml(c.corrige || '')}</p>`;
   });
 
@@ -10657,6 +10770,10 @@ ${tableDeroulement}
             let ficheJSONLot9 = await genererFicheJSONCultureLitteraire({
               leconCatalogue: leconCatalogueJSONLot9, seanceCatalogue: seanceCatalogueJSONLot9, approche: approcheNormalisee
             });
+            // Lot 10 : fautes fréquentes connues (table fermée) -- correction
+            // déterministe avant toute validation, pour ne jamais consommer
+            // l'unique régénération ciblée sur une simple faute de frappe.
+            ficheJSONLot9 = corrigerOrthographeFicheJSON(ficheJSONLot9);
             let { valide, erreurs } = validerFicheJSON(ficheJSONLot9, seanceCatalogueJSONLot9);
             if (!valide) {
               console.log(`⚠️ Lot 9 -- ${erreurs.length} non-conformité(s) détectée(s), régénération ciblée déclenchée :`, erreurs);
