@@ -1,0 +1,566 @@
+{
+ "_source": "Programme éducatif 2nde A/C/B (habiletés/contenus) + Progression annuelle DPFC 2026-2027 (titres/ordre). Règle: titres/ordre = progression; habiletés/contenus = programme.",
+ "_a_verifier": [
+  "Activité: la colonne de la progression DPFC s'intitule « ÉTUDE DE L'ŒUVRE INTÉGRALE »; le programme dit « Activité : Lecture ». Décision utilisateur: afficher « Étude de l'œuvre intégrale ».",
+  "S13/S14: pas d'habiletés/contenus dans le programme extrait — à confirmer.",
+  "Calendrier (semaines/mois): non extrait de façon fiable du PDF."
+ ],
+ "niveau": "2nde",
+ "discipline": "Français",
+ "competence": "Compétence 1 : Traiter des situations relatives à la construction du sens de textes divers.",
+ "activite": "Étude de l'œuvre intégrale",
+ "lecons": [
+  {
+   "numero": 1,
+   "titre": "Œuvre narrative",
+   "titre_programme": "Étude d'une œuvre intégrale narrative de littérature africaine ou étrangère",
+   "seances": [
+    {
+     "numero": 1,
+     "titre": "Culture littéraire : Connaître les genres en prose : leurs caractéristiques.",
+     "type": "culture_litteraire",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Connaître",
+       "contenu": [
+        "les genres en prose (roman, conte, épopée, nouvelle...)."
+       ]
+      },
+      {
+       "habilete": "Déterminer",
+       "contenu": [
+        "les éléments constitutifs de ces genres :",
+        "- l'intrigue ;",
+        "- le schéma narratif ;",
+        "- le schéma actantiel."
+       ]
+      },
+      {
+       "habilete": "Lire",
+       "contenu": [
+        "un texte en prose."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": [
+      "genres en prose",
+      "caractéristiques"
+     ]
+    },
+    {
+     "numero": 2,
+     "titre": "Culture littéraire : Connaître les genres en prose : les sous-genres.",
+     "type": "culture_litteraire",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Connaître",
+       "contenu": [
+        "les sous-genres :",
+        "- roman : roman d'aventure, épistolaire, de science-fiction ;",
+        "- conte : philosophique, drolatique, étiologique, didactique ;",
+        "- nouvelle ;",
+        "- épopée..."
+       ]
+      },
+      {
+       "habilete": "Présenter",
+       "contenu": [
+        "les auteurs de quelques œuvres narratives de la littérature ivoirienne, africaine et étrangère."
+       ]
+      },
+      {
+       "habilete": "Lire",
+       "contenu": [
+        "un texte en prose."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": [
+      "sous-genre",
+      "sous-genres"
+     ]
+    },
+    {
+     "numero": 3,
+     "titre": "Introduction à l'étude de l'œuvre intégrale narrative",
+     "type": "introduction",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Présenter",
+       "contenu": [
+        "l'auteur et l'œuvre en indiquant le genre (roman, conte, épopée, nouvelle...)."
+       ]
+      },
+      {
+       "habilete": "Situer",
+       "contenu": [
+        "l'œuvre dans son contexte historique, littéraire voire dans un courant littéraire."
+       ]
+      },
+      {
+       "habilete": "Formuler",
+       "contenu": [
+        "l'axe d'étude de l'œuvre."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": []
+    },
+    {
+     "numero": 4,
+     "titre": "Lecture méthodique n°1",
+     "type": "lecture_methodique",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Formuler",
+       "contenu": [
+        "des hypothèses de lecture (Lecture méthodique) ;",
+        "l'hypothèse générale (Lecture méthodique) ;",
+        "le fil conducteur (Lecture dirigée) ;",
+        "le problème en rapport avec le thème de l'exposé."
+       ]
+      },
+      {
+       "habilete": "Identifier",
+       "contenu": [
+        "le type de texte ;",
+        "la tonalité ;",
+        "les personnages et les thèmes majeurs ;",
+        "les outils grammaticaux pertinents ;",
+        "les indices lexicaux pertinents ;",
+        "les figures de style pertinentes ;",
+        "le schéma actantiel."
+       ]
+      },
+      {
+       "habilete": "Analyser",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Interpréter",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Appliquer",
+       "contenu": [
+        "la démarche des activités de lecture ;",
+        "la démarche de l'exposé."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": []
+    },
+    {
+     "numero": 5,
+     "titre": "Lecture dirigée n°1",
+     "type": "lecture_dirigee",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Formuler",
+       "contenu": [
+        "des hypothèses de lecture (Lecture méthodique) ;",
+        "l'hypothèse générale (Lecture méthodique) ;",
+        "le fil conducteur (Lecture dirigée) ;",
+        "le problème en rapport avec le thème de l'exposé."
+       ]
+      },
+      {
+       "habilete": "Identifier",
+       "contenu": [
+        "le type de texte ;",
+        "la tonalité ;",
+        "les personnages et les thèmes majeurs ;",
+        "les outils grammaticaux pertinents ;",
+        "les indices lexicaux pertinents ;",
+        "les figures de style pertinentes ;",
+        "le schéma actantiel."
+       ]
+      },
+      {
+       "habilete": "Analyser",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Interpréter",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Appliquer",
+       "contenu": [
+        "la démarche des activités de lecture ;",
+        "la démarche de l'exposé."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": []
+    },
+    {
+     "numero": 6,
+     "titre": "Lecture méthodique n°2",
+     "type": "lecture_methodique",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Formuler",
+       "contenu": [
+        "des hypothèses de lecture (Lecture méthodique) ;",
+        "l'hypothèse générale (Lecture méthodique) ;",
+        "le fil conducteur (Lecture dirigée) ;",
+        "le problème en rapport avec le thème de l'exposé."
+       ]
+      },
+      {
+       "habilete": "Identifier",
+       "contenu": [
+        "le type de texte ;",
+        "la tonalité ;",
+        "les personnages et les thèmes majeurs ;",
+        "les outils grammaticaux pertinents ;",
+        "les indices lexicaux pertinents ;",
+        "les figures de style pertinentes ;",
+        "le schéma actantiel."
+       ]
+      },
+      {
+       "habilete": "Analyser",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Interpréter",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Appliquer",
+       "contenu": [
+        "la démarche des activités de lecture ;",
+        "la démarche de l'exposé."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": []
+    },
+    {
+     "numero": 7,
+     "titre": "Exposé n°1",
+     "type": "expose",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Formuler",
+       "contenu": [
+        "des hypothèses de lecture (Lecture méthodique) ;",
+        "l'hypothèse générale (Lecture méthodique) ;",
+        "le fil conducteur (Lecture dirigée) ;",
+        "le problème en rapport avec le thème de l'exposé."
+       ]
+      },
+      {
+       "habilete": "Identifier",
+       "contenu": [
+        "le type de texte ;",
+        "la tonalité ;",
+        "les personnages et les thèmes majeurs ;",
+        "les outils grammaticaux pertinents ;",
+        "les indices lexicaux pertinents ;",
+        "les figures de style pertinentes ;",
+        "le schéma actantiel."
+       ]
+      },
+      {
+       "habilete": "Analyser",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Interpréter",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Appliquer",
+       "contenu": [
+        "la démarche des activités de lecture ;",
+        "la démarche de l'exposé."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": []
+    },
+    {
+     "numero": 8,
+     "titre": "Lecture dirigée n°2",
+     "type": "lecture_dirigee",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Formuler",
+       "contenu": [
+        "des hypothèses de lecture (Lecture méthodique) ;",
+        "l'hypothèse générale (Lecture méthodique) ;",
+        "le fil conducteur (Lecture dirigée) ;",
+        "le problème en rapport avec le thème de l'exposé."
+       ]
+      },
+      {
+       "habilete": "Identifier",
+       "contenu": [
+        "le type de texte ;",
+        "la tonalité ;",
+        "les personnages et les thèmes majeurs ;",
+        "les outils grammaticaux pertinents ;",
+        "les indices lexicaux pertinents ;",
+        "les figures de style pertinentes ;",
+        "le schéma actantiel."
+       ]
+      },
+      {
+       "habilete": "Analyser",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Interpréter",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Appliquer",
+       "contenu": [
+        "la démarche des activités de lecture ;",
+        "la démarche de l'exposé."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": []
+    },
+    {
+     "numero": 9,
+     "titre": "Lecture méthodique n°3",
+     "type": "lecture_methodique",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Formuler",
+       "contenu": [
+        "des hypothèses de lecture (Lecture méthodique) ;",
+        "l'hypothèse générale (Lecture méthodique) ;",
+        "le fil conducteur (Lecture dirigée) ;",
+        "le problème en rapport avec le thème de l'exposé."
+       ]
+      },
+      {
+       "habilete": "Identifier",
+       "contenu": [
+        "le type de texte ;",
+        "la tonalité ;",
+        "les personnages et les thèmes majeurs ;",
+        "les outils grammaticaux pertinents ;",
+        "les indices lexicaux pertinents ;",
+        "les figures de style pertinentes ;",
+        "le schéma actantiel."
+       ]
+      },
+      {
+       "habilete": "Analyser",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Interpréter",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Appliquer",
+       "contenu": [
+        "la démarche des activités de lecture ;",
+        "la démarche de l'exposé."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": []
+    },
+    {
+     "numero": 10,
+     "titre": "Lecture dirigée n°3",
+     "type": "lecture_dirigee",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Formuler",
+       "contenu": [
+        "des hypothèses de lecture (Lecture méthodique) ;",
+        "l'hypothèse générale (Lecture méthodique) ;",
+        "le fil conducteur (Lecture dirigée) ;",
+        "le problème en rapport avec le thème de l'exposé."
+       ]
+      },
+      {
+       "habilete": "Identifier",
+       "contenu": [
+        "le type de texte ;",
+        "la tonalité ;",
+        "les personnages et les thèmes majeurs ;",
+        "les outils grammaticaux pertinents ;",
+        "les indices lexicaux pertinents ;",
+        "les figures de style pertinentes ;",
+        "le schéma actantiel."
+       ]
+      },
+      {
+       "habilete": "Analyser",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Interpréter",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Appliquer",
+       "contenu": [
+        "la démarche des activités de lecture ;",
+        "la démarche de l'exposé."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": []
+    },
+    {
+     "numero": 11,
+     "titre": "Exposé n°2",
+     "type": "expose",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Formuler",
+       "contenu": [
+        "des hypothèses de lecture (Lecture méthodique) ;",
+        "l'hypothèse générale (Lecture méthodique) ;",
+        "le fil conducteur (Lecture dirigée) ;",
+        "le problème en rapport avec le thème de l'exposé."
+       ]
+      },
+      {
+       "habilete": "Identifier",
+       "contenu": [
+        "le type de texte ;",
+        "la tonalité ;",
+        "les personnages et les thèmes majeurs ;",
+        "les outils grammaticaux pertinents ;",
+        "les indices lexicaux pertinents ;",
+        "les figures de style pertinentes ;",
+        "le schéma actantiel."
+       ]
+      },
+      {
+       "habilete": "Analyser",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Interpréter",
+       "contenu": [
+        "les indices textuels relevés."
+       ]
+      },
+      {
+       "habilete": "Appliquer",
+       "contenu": [
+        "la démarche des activités de lecture ;",
+        "la démarche de l'exposé."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": []
+    },
+    {
+     "numero": 12,
+     "titre": "Conclusion de l'étude de l'œuvre intégrale narrative",
+     "type": "conclusion",
+     "duree": "1 heure",
+     "habiletes_contenus": [
+      {
+       "habilete": "Rappeler",
+       "contenu": [
+        "l'axe d'étude ;",
+        "les thèmes étudiés."
+       ]
+      },
+      {
+       "habilete": "Relever",
+       "contenu": [
+        "les faits d'écriture étudiés."
+       ]
+      },
+      {
+       "habilete": "Préciser",
+       "contenu": [
+        "la portée de l'œuvre."
+       ]
+      },
+      {
+       "habilete": "Porter",
+       "contenu": [
+        "un jugement critique sur l'œuvre (thème, écriture, visée, etc.)."
+       ]
+      }
+     ],
+     "notions_interdites_dans_situation": []
+    },
+    {
+     "numero": 13,
+     "titre": "Évaluation de l'étude de l'œuvre intégrale",
+     "type": "evaluation",
+     "duree": "1 heure",
+     "habiletes_contenus": null,
+     "notions_interdites_dans_situation": []
+    },
+    {
+     "numero": 14,
+     "titre": "Correction de l'évaluation de l'étude de l'œuvre intégrale narrative",
+     "type": "correction",
+     "duree": "1 heure",
+     "habiletes_contenus": null,
+     "notions_interdites_dans_situation": []
+    }
+   ]
+  }
+ ],
+ "regles_moments": {
+  "presentation_mn": 5,
+  "developpement_mn": 45,
+  "evaluation_mn": 10,
+  "parties_developpement": 3,
+  "duree_par_partie_mn": 15,
+  "consignes_evaluation": 3,
+  "interligne": 1.5
+ }
+}
