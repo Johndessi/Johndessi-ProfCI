@@ -1,0 +1,139 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Requête d'import POST /api/admin/fiche-bibliotheque (Lot 11)",
+  "description": "Corps JSON attendu par POST /api/admin/fiche-bibliotheque (en-tête x-admin-key : ADMIN_SEED_KEY). Le champ \"fiche\" est passé par corrigerOrthographeFicheJSON puis par le validateur sémantique du lot 10 (validerFicheJSON) avant tout stockage -- un JSON non conforme est rejeté avec la liste détaillée des défauts, rien n'est stocké. Périmètre couvert pour l'instant : niveau 2nde, discipline Français, activité Étude de l'œuvre intégrale, type de séance Culture littéraire (Leçon 1, Séances 1-2 -- cf. catalogue/2nde.json). La Séance 3 (Introduction, structure libre I/II/III) n'est PAS prise en charge par cette bibliothèque.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["niveau", "discipline", "activite", "lecon", "seance", "fiche"],
+  "properties": {
+    "niveau": {
+      "type": "string",
+      "description": "Code du niveau scolaire, doit correspondre à un fichier catalogue/<niveau>.json. Seul \"2nde\" est pris en charge pour l'instant.",
+      "enum": ["2nde"]
+    },
+    "discipline": { "type": "string", "description": "Doit correspondre au champ \"discipline\" du catalogue (ex. \"Français\")." },
+    "activite": { "type": "string", "description": "Doit correspondre au champ \"activite\" du catalogue (ex. \"Étude de l'œuvre intégrale\")." },
+    "lecon": {
+      "description": "Numéro de la leçon dans catalogue/<niveau>.json (entier ou chaîne numérique).",
+      "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "string", "pattern": "^[0-9]+$" }]
+    },
+    "seance": {
+      "description": "Numéro de la séance dans la leçon (entier ou chaîne numérique). La Séance 3 est explicitement refusée par la route.",
+      "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "string", "pattern": "^[0-9]+$" }]
+    },
+    "fiche": {
+      "title": "Contenu structuré de la fiche (schéma lot 9, identique à l'outil tool_use \"soumettre_fiche\")",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["situation", "presentation", "developpement", "evaluation"],
+      "properties": {
+        "situation": {
+          "type": "string",
+          "description": "4 à 6 phrases, ancrée dans le quotidien ivoirien, pose un problème SANS nommer la notion de la séance ni sa réponse (cf. catalogue[...].notions_interdites_dans_situation). Jamais \"en vers\" ici (séance exclusivement en prose)."
+        },
+        "supports": {
+          "type": "array",
+          "description": "AU MOINS 2 entrées. Jamais une entrée générique (\"manuels scolaires...\", \"collectifs et traduits\"...).",
+          "minItems": 2,
+          "items": { "type": "string" }
+        },
+        "bibliographie": {
+          "type": "array",
+          "description": "AU MOINS 2 entrées, chacune avec un titre précis ET un auteur/traducteur/collection identifiable. Jamais une entrée générique.",
+          "minItems": 2,
+          "items": { "type": "string" }
+        },
+        "presentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategie", "enseignant", "eleves"],
+          "properties": {
+            "strategie": { "type": "string" },
+            "enseignant": { "$ref": "#/definitions/actions" },
+            "eleves": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "developpement": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "EXACTEMENT 3 parties.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["titre", "strategie", "enseignant", "eleves", "traces"],
+            "properties": {
+              "titre": { "type": "string", "description": "Sujet de la partie SEUL -- jamais de numéro, durée ou stratégie (le code les ajoute : \"1. <titre> (15 mn, <stratégie>)\")." },
+              "strategie": { "type": "string" },
+              "enseignant": { "$ref": "#/definitions/actions" },
+              "eleves": { "type": "array", "items": { "type": "string" } },
+              "traces": {
+                "type": "array",
+                "minItems": 2,
+                "description": "AU MOINS 2 blocs (titre/paragraphe/liste/extrait) -- jamais un unique bloc fourre-tout.",
+                "items": { "$ref": "#/definitions/blocTrace" }
+              }
+            }
+          }
+        },
+        "evaluation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["consignes"],
+          "properties": {
+            "consignes": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "description": "EXACTEMENT 3 consignes, niveaux croissants : la 1re N1 ou N2, la 2e N3, la 3e N4.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["niveau", "enonce", "corrige"],
+                "properties": {
+                  "niveau": { "type": "string", "enum": ["N1", "N2", "N3", "N4"] },
+                  "enonce": {
+                    "type": "string",
+                    "description": "Commence par un verbe à l'impératif \"tu\" (ex. \"Identifie\", \"Analyse\", \"Lis\"...) ou par une vraie question. Jamais \"en vers\" ici. Pour N4 : jamais un renvoi à un texte non fourni (\"ces textes\", \"découverts à la bibliothèque\", \"ci-dessus\") ; jamais un verbe à réponse non unique (\"Propose\", \"Imagine\", \"Donne ton avis\", \"Choisis\")."
+                  },
+                  "extrait": {
+                    "type": "string",
+                    "description": "NOUVEAU texte, jamais déjà utilisé dans developpement[].traces, et jamais recopié une 2e fois dans \"enonce\". Si un extrait composé est cité, ne JAMAIS l'attribuer à une œuvre réelle nommée (ex. jamais \"extrait du conte X\" suivi d'une citation fabriquée) -- une attribution neutre (\"Extraits composés pour la séance.\") est ajoutée automatiquement par le rendu."
+                  },
+                  "corrige": {
+                    "type": "string",
+                    "description": "UNE SEULE réponse défendable. Jamais \"ou\"/\"on peut aussi\"/\"bonus\"/une note/un commentaire méta."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "texte"],
+        "properties": {
+          "type": { "type": "string", "enum": ["demande", "action"], "description": "\"demande\" = consigne/question adressée aux élèves (impératif tu). \"action\" = geste de l'enseignant (jamais à l'impératif tu)." },
+          "texte": { "type": "string" }
+        }
+      }
+    },
+    "blocTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["titre", "paragraphe", "liste", "extrait"] },
+        "texte": { "type": "string" },
+        "items": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

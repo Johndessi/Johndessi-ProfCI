@@ -739,6 +739,11 @@ const FicheSchema = new mongoose.Schema({
   // construction (bug réel trouvé en testant ce lot : "Demande :" ajouté à
   // tort devant une action du professeur bien étiquetée type="action").
   renduDeterministeLot9 : { type: Boolean, default: false },
+  // Lot 11 : true quand ce contenu provient de la bibliothèque de fiches
+  // déjà validées (zéro appel API pour cette génération précise) plutôt que
+  // d'un appel modèle -- utile pour distinguer après coup, sans deviner,
+  // quelles fiches ont réellement consommé du budget API.
+  serviDepuisBibliothequeLot11 : { type: Boolean, default: false },
   createdAt    : { type: Date, default: Date.now }
 });
 
@@ -876,6 +881,28 @@ const InfoOeuvreIntegraleSchema = new mongoose.Schema({
 InfoOeuvreIntegraleSchema.index({ titreNormalise: 1, auteurNormalise: 1 }, { unique: true });
 InfoOeuvreIntegraleSchema.index({ expireApres: 1 }, { expireAfterSeconds: 0 });
 
+// Lot 11 -- bibliothèque de fiches JSON déjà validées (schéma lot 9,
+// validateur lot 10) : quand une séance a une entrée ici, /api/generer-fiche
+// rend directement ce contenu (zéro appel API, cf. le court-circuit posé
+// dans la route) au lieu d'appeler le modèle à chaque enseignant qui demande
+// la même séance du même programme officiel -- ce contenu ne dépend ni de
+// l'enseignant ni de l'établissement, seulement du (niveau, discipline,
+// activité, leçon, séance). `ficheJSON` est stocké déjà passé par
+// corrigerOrthographeFicheJSON (jamais le JSON brut soumis) pour que le
+// rendu sorte identique à chaque lecture, sans retraitement à la volée.
+const FicheBibliothequeSchema = new mongoose.Schema({
+  niveau      : String,
+  discipline  : String,
+  activite    : String,
+  lecon       : String,
+  seance      : String,
+  ficheJSON   : mongoose.Schema.Types.Mixed,
+  version     : { type: Number, default: 1 },
+  createdAt   : { type: Date, default: Date.now },
+  updatedAt   : { type: Date, default: Date.now }
+});
+FicheBibliothequeSchema.index({ niveau: 1, discipline: 1, activite: 1, lecon: 1, seance: 1 }, { unique: true });
+
 const Modele = mongoose.model('Modele', ModeleSchema);
 const Fiche  = mongoose.model('Fiche',  FicheSchema);
 const ProgressionLecon = mongoose.model('ProgressionLecon', ProgressionLeconSchema);
@@ -883,6 +910,7 @@ const CompetenceDPFC = mongoose.model('CompetenceDPFC', CompetenceDPFCSchema);
 const CompetenceParActivite = mongoose.model('CompetenceParActivite', CompetenceParActiviteSchema);
 const LeconOfficielleDPFC = mongoose.model('LeconOfficielleDPFC', LeconOfficielleDPFCSchema);
 const InfoOeuvreIntegrale = mongoose.model('InfoOeuvreIntegrale', InfoOeuvreIntegraleSchema);
+const FicheBibliotheque = mongoose.model('FicheBibliotheque', FicheBibliothequeSchema, 'fiches_bibliotheque');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -6735,6 +6763,82 @@ app.post('/api/admin/progressions/seed', verifierCleAdmin, async (req, res) => {
   }
 });
 
+// ===========================================================================
+// LOT 11 -- Bibliothèque de fiches déjà validées (2nde/Français/Étude de
+// l'œuvre intégrale/Culture littéraire, Leçon 1, Séances 1-2 -- même
+// périmètre que modeFicheJSONActif, lots 9-10 ; Séance 3 explicitement
+// exclue, structure libre jamais modélisée par ce schéma). Permet de
+// générer UNE SEULE fois une fiche pour une séance du programme officiel,
+// de la valider avec le validateur du lot 10, puis de la servir à tout
+// enseignant qui demande cette même séance sans jamais rappeler le modèle
+// (cf. le court-circuit posé dans /api/generer-fiche).
+// ===========================================================================
+function normaliserCleBibliothequeLot11({ niveau, discipline, activite, lecon, seance }) {
+  const leconNum = parseInt(lecon, 10);
+  const seanceNum = parseInt(seance, 10);
+  return {
+    niveau: (niveau || '').toString().trim(),
+    discipline: (discipline || '').toString().trim(),
+    activite: (activite || '').toString().trim(),
+    lecon: Number.isFinite(leconNum) ? String(leconNum) : '',
+    seance: Number.isFinite(seanceNum) ? String(seanceNum) : ''
+  };
+}
+
+app.post('/api/admin/fiche-bibliotheque', verifierCleAdmin, async (req, res) => {
+  try {
+    const { niveau, discipline, activite, lecon, seance, fiche } = req.body || {};
+    const cle = normaliserCleBibliothequeLot11({ niveau, discipline, activite, lecon, seance });
+    if (!cle.niveau || !cle.discipline || !cle.activite || !cle.lecon || !cle.seance || !fiche || typeof fiche !== 'object' || Array.isArray(fiche)) {
+      return res.status(400).json({ success: false, error: "Champs requis manquants ou invalides : niveau, discipline, activite, lecon, seance (entiers), fiche (objet JSON conforme au schéma du lot 9)." });
+    }
+    if (cle.niveau !== '2nde') {
+      return res.status(400).json({ success: false, error: `Niveau "${cle.niveau}" non couvert par la bibliothèque pour l'instant (seul "2nde" est pris en charge).` });
+    }
+    if (parseInt(cle.seance, 10) === 3) {
+      return res.status(400).json({ success: false, error: "Séance 3 (Introduction) non prise en charge par la bibliothèque de fiches -- structure libre (I/II/III), hors périmètre du lot 11." });
+    }
+    const catalogueNiveau = chargerCatalogueNiveau(cle.niveau);
+    const leconCatalogue = obtenirLeconCatalogueJSON(catalogueNiveau, parseInt(cle.lecon, 10));
+    const seanceCatalogue = obtenirSeanceCatalogueJSON(leconCatalogue, parseInt(cle.seance, 10));
+    if (!catalogueNiveau || !leconCatalogue || !seanceCatalogue) {
+      return res.status(400).json({ success: false, error: `Leçon/séance introuvable dans le catalogue (${cle.niveau}, leçon ${cle.lecon}, séance ${cle.seance}).` });
+    }
+    // Même filet déterministe que le chemin de génération en direct (lot
+    // 10) -- une faute connue (table fermée) ne doit jamais faire rejeter
+    // un import sinon valide.
+    const ficheCorrigee = corrigerOrthographeFicheJSON(fiche);
+    const { valide, erreurs } = validerFicheJSON(ficheCorrigee, seanceCatalogue);
+    if (!valide) {
+      return res.status(400).json({ success: false, erreurs });
+    }
+    const existante = await FicheBibliotheque.findOne(cle);
+    const version = existante ? (existante.version || 1) + 1 : 1;
+    await FicheBibliotheque.findOneAndUpdate(
+      cle,
+      { ...cle, ficheJSON: ficheCorrigee, version, updatedAt: new Date() },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true, cle, version });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/admin/fiche-bibliotheque/liste', verifierCleAdmin, async (req, res) => {
+  try {
+    const items = await FicheBibliotheque.find({});
+    const resultats = items.map((it) => ({
+      niveau: it.niveau, discipline: it.discipline, activite: it.activite,
+      lecon: it.lecon, seance: it.seance, version: it.version,
+      createdAt: it.createdAt, updatedAt: it.updatedAt
+    }));
+    res.json({ success: true, total: resultats.length, items: resultats });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get('/api/admin/progressions/resume', async (req, res) => {
   try {
     const toutes = await ProgressionLecon.find({});
@@ -10348,19 +10452,41 @@ function rendreBlocTraceLot9(bloc) {
 }
 const ENSEIGNANT_EVALUATION_BOILERPLATE_LOT9 = ["Distribue la feuille d'évaluation", 'Lit les consignes à voix haute', 'Accorde 10 minutes pour traiter toutes les consignes', "Circule dans la classe et observe le travail de chaque élève", "Ramasse les copies à la fin du temps imparti"];
 const ELEVES_EVALUATION_BOILERPLATE_LOT9 = ["Reçoivent la feuille d'évaluation", 'Écoutent les consignes', 'Répondent individuellement aux consignes', "Posent des questions si une consigne n'est pas claire", "Rendent leur copie à la fin du temps imparti"];
+// Lot 11 : formatage manuel (jj/mm/aaaa) plutôt que toLocaleDateString --
+// dépend sinon des données ICU installées sur l'hôte Node, jamais garanties
+// identiques entre l'environnement de développement et la production.
+function formaterDateFrLot11(date) {
+  const j = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  return `${j}/${m}/${date.getFullYear()}`;
+}
 
 function rendreFicheJSONEnHTML(ficheJSON, contexte) {
-  const { discipline, classe, competence, activite, duree, leconLabel, seanceLabel, habiletesContenusSeance } = contexte;
+  const {
+    discipline, classe, competence, activite, duree, leconLabel, seanceLabel, habiletesContenusSeance,
+    // Lot 11 : personnalisation PAR CODE, UNIQUEMENT quand le contenu vient
+    // de la bibliothèque (cf. le court-circuit posé dans la route) -- le
+    // chemin de génération en direct (lots 9-10, inchangé) ne passe jamais
+    // ces 3 champs, donc l'entête rendue pour CE chemin reste strictement
+    // identique à avant (aucune ligne Établissement/Enseignant, Date vide).
+    etablissement = '', nomEnseignant = '', date = ''
+  } = contexte;
+
+  const ligneEtablissementLot11 = (etablissement || '').toString().trim()
+    ? `<div style="font-weight:bold;padding:2px 0;">Établissement :</div><div style="padding:2px 0;">${echapperHtml(etablissement)}</div>` : '';
+  const ligneEnseignantLot11 = (nomEnseignant || '').toString().trim()
+    ? `<div style="font-weight:bold;padding:2px 0;">Enseignant :</div><div style="padding:2px 0;">${echapperHtml(nomEnseignant)}</div>` : '';
 
   const entete = `<div class="entete-libre" style="display:grid;grid-template-columns:110px 1fr;column-gap:12px;row-gap:2px;margin-bottom:14px;">
   <div style="font-weight:bold;padding:2px 0;">Discipline :</div><div style="padding:2px 0;">${echapperHtml(discipline)}</div>
-  <div style="font-weight:bold;padding:2px 0;">Date :</div><div style="padding:2px 0;"></div>
+  <div style="font-weight:bold;padding:2px 0;">Date :</div><div style="padding:2px 0;">${echapperHtml(date)}</div>
   <div style="font-weight:bold;padding:2px 0;">Classe :</div><div style="padding:2px 0;">${echapperHtml(classe)}</div>
   <div style="font-weight:bold;padding:2px 0;">Compétence :</div><div style="padding:2px 0;">${echapperHtml(competence)}</div>
   <div style="font-weight:bold;padding:2px 0;">Activité :</div><div style="padding:2px 0;">${echapperHtml(activite)}</div>
   <div style="font-weight:bold;padding:2px 0;">Durée :</div><div style="padding:2px 0;">${echapperHtml(duree)}</div>
   <div style="font-weight:bold;padding:2px 0;">Leçon :</div><div style="padding:2px 0;">${echapperHtml(leconLabel)}</div>
   <div style="font-weight:bold;padding:2px 0;">Séance :</div><div style="padding:2px 0;">${echapperHtml(seanceLabel)}</div>
+  ${ligneEtablissementLot11}${ligneEnseignantLot11}
 </div>`;
 
   const situation = `<p>Situation d'apprentissage : ${echapperHtml(ficheJSON.situation || '')}</p>`;
@@ -10511,6 +10637,10 @@ ${tableDeroulement}
       // classique (même valeur d'Activité affichée, cf. ACTIVITE_OEUVRE_INTEGRALE).
       sousModule = '', numeroSequence = '1', titreOeuvre = '', auteurOeuvre = '',
       etablissement = '', axeEtude = '', situationApprentissageOeuvre = '',
+      // Lot 11 : personnalisation par code de la bibliothèque de fiches
+      // (cf. le court-circuit posé dans le bloc Lot 9/10) -- jamais envoyé
+      // ni utilisé en dehors de ce chemin précis.
+      nomEnseignant = '',
       analyseCouverture = '', themeOeuvre = '', personnagesOeuvre = '', lieuxOeuvre = '', biographieAuteur = '',
       // cf. FicheSchema.origineGeneration : jamais envoyé par le frontend,
       // réservé aux scripts de débogage/investigation appelant l'API directement.
@@ -10766,7 +10896,52 @@ ${tableDeroulement}
         if (!catalogueNiveauLot9 || !leconCatalogueJSONLot9 || !seanceCatalogueJSONLot9) {
           console.error('❌ Lot 9 -- catalogue/séance introuvable (numeroSequence=' + numeroSequence + ', seance=' + seance + '), repli sur l\'ancien chemin.');
         } else {
+          const leconLabelLot9 = `${numeroSequence} : ${leconCatalogueJSONLot9.titre}`;
+          const seanceLabelLot9 = `${seance} : ${seanceCatalogueJSONLot9.titre}`;
           try {
+            // Lot 11 -- bibliothèque de fiches déjà validées : AVANT tout
+            // appel API, on cherche une entrée pour cette séance précise du
+            // programme officiel (niveau, discipline, activité, leçon,
+            // séance -- jamais l'enseignant ni l'établissement, qui ne
+            // changent pas le contenu pédagogique attendu). Trouvée => rendu
+            // déterministe identique au lot 9, personnalisé par code
+            // (établissement/enseignant/date), ZÉRO appel API. Sinon,
+            // comportement actuel inchangé plus bas (ligne non modifiée).
+            const cleBibliothequeLot11 = {
+              niveau: profilInfoOI.profil,
+              discipline: (catalogueNiveauLot9.discipline || discipline || '').toString().trim(),
+              activite: (catalogueNiveauLot9.activite || '').toString().trim(),
+              lecon: String(parseInt(numeroSequence, 10)),
+              seance: String(parseInt(seance, 10))
+            };
+            const ficheBibliothequeLot11 = await FicheBibliotheque.findOne(cleBibliothequeLot11);
+            if (ficheBibliothequeLot11) {
+              console.log('📚 Lot 11 -- fiche de bibliothèque trouvée, rendu direct sans appel API :', cleBibliothequeLot11);
+              const contenuHTMLBibliotheque = rendreFicheJSONEnHTML(ficheBibliothequeLot11.ficheJSON, {
+                discipline: catalogueNiveauLot9.discipline || discipline,
+                classe, competence: catalogueNiveauLot9.competence, activite: catalogueNiveauLot9.activite,
+                duree, leconLabel: leconLabelLot9, seanceLabel: seanceLabelLot9,
+                habiletesContenusSeance: seanceCatalogueJSONLot9.habiletes_contenus || [],
+                etablissement, nomEnseignant, date: formaterDateFrLot11(new Date())
+              });
+              const ficheBibliothequeCreee = await Fiche.create({
+                enseignantId: enseignantId || 'anonyme',
+                discipline: discipline || 'Français', classe,
+                lecon: leconLabelLot9, seance: seanceLabelLot9, duree, niveau,
+                approche: approcheNormalisee, contenu: contenuHTMLBibliotheque,
+                contenuBrutModele: JSON.stringify(ficheBibliothequeLot11.ficheJSON),
+                numeroSequenceOeuvre: numeroSequence,
+                estOeuvreIntegraleSecondCycle: true,
+                renduDeterministeLot9: true,
+                serviDepuisBibliothequeLot11: true,
+                origineGeneration: origineGenerationNormalisee
+              });
+              clearInterval(heartbeat);
+              res.write(`data: ${JSON.stringify({ chunk: contenuHTMLBibliotheque })}\n\n`);
+              res.write(`data: ${JSON.stringify({ done: true, ficheId: ficheBibliothequeCreee._id, contenuFinal: contenuHTMLBibliotheque })}\n\n`);
+              return res.end();
+            }
+
             let ficheJSONLot9 = await genererFicheJSONCultureLitteraire({
               leconCatalogue: leconCatalogueJSONLot9, seanceCatalogue: seanceCatalogueJSONLot9, approche: approcheNormalisee
             });
@@ -10788,8 +10963,6 @@ ${tableDeroulement}
               }
             }
 
-            const leconLabelLot9 = `${numeroSequence} : ${leconCatalogueJSONLot9.titre}`;
-            const seanceLabelLot9 = `${seance} : ${seanceCatalogueJSONLot9.titre}`;
             const contenuHTMLLot9 = rendreFicheJSONEnHTML(ficheJSONLot9, {
               discipline: catalogueNiveauLot9.discipline || discipline,
               classe, competence: catalogueNiveauLot9.competence, activite: catalogueNiveauLot9.activite,

@@ -1,0 +1,189 @@
+{
+  "niveau": "2nde",
+  "discipline": "Français",
+  "activite": "Étude de l'œuvre intégrale",
+  "lecon": 1,
+  "seance": 1,
+  "fiche": {
+    "situation": "À la bibliothèque municipale de Yamoussoukro, un élève emprunte trois livres en prose : l'histoire d'un jeune prince qui conquiert son royaume en affrontant des créatures fantastiques, un récit bref mettant en scène un enfant qui découvre la ruse pour échapper à un tyran, et enfin l'histoire d'une adolescente dont la vie bascule le jour où elle reçoit une mystérieuse lettre. En lisant ces trois textes, l'élève se demande comment les distinguer, car chacun raconte une aventure captivante mais de façon différente. Pourquoi ces histoires ne se ressemblent-elles pas, alors qu'elles sont toutes écrites en prose ?",
+    "supports": [
+      "Extraits composés pour la séance illustrant chaque genre en prose",
+      "Tableau comparatif des caractéristiques des genres (roman, conte, épopée, nouvelle)"
+    ],
+    "bibliographie": [
+      "L'Enfant noir, Camara Laye",
+      "Soundjata ou l'épopée mandingue, traduit par D. T. Niane"
+    ],
+    "presentation": {
+      "strategie": "Activité d'observation et de classification",
+      "enseignant": [
+        {
+          "type": "action",
+          "texte": "Distribue trois extraits de textes en prose : un passage d'épopée, un conte et un roman."
+        },
+        {
+          "type": "demande",
+          "texte": "Lis attentivement ces trois extraits et relève les points communs et les différences entre ces textes."
+        }
+      ],
+      "eleves": [
+        "Les élèves lisent les trois extraits en silence.",
+        "Les élèves identifient spontanément des différences : l'épopée raconte des exploits grandioses, le conte parle de personnages merveilleux, le roman se concentre sur les émotions d'un personnage ordinaire.",
+        "Les élèves formulent leurs observations à l'oral."
+      ]
+    },
+    "developpement": [
+      {
+        "titre": "Définition et identification des genres en prose",
+        "strategie": "Approche inductive par l'exemple",
+        "enseignant": [
+          {
+            "type": "action",
+            "texte": "Affiche au tableau une liste de titres : l'Odyssée (épopée), Cendrillon (conte), Madame Bovary (roman), L'Enfant noir (roman autobiographique), Ali Baba et les Quarante Voleurs (conte), Soundjata (épopée du Mali)."
+          },
+          {
+            "type": "demande",
+            "texte": "Énumère les différents types d'histoires en prose que tu connais ou que tu as entendus nommer."
+          }
+        ],
+        "eleves": [
+          "Les élèves citent : roman, conte, épopée, nouvelle, récit autobiographique.",
+          "Les élèves regroupent les titres affichés par catégorie.",
+          "Les élèves découvrent que la prose est le mode d'expression commun de tous ces genres."
+        ],
+        "traces": [
+          {
+            "type": "titre",
+            "texte": "Les principaux genres en prose"
+          },
+          {
+            "type": "liste",
+            "items": [
+              "Le roman : récit long et imaginaire qui raconte la vie d'un ou plusieurs personnages en détail, avec développement des émotions et des pensées.",
+              "Le conte : récit court et traditionnel, souvent merveilleux ou fantastique, transmis oralement, avec une leçon ou une morale.",
+              "L'épopée : récit grandiose et héroïque, en prose ou en vers, narrant les exploits de héros et de peuples, mêlant histoire réelle et éléments légendaires.",
+              "La nouvelle : récit court et dense, plus court que le roman, centré sur un événement unique ou une révélation soudaine.",
+              "Le récit autobiographique : récit en prose racontant les événements réels de la vie de l'auteur, à la première personne."
+            ]
+          },
+          {
+            "type": "paragraphe",
+            "texte": "Tous ces genres partagent un trait commun : ils sont écrits en prose, c'est-à-dire sous forme continue de paragraphes, sans division en vers ni en strophes. La prose est le mode naturel du langage parlé, adapté à la narration longue et variée."
+          }
+        ]
+      },
+      {
+        "titre": "Les éléments constitutifs : intrigue et schéma narratif",
+        "strategie": "Analyse structurelle d'un exemple concret",
+        "enseignant": [
+          {
+            "type": "action",
+            "texte": "Projette ou lit un extrait du conte Le Petit Chaperon Rouge."
+          },
+          {
+            "type": "demande",
+            "texte": "Identifie l'intrigue, c'est-à-dire la suite d'événements qui structurent ce conte."
+          }
+        ],
+        "eleves": [
+          "Les élèves repèrent : le départ de la jeune fille, la rencontre du loup, la ruse du loup, le dénouement.",
+          "Les élèves comprennent que l'intrigue est la trame d'événements qui font progresser l'histoire.",
+          "Les élèves organisent ces événements selon un ordre logique."
+        ],
+        "traces": [
+          {
+            "type": "titre",
+            "texte": "L'intrigue et le schéma narratif"
+          },
+          {
+            "type": "paragraphe",
+            "texte": "L'intrigue est l'ensemble des événements et des actions qui constituent l'histoire. Elle répond à la question : que se passe-t-il ?"
+          },
+          {
+            "type": "titre",
+            "texte": "Le schéma narratif classique"
+          },
+          {
+            "type": "liste",
+            "items": [
+              "Situation initiale : présentation du contexte, des lieux, du personnage principal et de son état avant tout événement perturbateur.",
+              "Élément déclencheur (ou nœud de l'action) : événement qui rompt l'équilibre et provoque l'action du récit.",
+              "Péripéties : succession d'événements et de rebondissements qui font progresser l'intrigue.",
+              "Climax : moment d'intensité maximale, point de non-retour où l'enjeu principal se joue.",
+              "Résolution (ou dénouement) : événement qui résout le conflit et rétablit un équilibre.",
+              "Situation finale : état des personnages et du monde après la résolution."
+            ]
+          },
+          {
+            "type": "paragraphe",
+            "texte": "Ce schéma n'est pas rigide : certains récits modernes jouent avec cet ordre, omettent une étape, ou la répètent. Tous les récits en prose ne suivent pas exactement ce modèle, mais ses éléments permettent d'analyser la structure d'une histoire."
+          }
+        ]
+      },
+      {
+        "titre": "Le schéma actantiel et les rôles des personnages",
+        "strategie": "Modélisation des relations entre personnages",
+        "enseignant": [
+          {
+            "type": "action",
+            "texte": "Affiche le schéma actantiel sous forme de diagramme simplifié."
+          },
+          {
+            "type": "demande",
+            "texte": "Classe les personnages du Petit Chaperon Rouge selon leur rôle : qui veut quoi, qui aide, qui s'oppose ?"
+          }
+        ],
+        "eleves": [
+          "Les élèves identifient le Petit Chaperon Rouge comme celui qui cherche à atteindre un but.",
+          "Les élèves reconnaissent la mère et la grand-mère comme alliés, le loup comme opposant.",
+          "Les élèves comprennent que chaque personnage a une fonction dans le récit."
+        ],
+        "traces": [
+          {
+            "type": "titre",
+            "texte": "Le schéma actantiel : structure des rôles"
+          },
+          {
+            "type": "paragraphe",
+            "texte": "Le schéma actantiel est un outil qui montre comment les personnages sont organisés autour d'une quête ou d'un objectif. Il permet de voir non pas qui fait quoi chronologiquement, mais quel rôle chaque personnage joue par rapport à l'action centrale."
+          },
+          {
+            "type": "liste",
+            "items": [
+              "Le sujet : le personnage principal qui poursuit un objectif ou une quête (exemple : Cendrillon cherche à aller au bal).",
+              "L'objet : ce que le sujet désire atteindre (le bal, l'amour, le trésor, la vengeance).",
+              "Le destinateur : celui qui crée le désir ou l'objectif pour le sujet (exemple : l'invitation au bal).",
+              "Le destinataire : celui qui bénéficie du succès de la quête (souvent le sujet lui-même, parfois un tiers).",
+              "L'adjuvant (ou allié) : personnage ou force qui aide le sujet à atteindre son objectif (exemple : la marraine-fée).",
+              "L'opposant : personnage ou force qui s'oppose à la quête du sujet (exemple : les belles-sœurs, la belle-mère)."
+            ]
+          },
+          {
+            "type": "paragraphe",
+            "texte": "Contrairement au schéma narratif qui suit la chronologie des événements, le schéma actantiel offre une vision structurelle et logique des rôles. Un même personnage peut cumuler plusieurs fonctions actantielles, et ce schéma fonctionne dans tous les genres en prose : roman, conte, épopée, nouvelle."
+          }
+        ]
+      }
+    ],
+    "evaluation": {
+      "consignes": [
+        {
+          "niveau": "N1",
+          "enonce": "Énumère quatre genres en prose et donne une caractéristique propre à chacun.",
+          "corrige": "Roman (récit long imaginaire), Conte (récit court traditionnel merveilleux), Épopée (récit héroïque grandiose des exploits d'un héros), Nouvelle (récit court et dense centré sur un événement unique)."
+        },
+        {
+          "niveau": "N3",
+          "enonce": "Lis cet extrait : « Un esprit voulait récupérer tous les contes du monde. Il les gardait jalousement, refusant de les partager. Un jour, il décida de les offrir à un roi qui les enfermait dans une jarre d'or. Mais la jarre était trop petite et les contes s'échappaient peu à peu, retournant à tous les hommes. » Identifie la situation initiale, l'élément déclencheur et le dénouement.",
+          "corrige": "Situation initiale : Anansi possède tous les contes et les garde pour lui. Élément déclencheur : Anansi décide de les offrir au roi dans une jarre d'or. Dénouement : les contes s'échappent de la jarre et retournent à tous les hommes."
+        },
+        {
+          "niveau": "N4",
+          "enonce": "Analyse cet extrait selon le schéma actantiel et le schéma narratif, puis détermine s'il appartient davantage au genre du roman ou à celui du conte. Justifie en trois à quatre phrases.",
+          "corrige": "Le texte montrant une intrigue courte, centrée sur un événement unique avec une structure simple (situation initiale-événement déclencheur-résolution) et des personnages types (un héros, un allié magique, un opposant) appartient au conte. Celui qui propose une intrigue longue, complexe, avec développement psychologique des personnages, plusieurs péripéties imbriquées et une situation finale nuancée appartient au roman.",
+          "extrait": "La vieille Akissi avait toujours vécu seule dans sa case au bord du fleuve, jusqu'au jour où un étranger vint lui demander où se cachait le trésor du village. Elle refusa de répondre, et l'étranger, furieux, menaça de brûler sa case. C'est alors que les villageois, alertés par la fumée qui montait déjà, accoururent et chassèrent l'intrus, sauvant Akissi et son secret."
+        }
+      ]
+    }
+  }
+}
