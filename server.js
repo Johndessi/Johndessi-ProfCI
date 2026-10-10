@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -727,6 +729,16 @@ const FicheSchema = new mongoose.Schema({
   // aucune de ces deux informations n'est autrement disponible (le schéma ne
   // retient ni l'activité ni le profil de l'enseignant).
   estOeuvreIntegraleSecondCycle : { type: Boolean, default: false },
+  // Lot 9 : contenu produit par le rendu déterministe JSON->HTML (jamais du
+  // texte libre + correctifs regex) -- posé une fois pour toutes à la
+  // création, pour que les 3 routes d'export (GET /api/fiche/:id, POST
+  // .../pdf, POST .../docx) sachent sauter ENTIÈREMENT les correctifs
+  // mécaniques des lots 3-8 (convertirTableauxMarkdownEnHtml, hoisterTableauxLargesDesCellules,
+  // envelopperConsignesElevesDansDemande...), qui supposent un texte libre
+  // jamais produit ici et corrompraient sinon ce contenu déjà correct par
+  // construction (bug réel trouvé en testant ce lot : "Demande :" ajouté à
+  // tort devant une action du professeur bien étiquetée type="action").
+  renduDeterministeLot9 : { type: Boolean, default: false },
   createdAt    : { type: Date, default: Date.now }
 });
 
@@ -9894,6 +9906,442 @@ function limiterGenerationParIp(req, res, next) {
   next();
 }
 
+// ===========================================================================
+// LOT 9 -- Rendu déterministe JSON -> HTML pour les séances 2nde Français /
+// Étude de l'œuvre intégrale / Culture littéraire. Remplace le texte libre +
+// les dizaines de correctifs regex accumulés lots 3-8 pour CES séances
+// précises : le modèle ne renvoie plus que du CONTENU structuré (tool_use
+// forcé, schéma proche de fiche.schema.json) ; tout le déterministe (entête,
+// Habiletés/Contenus verbatim programme, durées 5/45/10 et 15/15/15,
+// interligne, titres de moments, numérotation du plan) est fabriqué par le
+// code depuis catalogue/<niveau>.json. Activé par défaut (FICHE_MODE=legacy
+// désactive et repasse par l'ancien chemin texte libre). La Séance 3
+// (Introduction), de structure totalement différente (sections libres
+// I/II/III, pas de tableau Développement/Évaluation), reste délibérément sur
+// l'ancien chemin quel que soit FICHE_MODE -- décision explicite de
+// l'enseignant (le schéma fourni ce lot ne modélise que la forme tableau).
+// ===========================================================================
+
+const CATALOGUE_NIVEAU_CACHE = {};
+function chargerCatalogueNiveau(codeNiveau) {
+  if (Object.prototype.hasOwnProperty.call(CATALOGUE_NIVEAU_CACHE, codeNiveau)) return CATALOGUE_NIVEAU_CACHE[codeNiveau];
+  const chemin = path.join(__dirname, 'catalogue', `${codeNiveau}.json`);
+  let catalogue = null;
+  try {
+    catalogue = JSON.parse(fs.readFileSync(chemin, 'utf8'));
+  } catch (e) {
+    console.error(`❌ Lot 9 -- catalogue introuvable/invalide (${chemin}) :`, e.message);
+    catalogue = null;
+  }
+  CATALOGUE_NIVEAU_CACHE[codeNiveau] = catalogue;
+  return catalogue;
+}
+function obtenirLeconCatalogueJSON(catalogue, numeroLecon) {
+  if (!catalogue) return null;
+  return (catalogue.lecons || []).find((l) => l.numero === numeroLecon) || null;
+}
+function obtenirSeanceCatalogueJSON(leconCatalogue, numeroSeance) {
+  if (!leconCatalogue) return null;
+  return (leconCatalogue.seances || []).find((s) => s.numero === numeroSeance) || null;
+}
+
+// Gate : 2nde, Français, Étude de l'œuvre intégrale, Culture littéraire,
+// genre narrative (seul couvert par catalogue/2nde.json pour l'instant --
+// Leçon 1, Séances 1-2). Tout le reste (Séance 3 Introduction incluse) passe
+// par l'ancien chemin, inchangé.
+function modeFicheJSONActif({ typeSeanceOI, profilInfoOI, discipline, sousModule, genreOeuvreOI }) {
+  if ((process.env.FICHE_MODE || 'json') === 'legacy') return false;
+  return sousModule === 'oeuvre_integrale'
+    && typeSeanceOI === 'culture_litteraire'
+    && !!profilInfoOI && profilInfoOI.profil === '2nde'
+    && (discipline || '').toString().trim() === 'Français'
+    && genreOeuvreOI === 'narrative';
+}
+
+// --- Schéma de l'outil (tool_use forcé), dérivé de fiche.schema.json -------
+const SCHEMA_ACTIONS_FICHE_JSON = {
+  type: 'array',
+  items: {
+    type: 'object', additionalProperties: false, required: ['type', 'texte'],
+    properties: {
+      type: { type: 'string', enum: ['demande', 'action'] },
+      texte: { type: 'string' }
+    }
+  }
+};
+const SCHEMA_BLOC_TRACES_FICHE_JSON = {
+  type: 'object', additionalProperties: false, required: ['type'],
+  properties: {
+    type: { type: 'string', enum: ['titre', 'paragraphe', 'liste', 'extrait'] },
+    texte: { type: 'string' },
+    items: { type: 'array', items: { type: 'string' } }
+  }
+};
+const SCHEMA_OUTIL_FICHE_JSON = {
+  name: 'soumettre_fiche',
+  description: "Soumet le contenu structuré complet de la fiche de cours (situation, présentation, développement en 3 parties, évaluation en 3 consignes).",
+  input_schema: {
+    type: 'object', additionalProperties: false,
+    required: ['situation', 'presentation', 'developpement', 'evaluation'],
+    properties: {
+      situation: { type: 'string', description: "4 à 6 phrases, pose le problème SANS nommer la notion étudiée ni la réponse." },
+      bibliographie: { type: 'array', items: { type: 'string' } },
+      supports: { type: 'array', items: { type: 'string' } },
+      presentation: {
+        type: 'object', additionalProperties: false, required: ['strategie', 'enseignant', 'eleves'],
+        properties: { strategie: { type: 'string' }, enseignant: SCHEMA_ACTIONS_FICHE_JSON, eleves: { type: 'array', items: { type: 'string' } } }
+      },
+      developpement: {
+        type: 'array', minItems: 3, maxItems: 3,
+        items: {
+          type: 'object', additionalProperties: false, required: ['titre', 'strategie', 'enseignant', 'eleves', 'traces'],
+          properties: {
+            titre: { type: 'string', description: "Sujet de la partie SEUL, sans numéro ni durée ni stratégie -- le code les ajoute." },
+            strategie: { type: 'string' },
+            enseignant: SCHEMA_ACTIONS_FICHE_JSON,
+            eleves: { type: 'array', items: { type: 'string' } },
+            traces: { type: 'array', minItems: 2, items: SCHEMA_BLOC_TRACES_FICHE_JSON }
+          }
+        }
+      },
+      evaluation: {
+        type: 'object', additionalProperties: false, required: ['consignes'],
+        properties: {
+          consignes: {
+            type: 'array', minItems: 3, maxItems: 3,
+            items: {
+              type: 'object', additionalProperties: false, required: ['niveau', 'enonce', 'corrige'],
+              properties: {
+                niveau: { type: 'string', enum: ['N1', 'N2', 'N3', 'N4'] },
+                enonce: { type: 'string', description: "Verbe à l'impératif, 2e personne du singulier (tu)." },
+                extrait: { type: 'string', description: "NOUVEAU texte, différent de tous ceux utilisés en cours." },
+                corrige: { type: 'string', description: "UNE seule réponse. Aucun 'ou', 'on peut aussi', 'bonus', note ou commentaire." }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+const SCHEMA_OUTIL_CORRECTIONS_FICHE_JSON = {
+  name: 'soumettre_corrections',
+  description: "Soumet uniquement les sections corrigées de la fiche (situation et/ou parties du développement et/ou consignes d'évaluation signalées comme fautives).",
+  input_schema: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      situation: { type: 'string' },
+      developpement_corrige: {
+        type: 'array',
+        items: {
+          type: 'object', additionalProperties: false, required: ['index', 'titre', 'strategie', 'enseignant', 'eleves', 'traces'],
+          properties: {
+            index: { type: 'integer', minimum: 0, maximum: 2 },
+            titre: { type: 'string' }, strategie: { type: 'string' },
+            enseignant: SCHEMA_ACTIONS_FICHE_JSON, eleves: { type: 'array', items: { type: 'string' } },
+            traces: { type: 'array', items: SCHEMA_BLOC_TRACES_FICHE_JSON }
+          }
+        }
+      },
+      consignes_corrigees: {
+        type: 'array',
+        items: {
+          type: 'object', additionalProperties: false, required: ['index', 'niveau', 'enonce', 'corrige'],
+          properties: {
+            index: { type: 'integer', minimum: 0, maximum: 2 },
+            niveau: { type: 'string', enum: ['N1', 'N2', 'N3', 'N4'] }, enonce: { type: 'string' },
+            extrait: { type: 'string' }, corrige: { type: 'string' }
+          }
+        }
+      }
+    }
+  }
+};
+
+// --- Prompt (contenu seulement -- tout le déterministe reste côté code) ----
+function construireUserMessageJSONCultureLitteraire({ leconCatalogue, seanceCatalogue, approche }) {
+  const habiletesTexte = (seanceCatalogue.habiletes_contenus || [])
+    .map((hc) => `- ${hc.habilete} : ${(hc.contenu || []).join(' ')}`).join('\n');
+  const interditsTexte = (seanceCatalogue.notions_interdites_dans_situation || []).join(', ') || '(aucune)';
+  const listeVerbesTaxonomie = NIVEAUX_TAXONOMIQUES_ORDRE
+    .map((n) => `${n} (${VERBES_TAXONOMIQUES[n].nom}) : ${VERBES_TAXONOMIQUES[n].verbes.map((v) => v.verbe).join(', ')}`).join('\n');
+  return `Tu rédiges le CONTENU d'une fiche de cours de Français, 2nde, "Étude de l'œuvre intégrale narrative", Leçon "${leconCatalogue.titre}", Séance ${seanceCatalogue.numero} : "${seanceCatalogue.titre}".
+
+PROGRAMME OFFICIEL DE CETTE SÉANCE (habiletés/contenus, à couvrir fidèlement dans le Développement -- tu peux illustrer/développer, jamais t'écarter de ces notions ni en ajouter d'autres hors programme) :
+${habiletesTexte}
+
+APPROCHE : ${approche || 'APC'} -- toute consigne adressée aux élèves (champ "enonce" de l'Évaluation, ou "texte" d'une action de type "demande") doit commencer par un verbe à l'IMPÉRATIF, 2e PERSONNE DU SINGULIER (ex. "Identifie", "Cite", "Relève" -- jamais l'infinitif, jamais le vouvoiement "-ez"/"vous"), choisi dans cette liste :
+${listeVerbesTaxonomie}
+
+RÈGLES STRICTES :
+1) "situation" (champ racine) : 4 à 6 phrases, ancrée dans le quotidien ivoirien, pose un problème SANS JAMAIS nommer ni la notion de cette séance, ni sa réponse. Mots/expressions INTERDITS dans la situation (révéleraient la notion à l'avance) : ${interditsTexte}. Si tu évoques l'activité du cours, le nom exact est "Étude de l'œuvre intégrale" -- JAMAIS "Lecture".
+2) "presentation" et chaque partie de "developpement" : le champ "enseignant" est un tableau d'actions. type="demande" = une consigne/question adressée aux ÉLÈVES -- "texte" commence directement par le verbe à l'impératif tu (ou par une vraie question), JAMAIS par une action de l'enseignant lui-même ("Fait...", "Écrit...", "Distribue...", "Lit...", "Divise...", "Circule...", "Invite...", "Présente...", "Annonce...") -- un tel geste est TOUJOURS type="action". N'écris JAMAIS "Demande :" ni de guillemets dans "texte" -- le code les ajoute automatiquement pour type="demande". Si "texte" cite une parole entre guillemets, reste au tutoiement de bout en bout (jamais "votre"/"vous" mélangé à un verbe "tu").
+3) "developpement" : EXACTEMENT 3 parties. "titre" = le seul sujet de la partie (jamais de numéro, durée ou stratégie dans ce champ -- le code les ajoute). "traces" = le contenu réellement appris, détaillé et structuré en AU MOINS 2 blocs (titre/paragraphe/liste/extrait) -- jamais un unique bloc fourre-tout.
+4) "evaluation.consignes" : EXACTEMENT 3, niveaux croissants -- la 1re "N1" ou "N2", la 2e "N3", la 3e "N4". Chaque "extrait" (si fourni) doit être un texte NOUVEAU, jamais un extrait déjà utilisé dans "developpement[].traces". Chaque "corrige" : UNE SEULE réponse défendable, jamais "ou"/"on peut aussi"/"bonus"/une note/un commentaire méta -- juste la réponse elle-même. La consigne N4 ("Traiter une situation") doit être traitable avec les SEULS contenus vus dans cette séance précise (jamais un genre/notion hors de la liste ci-dessus), et sa réponse attendue doit être courte (quelques phrases), jamais une production longue ni un chiffre de pages inventé.
+5) Jamais "en vers" pour un genre en prose (roman, conte, nouvelle, épopée en prose) -- cette séance porte exclusivement sur la prose.
+6) Jamais de mot anglais, jamais de chiffre de pages inventé pour un texte que tu décris.
+
+Remplis l'outil "soumettre_fiche" avec ces champs.`;
+}
+
+async function genererFicheJSONCultureLitteraire({ leconCatalogue, seanceCatalogue, approche }) {
+  const userMessage = construireUserMessageJSONCultureLitteraire({ leconCatalogue, seanceCatalogue, approche });
+  const reponse = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 8000,
+    tools: [SCHEMA_OUTIL_FICHE_JSON],
+    tool_choice: { type: 'tool', name: 'soumettre_fiche' },
+    messages: [{ role: 'user', content: userMessage }]
+  });
+  const toolUse = (reponse.content || []).find((b) => b.type === 'tool_use');
+  if (!toolUse) throw new Error("Le modèle n'a pas renvoyé de fiche structurée (tool_use absent).");
+  return toolUse.input;
+}
+
+// --- Validation sémantique du JSON (avant rendu) ----------------------------
+const VERBES_3E_PERSONNE_INTERDITS_DANS_DEMANDE = /^(Fait|Écrit|Distribue|Lit|Divise|Circule|Invite|Présente\s+le|Annonce|Accorde|Ramasse|Pose|Salue|Répond)\b/;
+const EN_WORDS_RE_LOT9 = /\b(the|and|of|with|which|because|should|answer|student|teacher|expected)\b/i;
+const MOTIFS_CORRIGE_INTERDIT_LOT9 = [
+  { re: /(?<![A-Za-zÀ-ÿ])OU(?![A-Za-zÀ-ÿ])/, message: '« OU » (majuscules) -- réponse non unique' },
+  { re: /on peut aussi|également adapt|bonus|accepté|accepte aussi|préférable|plusieurs réponses|exemple pour l'extrait/i, message: 'corrigé à réponses multiples / méta-commentaire' },
+  { re: /l['’]élève doit|sans justification\b.{0,20}\.|note\s*:/i, message: 'méta-texte dans le corrigé' }
+];
+function texteCommenceParVerbeTuImperatifOuQuestion(texte) {
+  const brut = (texte || '').trim();
+  if (/\?\s*$/.test(brut)) return true;
+  const premierMot = (brut.split(/\s+/)[0] || '').toLowerCase().replace(/[.,;:!?»]+$/, '');
+  return TOUS_VERBES_TAXONOMIQUES.some((v) => imperatifSingulierVerbeTaxonomique(v).toLowerCase() === premierMot);
+}
+function validerFicheJSON(ficheJSON, seanceCatalogue) {
+  const erreurs = [];
+  const ajoute = (section, message) => erreurs.push({ section, message });
+
+  const verifierActionsEnseignant = (actions, section) => {
+    (actions || []).forEach((a) => {
+      if (a.type !== 'demande') return;
+      const texte = (a.texte || '').trim();
+      if (VERBES_3E_PERSONNE_INTERDITS_DANS_DEMANDE.test(texte)) {
+        ajoute(section, `action type="demande" commence par un verbe à la 3e personne : "${texte.slice(0, 60)}"`);
+      }
+      if (/\b(Analyse|Identifie|Relève|Cite|Explique|D[ée]termine|Distingue|[ÉE]num[èe]re|Pr[ée]sente|Compare|Classe|Justifie|Interpr[èe]te|Argumente)\b[^.?!]*\b(votre|identifiez|relevez|citez|analysez|d[ée]terminez|distinguez|[ée]num[ée]rez|pr[ée]sentez|comparez|classez|justifiez|interpr[ée]tez|argumentez)\b/i.test(texte)) {
+        ajoute(section, `mélange tu/vous dans une consigne : "${texte.slice(0, 60)}"`);
+      }
+    });
+  };
+
+  verifierActionsEnseignant(ficheJSON.presentation && ficheJSON.presentation.enseignant, 'presentation');
+
+  const toutesLesTraces = [];
+  (ficheJSON.developpement || []).forEach((partie, i) => {
+    const section = `developpement[${i}]`;
+    if (!partie.titre || !partie.titre.trim()) ajoute(section, 'titre vide');
+    if (!Array.isArray(partie.traces) || partie.traces.length < 2) ajoute(section, 'traces insuffisantes (moins de 2 blocs)');
+    verifierActionsEnseignant(partie.enseignant, section);
+    (partie.traces || []).forEach((bloc) => {
+      toutesLesTraces.push([bloc.texte, ...(bloc.items || [])].filter(Boolean).join(' '));
+    });
+  });
+  const texteTracesConcatene = normaliserTexte(toutesLesTraces.join(' '));
+
+  const consignes = (ficheJSON.evaluation && ficheJSON.evaluation.consignes) || [];
+  if (consignes.length !== 3) ajoute('evaluation', `${consignes.length} consigne(s) au lieu de 3`);
+  const niveauxAttendus = [['N1', 'N2'], ['N3'], ['N4']];
+  consignes.forEach((c, j) => {
+    const section = `evaluation.consignes[${j}]`;
+    if (niveauxAttendus[j] && !niveauxAttendus[j].includes(c.niveau)) {
+      ajoute(section, `niveau "${c.niveau}" attendu parmi ${niveauxAttendus[j].join('/')}`);
+    }
+    if (!texteCommenceParVerbeTuImperatifOuQuestion(c.enonce)) {
+      ajoute(section, `énoncé ne commence pas par un verbe à l'impératif "tu" : "${(c.enonce || '').slice(0, 60)}"`);
+    }
+    MOTIFS_CORRIGE_INTERDIT_LOT9.forEach(({ re, message }) => { if (re.test(c.corrige || '')) ajoute(section, `corrigé : ${message}`); });
+    if (c.extrait && c.extrait.trim() && texteTracesConcatene.includes(normaliserTexte(c.extrait.trim()))) {
+      ajoute(section, "extrait d'évaluation identique à un extrait déjà utilisé dans le développement");
+    }
+  });
+
+  const texteComplet = JSON.stringify(ficheJSON);
+  if (EN_WORDS_RE_LOT9.test(texteComplet)) {
+    const trouves = texteComplet.match(new RegExp(EN_WORDS_RE_LOT9.source, 'gi')) || [];
+    ajoute('global', `mot(s) anglais détecté(s) : ${[...new Set(trouves.map((m) => m.toLowerCase()))].join(', ')}`);
+  }
+  if (/\ben\s+vers\b/i.test(texteComplet)) ajoute('global', '"en vers" mentionné (séance exclusivement en prose)');
+  if (/\d+\s*pages?\b/i.test(texteComplet)) ajoute('global', 'nombre de pages inventé détecté');
+  if (/activit[ée]\s+est\s+la\s+lecture|notre\s+activit[ée][^.?!]{0,20}[:»]?\s*lecture\b/i.test(texteComplet)) {
+    ajoute('global', 'activité nommée "Lecture" au lieu de "Étude de l\'œuvre intégrale"');
+  }
+  const notionsInterdites = (seanceCatalogue.notions_interdites_dans_situation || []);
+  const situationNormalisee = normaliserTexte(ficheJSON.situation || '');
+  notionsInterdites.forEach((n) => {
+    const nNormalise = normaliserTexte(n);
+    if (nNormalise && situationNormalisee.includes(nNormalise)) ajoute('situation', `la situation mentionne la notion interdite "${n}"`);
+  });
+
+  return { valide: erreurs.length === 0, erreurs };
+}
+
+// --- Régénération ciblée des SEULES sections fautives (max 1 fois) ---------
+async function regenererSectionsFautivesFicheJSON(ficheJSON, erreurs) {
+  const detailErreurs = erreurs.map((e) => `- ${e.section} : ${e.message}`).join('\n');
+  const userMessage = `La fiche JSON ci-dessous contient des sections non conformes. Corrige UNIQUEMENT les sections listées, en conservant leur sens et leur place dans la progression -- ne touche à rien d'autre.
+
+SECTIONS FAUTIVES ET RAISON :
+${detailErreurs}
+
+FICHE ACTUELLE (pour contexte) :
+${JSON.stringify(ficheJSON)}
+
+Remplis l'outil "soumettre_corrections" avec UNIQUEMENT : "situation" si elle est fautive ; "developpement_corrige" (un élément par partie fautive, avec son "index" 0/1/2 et TOUS ses champs réécrits) ; "consignes_corrigees" (un élément par consigne fautive, avec son "index" 0/1/2 et TOUS ses champs réécrits).`;
+  const reponse = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 4096,
+    tools: [SCHEMA_OUTIL_CORRECTIONS_FICHE_JSON],
+    tool_choice: { type: 'tool', name: 'soumettre_corrections' },
+    messages: [{ role: 'user', content: userMessage }]
+  });
+  const toolUse = (reponse.content || []).find((b) => b.type === 'tool_use');
+  if (!toolUse) return ficheJSON;
+  const corrections = toolUse.input || {};
+  const ficheCorrigee = JSON.parse(JSON.stringify(ficheJSON));
+  if (typeof corrections.situation === 'string' && corrections.situation.trim()) ficheCorrigee.situation = corrections.situation;
+  (corrections.developpement_corrige || []).forEach((p) => {
+    if (Number.isInteger(p.index) && ficheCorrigee.developpement[p.index]) {
+      ficheCorrigee.developpement[p.index] = { titre: p.titre, strategie: p.strategie, enseignant: p.enseignant, eleves: p.eleves, traces: p.traces };
+    }
+  });
+  (corrections.consignes_corrigees || []).forEach((c) => {
+    if (Number.isInteger(c.index) && ficheCorrigee.evaluation.consignes[c.index]) {
+      const corrigee = { niveau: c.niveau, enonce: c.enonce, corrige: c.corrige };
+      if (c.extrait) corrigee.extrait = c.extrait;
+      ficheCorrigee.evaluation.consignes[c.index] = corrigee;
+    }
+  });
+  return ficheCorrigee;
+}
+
+// --- Rendu déterministe : fiche JSON (+ contexte catalogue) -> HTML --------
+function libelleNiveauTaxonomiqueLot9(code) {
+  return (VERBES_TAXONOMIQUES[code] && VERBES_TAXONOMIQUES[code].nom) || code;
+}
+function rendreActionEnseignantLot9(action) {
+  const texte = echapperHtml((action.texte || '').trim());
+  if (action.type === 'demande') return `<p>- Demande : « ${texte} »</p>`;
+  return `<p>- ${texte}</p>`;
+}
+function rendreListeSimpleLot9(items) {
+  return (items || []).map((it) => `<p>- ${echapperHtml((it || '').toString())}</p>`).join('');
+}
+function rendreBlocTraceLot9(bloc) {
+  if (bloc.type === 'titre') return `<p data-docx-titre="1" style="margin:10px 0 4px 0;font-weight:bold">${echapperHtml(bloc.texte || '')}</p>`;
+  if (bloc.type === 'liste') return (bloc.items || []).map((it) => `<p>- ${echapperHtml((it || '').toString())}</p>`).join('');
+  if (bloc.type === 'extrait') return `<p>« ${echapperHtml(bloc.texte || '')} »</p>`;
+  return `<p>${echapperHtml(bloc.texte || '')}</p>`;
+}
+const ENSEIGNANT_EVALUATION_BOILERPLATE_LOT9 = ["Distribue la feuille d'évaluation", 'Lit les consignes à voix haute', 'Accorde 10 minutes pour traiter toutes les consignes', "Circule dans la classe et observe le travail de chaque élève", "Ramasse les copies à la fin du temps imparti"];
+const ELEVES_EVALUATION_BOILERPLATE_LOT9 = ["Reçoivent la feuille d'évaluation", 'Écoutent les consignes', 'Répondent individuellement aux consignes', "Posent des questions si une consigne n'est pas claire", "Rendent leur copie à la fin du temps imparti"];
+
+function rendreFicheJSONEnHTML(ficheJSON, contexte) {
+  const { discipline, classe, competence, activite, duree, leconLabel, seanceLabel, habiletesContenusSeance } = contexte;
+
+  const entete = `<div class="entete-libre" style="display:grid;grid-template-columns:110px 1fr;column-gap:12px;row-gap:2px;margin-bottom:14px;">
+  <div style="font-weight:bold;padding:2px 0;">Discipline :</div><div style="padding:2px 0;">${echapperHtml(discipline)}</div>
+  <div style="font-weight:bold;padding:2px 0;">Date :</div><div style="padding:2px 0;"></div>
+  <div style="font-weight:bold;padding:2px 0;">Classe :</div><div style="padding:2px 0;">${echapperHtml(classe)}</div>
+  <div style="font-weight:bold;padding:2px 0;">Compétence :</div><div style="padding:2px 0;">${echapperHtml(competence)}</div>
+  <div style="font-weight:bold;padding:2px 0;">Activité :</div><div style="padding:2px 0;">${echapperHtml(activite)}</div>
+  <div style="font-weight:bold;padding:2px 0;">Durée :</div><div style="padding:2px 0;">${echapperHtml(duree)}</div>
+  <div style="font-weight:bold;padding:2px 0;">Leçon :</div><div style="padding:2px 0;">${echapperHtml(leconLabel)}</div>
+  <div style="font-weight:bold;padding:2px 0;">Séance :</div><div style="padding:2px 0;">${echapperHtml(seanceLabel)}</div>
+</div>`;
+
+  const situation = `<p>Situation d'apprentissage : ${echapperHtml(ficheJSON.situation || '')}</p>`;
+
+  const ligneHabiletes = habiletesContenusSeance.map((hc) => `<tr><td style="border:1px solid #000;padding:6px;vertical-align:top;">${echapperHtml(hc.habilete)}</td><td style="border:1px solid #000;padding:6px;vertical-align:top;">${(hc.contenu || []).map((c) => echapperHtml(c)).join('<br>')}</td></tr>`).join('');
+  const tableHabiletes = `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+  <tr><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Habiletés</th><th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Contenus</th></tr>
+  ${ligneHabiletes}
+</table>`;
+
+  const supports = (ficheJSON.supports || []).filter(Boolean);
+  const bibliographie = (ficheJSON.bibliographie || []).filter(Boolean);
+  const celluleSupports = `<p>Supports didactiques</p>${supports.map((s) => `<p>- ${echapperHtml(s)}</p>`).join('')}`;
+  const celluleBiblio = `<p>Bibliographie</p>${bibliographie.map((b) => `<p>- ${echapperHtml(b)}</p>`).join('')}`;
+  const tableSupports = `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+  <tr>
+    <td style="border:1px solid #000;padding:8px;width:50%;vertical-align:top;">${celluleSupports}</td>
+    <td style="border:1px solid #000;padding:8px;width:50%;vertical-align:top;">${celluleBiblio}</td>
+  </tr>
+</table>`;
+
+  const presentationEnseignant = (ficheJSON.presentation.enseignant || []).map(rendreActionEnseignantLot9).join('');
+  const presentationEleves = rendreListeSimpleLot9(ficheJSON.presentation.eleves);
+  const presentationTraces = `<p>${echapperHtml(leconLabel)}</p><p>${echapperHtml(seanceLabel)}</p>`;
+
+  const partiesPlan = [];
+  const partiesEnseignant = [];
+  const partiesEleves = [];
+  const partiesTraces = [];
+  (ficheJSON.developpement || []).forEach((partie, i) => {
+    const titreNumerote = `${i + 1}. ${(partie.titre || '').trim()} (15 mn, ${(partie.strategie || '').trim()})`;
+    const titreHtml = `<p data-docx-titre="1" style="margin:10px 0 4px 0;font-weight:bold">${echapperHtml(titreNumerote)}</p>`;
+    partiesPlan.push(titreHtml);
+    partiesEnseignant.push((partie.enseignant || []).map(rendreActionEnseignantLot9).join(''));
+    partiesEleves.push(rendreListeSimpleLot9(partie.eleves));
+    partiesTraces.push(titreHtml + (partie.traces || []).map(rendreBlocTraceLot9).join(''));
+  });
+
+  const consignes = (ficheJSON.evaluation && ficheJSON.evaluation.consignes) || [];
+  const aUnExtrait = consignes.some((c) => c.extrait && c.extrait.trim());
+  let tracesEvaluation = '<p>ÉVALUATION</p>';
+  if (aUnExtrait) tracesEvaluation += '<p>Extraits composés pour la séance.</p>';
+  consignes.forEach((c, j) => {
+    tracesEvaluation += `<p>Consigne ${j + 1} (Niveau ${c.niveau} : ${libelleNiveauTaxonomiqueLot9(c.niveau)})</p>`;
+    tracesEvaluation += `<p>${echapperHtml(c.enonce || '')}</p>`;
+    if (c.extrait && c.extrait.trim()) tracesEvaluation += `<p>Extrait :</p><p>« ${echapperHtml(c.extrait)} »</p>`;
+    tracesEvaluation += `<p>Réponse attendue : ${echapperHtml(c.corrige || '')}</p>`;
+  });
+
+  const tableDeroulement = `<table style="width:100%;border-collapse:collapse;">
+  <tr>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Moments didactiques / Durée</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:20%;">Stratégies pédagogiques / Plan du cours</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités de l'enseignant</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:25%;">Activités des élèves</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;width:15%;">Traces écrites</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;"><p>PRÉSENTATION</p><p>(5 mn)</p></td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${echapperHtml(ficheJSON.presentation.strategie || '')}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationEnseignant}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationEleves}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${presentationTraces}</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;"><p>DÉVELOPPEMENT</p><p>(45 mn)</p></td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${partiesPlan.join('')}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${partiesEnseignant.join('')}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${partiesEleves.join('')}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${partiesTraces.join('')}</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #000;padding:6px;font-weight:bold;vertical-align:top;"><p>ÉVALUATION</p><p>(10 mn)</p></td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">Travail individuel</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${rendreListeSimpleLot9(ENSEIGNANT_EVALUATION_BOILERPLATE_LOT9)}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${rendreListeSimpleLot9(ELEVES_EVALUATION_BOILERPLATE_LOT9)}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${tracesEvaluation}</td>
+  </tr>
+</table>`;
+
+  return `<div class="fiche-cours" style="font-family:'Times New Roman',serif;line-height:1.5">
+<p data-docx-titre-fiche="1" style="text-align:center;font-weight:bold;margin:0 0 10px 0"><strong>FICHE DE COURS</strong></p>
+${entete}
+${situation}
+${tableHabiletes}
+${tableSupports}
+${tableDeroulement}
+</div>`;
+}
+
  app.post('/api/generer-fiche', limiterGenerationParIp, uploadTexteSupportFichier, async (req, res) => {
   console.log('📩 Requête reçue:', req.body.discipline, req.body.classe, req.body.lecon);
   // Bug réel (04/10, crash Render confirmé par les logs -- ReferenceError:
@@ -10187,6 +10635,76 @@ function limiterGenerationParIp(req, res, next) {
         // séance (cf. construireInstructionsLectureMethodiqueLycee).
         if (!planCoursEstSubstantiel(planCours)) {
           return envoyerBlocageSSE(res, "Pour une séance de Lecture méthodique, l'enseignant doit fournir son plan de cours complet (présentation du texte, hypothèse de lecture, axes, repérages -- citations exactes --, analyses, interprétations) -- aucune génération automatique n'existe pour cette sous-activité en dehors du plan fourni.", heartbeat);
+        }
+      }
+
+      // Lot 9 -- rendu déterministe JSON->HTML : court-circuite entièrement
+      // le chemin texte libre + correctifs regex (lots 3-8) pour les séances
+      // 2nde / Français / Étude de l'œuvre intégrale / Culture littéraire
+      // (narrative, Leçon 1, Séances 1-2 pour l'instant -- cf. commentaire
+      // sur modeFicheJSONActif). Même structure que le court-circuit
+      // Séance 11 plus haut : construit le HTML, sauvegarde la Fiche,
+      // renvoie l'évènement SSE "done", et retourne -- jamais de passage par
+      // le stream Anthropic ni par les correctifs mécaniques plus bas.
+      if (modeFicheJSONActif({ typeSeanceOI, profilInfoOI, discipline, sousModule, genreOeuvreOI })) {
+        const catalogueNiveauLot9 = chargerCatalogueNiveau('2nde');
+        const leconCatalogueJSONLot9 = obtenirLeconCatalogueJSON(catalogueNiveauLot9, parseInt(numeroSequence, 10));
+        const seanceCatalogueJSONLot9 = obtenirSeanceCatalogueJSON(leconCatalogueJSONLot9, parseInt(seance, 10));
+        if (!catalogueNiveauLot9 || !leconCatalogueJSONLot9 || !seanceCatalogueJSONLot9) {
+          console.error('❌ Lot 9 -- catalogue/séance introuvable (numeroSequence=' + numeroSequence + ', seance=' + seance + '), repli sur l\'ancien chemin.');
+        } else {
+          try {
+            let ficheJSONLot9 = await genererFicheJSONCultureLitteraire({
+              leconCatalogue: leconCatalogueJSONLot9, seanceCatalogue: seanceCatalogueJSONLot9, approche: approcheNormalisee
+            });
+            let { valide, erreurs } = validerFicheJSON(ficheJSONLot9, seanceCatalogueJSONLot9);
+            if (!valide) {
+              console.log(`⚠️ Lot 9 -- ${erreurs.length} non-conformité(s) détectée(s), régénération ciblée déclenchée :`, erreurs);
+              try {
+                ficheJSONLot9 = await regenererSectionsFautivesFicheJSON(ficheJSONLot9, erreurs);
+              } catch (e) {
+                console.error('❌ Lot 9 -- échec de la régénération ciblée (fiche conservée telle quelle) :', e.message);
+              }
+              ({ valide, erreurs } = validerFicheJSON(ficheJSONLot9, seanceCatalogueJSONLot9));
+              if (!valide) {
+                console.log(`⚠️ Lot 9 -- encore ${erreurs.length} non-conformité(s) après régénération, avertissement affiché.`, erreurs);
+              }
+            }
+
+            const leconLabelLot9 = `${numeroSequence} : ${leconCatalogueJSONLot9.titre}`;
+            const seanceLabelLot9 = `${seance} : ${seanceCatalogueJSONLot9.titre}`;
+            const contenuHTMLLot9 = rendreFicheJSONEnHTML(ficheJSONLot9, {
+              discipline: catalogueNiveauLot9.discipline || discipline,
+              classe, competence: catalogueNiveauLot9.competence, activite: catalogueNiveauLot9.activite,
+              duree, leconLabel: leconLabelLot9, seanceLabel: seanceLabelLot9,
+              habiletesContenusSeance: seanceCatalogueJSONLot9.habiletes_contenus || []
+            });
+
+            const ficheLot9 = await Fiche.create({
+              enseignantId: enseignantId || 'anonyme',
+              discipline: discipline || 'Français', classe,
+              lecon: leconLabelLot9, seance: seanceLabelLot9, duree, niveau,
+              approche: approcheNormalisee, contenu: contenuHTMLLot9,
+              contenuBrutModele: JSON.stringify(ficheJSONLot9),
+              numeroSequenceOeuvre: numeroSequence,
+              estOeuvreIntegraleSecondCycle: true,
+              renduDeterministeLot9: true,
+              origineGeneration: origineGenerationNormalisee
+            });
+            clearInterval(heartbeat);
+            res.write(`data: ${JSON.stringify({ chunk: contenuHTMLLot9 })}\n\n`);
+            if (!valide) {
+              res.write(`data: ${JSON.stringify({ avertissement: `Fiche générée malgré ${erreurs.length} non-conformité(s) non corrigée(s) après une tentative de correction automatique : ${erreurs.map((e) => `${e.section} (${e.message})`).join(' ; ')} -- vérifiez avant utilisation.` })}\n\n`);
+            }
+            res.write(`data: ${JSON.stringify({ done: true, ficheId: ficheLot9._id, contenuFinal: contenuHTMLLot9 })}\n\n`);
+            return res.end();
+          } catch (e) {
+            console.error('❌ Lot 9 -- échec du rendu déterministe :', e.message);
+            // Les en-têtes SSE sont déjà posés/flushés en tout début de
+            // route (avant ce bloc) -- jamais res.status().json() ici, qui
+            // échouerait sur une réponse déjà engagée en text/event-stream.
+            return envoyerBlocageSSE(res, e.message, heartbeat);
+          }
         }
       }
     }
@@ -12180,32 +12698,41 @@ app.get('/api/fiche/:id', async (req, res) => {
     // 2e envoi) : tableau Markdown encore brut ("|...|") dans l'aperçu HTML.
     // Fonction idempotente et auto-gated (no-op si aucun "|" détecté) --
     // sans risque à appliquer systématiquement, pour tout type de fiche.
-    let contenuAffiche = convertirTableauxMarkdownEnHtml(fiche.contenu);
-    // Chantier 1 (lot 6) : même raisonnement -- une fiche déjà enregistrée
-    // avec un tableau large imbriqué (illisible, cf. commentaire sur
-    // hoisterTableauxLargesDesCellules) ne rejouait jamais cette correction
-    // non plus, puisqu'elle n'était câblée qu'au pipeline de génération.
-    contenuAffiche = hoisterTableauxLargesDesCellules(contenuAffiche);
-    // Chantier 1 (lot 8) : idem pour un "\n" littéral déjà figé dans une
-    // fiche enregistrée avant ce correctif.
-    contenuAffiche = corrigerRetoursLigneLitterauxDansFiche(contenuAffiche);
-    // Chantier 2 (lot 6) : idem pour un établissement inventé déjà figé dans
-    // le contenu enregistré.
-    contenuAffiche = corrigerEtablissementInvente(contenuAffiche);
-    // Chantiers 4 et 6 (lot 7) : mêmes raisonnement -- corrections purement
-    // mécaniques (aucun appel Anthropic), donc sans risque ni coût à
-    // appliquer aussi aux fiches déjà enregistrées. Les chantiers 2 (G.3) et
-    // 3 (supports), qui impliquent une régénération ciblée par appel réel,
-    // restent volontairement réservés à la génération (même choix déjà fait
-    // pour le chantier C, lot 5) -- jamais rejoués à chaque téléchargement.
-    contenuAffiche = corrigerInfinitifsConsignesDeveloppement(contenuAffiche);
-    contenuAffiche = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuAffiche);
-    // Chantier 3 (lot 8) : même raisonnement, correctifs purement mécaniques.
-    contenuAffiche = corrigerCoordinationVerbeEleveNonConjugue(contenuAffiche);
-    contenuAffiche = corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuAffiche);
-    contenuAffiche = corrigerVouvoiementDansConsigneDemande(contenuAffiche);
-    contenuAffiche = envelopperConsignesElevesDansDemande(contenuAffiche);
-    contenuAffiche = corrigerDureeAnnonceeEvaluation(contenuAffiche);
+    // Lot 9 : un contenu déjà produit par le rendu déterministe JSON->HTML
+    // ne doit JAMAIS repasser par ces correctifs -- tous supposent un texte
+    // libre jamais généré ici, et le corrompraient (bug réel trouvé en
+    // testant ce lot : envelopperConsignesElevesDansDemande ajoutait à tort
+    // "Demande :" devant une action du professeur pourtant bien étiquetée
+    // type="action" par le JSON d'origine).
+    let contenuAffiche = fiche.contenu;
+    if (!fiche.renduDeterministeLot9) {
+      contenuAffiche = convertirTableauxMarkdownEnHtml(contenuAffiche);
+      // Chantier 1 (lot 6) : même raisonnement -- une fiche déjà enregistrée
+      // avec un tableau large imbriqué (illisible, cf. commentaire sur
+      // hoisterTableauxLargesDesCellules) ne rejouait jamais cette correction
+      // non plus, puisqu'elle n'était câblée qu'au pipeline de génération.
+      contenuAffiche = hoisterTableauxLargesDesCellules(contenuAffiche);
+      // Chantier 1 (lot 8) : idem pour un "\n" littéral déjà figé dans une
+      // fiche enregistrée avant ce correctif.
+      contenuAffiche = corrigerRetoursLigneLitterauxDansFiche(contenuAffiche);
+      // Chantier 2 (lot 6) : idem pour un établissement inventé déjà figé dans
+      // le contenu enregistré.
+      contenuAffiche = corrigerEtablissementInvente(contenuAffiche);
+      // Chantiers 4 et 6 (lot 7) : mêmes raisonnement -- corrections purement
+      // mécaniques (aucun appel Anthropic), donc sans risque ni coût à
+      // appliquer aussi aux fiches déjà enregistrées. Les chantiers 2 (G.3) et
+      // 3 (supports), qui impliquent une régénération ciblée par appel réel,
+      // restent volontairement réservés à la génération (même choix déjà fait
+      // pour le chantier C, lot 5) -- jamais rejoués à chaque téléchargement.
+      contenuAffiche = corrigerInfinitifsConsignesDeveloppement(contenuAffiche);
+      contenuAffiche = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuAffiche);
+      // Chantier 3 (lot 8) : même raisonnement, correctifs purement mécaniques.
+      contenuAffiche = corrigerCoordinationVerbeEleveNonConjugue(contenuAffiche);
+      contenuAffiche = corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuAffiche);
+      contenuAffiche = corrigerVouvoiementDansConsigneDemande(contenuAffiche);
+      contenuAffiche = envelopperConsignesElevesDansDemande(contenuAffiche);
+      contenuAffiche = corrigerDureeAnnonceeEvaluation(contenuAffiche);
+    }
     const ficheAffichee = fiche.toObject ? fiche.toObject() : { ...fiche };
     ficheAffichee.contenu = contenuAffiche;
     res.json(ficheAffichee);
@@ -12286,24 +12813,30 @@ app.post('/api/fiche/:id/pdf', async (req, res) => {
     // Chantier B (lot 4) : voir commentaire identique sur GET /api/fiche/:id --
     // le PDF téléchargé relit fiche.contenu tel quel, sans jamais rejouer la
     // conversion Markdown -> tableau. Idempotent, sans risque.
-    let contenuExport = convertirTableauxMarkdownEnHtml(fiche.contenu);
-    // Chantier 1 (lot 6) : même raisonnement -- rejoue le sorting des
-    // tableaux larges hors cellule (cf. hoisterTableauxLargesDesCellules).
-    contenuExport = hoisterTableauxLargesDesCellules(contenuExport);
-    // Chantier 1 (lot 8) : "\n" littéral déjà figé dans une fiche
-    // enregistrée avant ce correctif.
-    contenuExport = corrigerRetoursLigneLitterauxDansFiche(contenuExport);
-    // Chantier 2 (lot 6) : établissement inventé déjà figé dans le contenu.
-    contenuExport = corrigerEtablissementInvente(contenuExport);
-    // Chantiers 4 et 6 (lot 7) : corrections mécaniques, sans appel Anthropic.
-    contenuExport = corrigerInfinitifsConsignesDeveloppement(contenuExport);
-    contenuExport = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuExport);
-    // Chantier 3 (lot 8) : correctifs mécaniques de format des consignes.
-    contenuExport = corrigerCoordinationVerbeEleveNonConjugue(contenuExport);
-    contenuExport = corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuExport);
-    contenuExport = corrigerVouvoiementDansConsigneDemande(contenuExport);
-    contenuExport = envelopperConsignesElevesDansDemande(contenuExport);
-    contenuExport = corrigerDureeAnnonceeEvaluation(contenuExport);
+    // Lot 9 : un contenu déjà produit par le rendu déterministe JSON->HTML
+    // ne doit jamais repasser par ces correctifs (cf. commentaire identique
+    // sur GET /api/fiche/:id).
+    let contenuExport = fiche.contenu;
+    if (!fiche.renduDeterministeLot9) {
+      contenuExport = convertirTableauxMarkdownEnHtml(contenuExport);
+      // Chantier 1 (lot 6) : même raisonnement -- rejoue le sorting des
+      // tableaux larges hors cellule (cf. hoisterTableauxLargesDesCellules).
+      contenuExport = hoisterTableauxLargesDesCellules(contenuExport);
+      // Chantier 1 (lot 8) : "\n" littéral déjà figé dans une fiche
+      // enregistrée avant ce correctif.
+      contenuExport = corrigerRetoursLigneLitterauxDansFiche(contenuExport);
+      // Chantier 2 (lot 6) : établissement inventé déjà figé dans le contenu.
+      contenuExport = corrigerEtablissementInvente(contenuExport);
+      // Chantiers 4 et 6 (lot 7) : corrections mécaniques, sans appel Anthropic.
+      contenuExport = corrigerInfinitifsConsignesDeveloppement(contenuExport);
+      contenuExport = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuExport);
+      // Chantier 3 (lot 8) : correctifs mécaniques de format des consignes.
+      contenuExport = corrigerCoordinationVerbeEleveNonConjugue(contenuExport);
+      contenuExport = corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuExport);
+      contenuExport = corrigerVouvoiementDansConsigneDemande(contenuExport);
+      contenuExport = envelopperConsignesElevesDansDemande(contenuExport);
+      contenuExport = corrigerDureeAnnonceeEvaluation(contenuExport);
+    }
     const pdfBuffer = await genererPdfDepuisHtml(contenuExport, landscape);
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -12330,26 +12863,32 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
     // jamais à l'export. Donc toute fiche déjà enregistrée avec ce bug restait
     // bloquée dessus pour toujours, même après correction du chantier B au
     // lot 3. Fonction idempotente et auto-gated (no-op si aucun "|" détecté).
-    let contenuExport = convertirTableauxMarkdownEnHtml(fiche.contenu);
-    // Chantier 1 (lot 6) : preuve demandée par l'enseignant sur CE docx réel
-    // (tableau à 7 colonnes imbriqué dans la cellule Traces, illisible en
-    // LibreOffice) -- rejoue le sorting hors cellule à l'export, même
-    // raisonnement que ci-dessus pour convertirTableauxMarkdownEnHtml.
-    contenuExport = hoisterTableauxLargesDesCellules(contenuExport);
-    // Chantier 1 (lot 8) : "\n" littéral déjà figé dans une fiche
-    // enregistrée avant ce correctif.
-    contenuExport = corrigerRetoursLigneLitterauxDansFiche(contenuExport);
-    // Chantier 2 (lot 6) : établissement inventé déjà figé dans le contenu.
-    contenuExport = corrigerEtablissementInvente(contenuExport);
-    // Chantiers 4 et 6 (lot 7) : corrections mécaniques, sans appel Anthropic.
-    contenuExport = corrigerInfinitifsConsignesDeveloppement(contenuExport);
-    contenuExport = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuExport);
-    // Chantier 3 (lot 8) : correctifs mécaniques de format des consignes.
-    contenuExport = corrigerCoordinationVerbeEleveNonConjugue(contenuExport);
-    contenuExport = corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuExport);
-    contenuExport = corrigerVouvoiementDansConsigneDemande(contenuExport);
-    contenuExport = envelopperConsignesElevesDansDemande(contenuExport);
-    contenuExport = corrigerDureeAnnonceeEvaluation(contenuExport);
+    // Lot 9 : un contenu déjà produit par le rendu déterministe JSON->HTML
+    // ne doit jamais repasser par ces correctifs (cf. commentaire identique
+    // sur GET /api/fiche/:id).
+    let contenuExport = fiche.contenu;
+    if (!fiche.renduDeterministeLot9) {
+      contenuExport = convertirTableauxMarkdownEnHtml(contenuExport);
+      // Chantier 1 (lot 6) : preuve demandée par l'enseignant sur CE docx réel
+      // (tableau à 7 colonnes imbriqué dans la cellule Traces, illisible en
+      // LibreOffice) -- rejoue le sorting hors cellule à l'export, même
+      // raisonnement que ci-dessus pour convertirTableauxMarkdownEnHtml.
+      contenuExport = hoisterTableauxLargesDesCellules(contenuExport);
+      // Chantier 1 (lot 8) : "\n" littéral déjà figé dans une fiche
+      // enregistrée avant ce correctif.
+      contenuExport = corrigerRetoursLigneLitterauxDansFiche(contenuExport);
+      // Chantier 2 (lot 6) : établissement inventé déjà figé dans le contenu.
+      contenuExport = corrigerEtablissementInvente(contenuExport);
+      // Chantiers 4 et 6 (lot 7) : corrections mécaniques, sans appel Anthropic.
+      contenuExport = corrigerInfinitifsConsignesDeveloppement(contenuExport);
+      contenuExport = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuExport);
+      // Chantier 3 (lot 8) : correctifs mécaniques de format des consignes.
+      contenuExport = corrigerCoordinationVerbeEleveNonConjugue(contenuExport);
+      contenuExport = corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuExport);
+      contenuExport = corrigerVouvoiementDansConsigneDemande(contenuExport);
+      contenuExport = envelopperConsignesElevesDansDemande(contenuExport);
+      contenuExport = corrigerDureeAnnonceeEvaluation(contenuExport);
+    }
     const docxBuffer = await genererDocxDepuisHtml(contenuExport, landscape, fiche.estOeuvreIntegraleSecondCycle);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
