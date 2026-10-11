@@ -1,2 +1,7 @@
 node_modules/
 .env
+
+# Lot 12 -- dossier local de fiches à importer (scripts/import-bibliotheque.js) :
+# contenu pédagogique en cours de préparation, jamais versionné ici.
+fiches-bibliotheque/
+*.fiche.json
