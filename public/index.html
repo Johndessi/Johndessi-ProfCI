@@ -163,6 +163,7 @@ textarea { resize: vertical; min-height: 90px; }
   <div class="tabs">
     <button class="tab active" onclick="showTab('generer')">✏️ Générer</button>
     <button class="tab" onclick="showTab('modele')">📋 Mon modèle</button>
+    <button class="tab" onclick="showTab('modeleseance')">📝 Modèle de séance</button>
     <button class="tab" onclick="showTab('historique')">📂 Historique</button>
     <button class="tab" onclick="showTab('admin')">⚙️ Admin</button>
   </div>
@@ -727,6 +728,61 @@ textarea { resize: vertical; min-height: 90px; }
     </div>
   </div>
 
+<div id="tab-modeleseance" style="display:none">
+    <div class="card">
+      <h2>📝 Modèle de séance (lecture méthodique, 2nde)</h2>
+      <p style="font-size:13px;color:var(--gris2);margin-bottom:16px">
+        À partir de la Séance 4, l'œuvre intégrale étudiée dépend de votre établissement : remplissez les
+        champs ci-dessous (votre œuvre, votre passage, vos entrées de lecture) -- la fiche est générée
+        immédiatement, sans appel à l'IA. Votre brouillon est sauvegardé automatiquement sur cet appareil et
+        réutilisable pour votre classe suivante.
+      </p>
+      <p style="font-size:12px;color:var(--gris2);margin-bottom:14px">
+        2nde · Français · Étude de l'œuvre intégrale · Leçon 1 · Séance 4
+      </p>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Classe</label>
+          <input id="msClasse" type="text" placeholder="Ex: 2nde A" oninput="sauvegarderBrouillonModeleSeance()"/>
+        </div>
+        <div class="form-group">
+          <label>Durée</label>
+          <input id="msDuree" type="text" value="1 heure" oninput="sauvegarderBrouillonModeleSeance()"/>
+        </div>
+        <div class="form-group">
+          <label>Établissement (optionnel)</label>
+          <input id="msEtablissement" type="text" placeholder="Ex: Lycée Moderne de Yopougon" oninput="sauvegarderBrouillonModeleSeance()"/>
+        </div>
+        <div class="form-group">
+          <label>Votre nom (optionnel)</label>
+          <input id="msNomEnseignant" type="text" placeholder="Ex: Mme Koffi" oninput="sauvegarderBrouillonModeleSeance()"/>
+        </div>
+      </div>
+
+      <div id="msChargement" style="padding:16px;text-align:center;color:var(--gris2)">Chargement des champs du modèle...</div>
+      <div id="msFormulaire" style="display:none"></div>
+
+      <div id="msErreurs" style="display:none;margin-top:12px;padding:12px;border-radius:8px;background:#FFF0E0;color:#8a4b00;font-size:13px;line-height:1.6"></div>
+
+      <button class="btn vert" id="msBtnGenerer" style="margin-top:16px" onclick="genererFicheModeleSeance()" disabled>
+        ⚙️ Générer la fiche (zéro appel IA)
+      </button>
+      <button class="btn" style="margin-top:8px;background:#999" onclick="viderBrouillonModeleSeance()">
+        🗑️ Vider le brouillon sauvegardé
+      </button>
+
+      <div id="msResultat" style="margin-top:18px;display:none">
+        <p style="color:var(--vert);font-weight:700;margin-bottom:10px">✅ Fiche générée</p>
+        <div class="view-controls" style="margin-bottom:10px">
+          <button class="btn" style="width:auto;padding:8px 16px" onclick="telechargerWord()">📄 Word</button>
+          <button class="btn" style="width:auto;padding:8px 16px" onclick="telechargerPDF()">🖨️ PDF N&amp;B</button>
+        </div>
+        <div id="msFicheContainer" style="overflow:auto"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="tab-historique" style="display:none">
     <div class="card">
       <h2>📂 Mes fiches générées</h2>
@@ -785,12 +841,16 @@ let ficheEnCours = null;
 let viewActuelle = 'portrait';
 
 function showTab(name) {
-  ['generer','modele','historique','admin'].forEach(t => {
+  ['generer','modele','modeleseance','historique','admin'].forEach(t => {
     document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
   });
   document.querySelectorAll('.tab').forEach((btn, i) => {
-    btn.classList.toggle('active', ['generer','modele','historique','admin'][i] === name);
+    btn.classList.toggle('active', ['generer','modele','modeleseance','historique','admin'][i] === name);
   });
+  if (name === 'modeleseance' && !modeleSeanceChargeUneFois) {
+    modeleSeanceChargeUneFois = true;
+    chargerChampsModeleSeance();
+  }
 }
 
 function setNiveau(niveau, btn) {
@@ -2071,6 +2131,195 @@ async function sauvegarderModele() {
     toast('✅ Modèle enregistré !');
   } catch(e) {
     toast('❌ ' + e.message);
+  }
+}
+
+// ===========================================================================
+// Lot 13 -- Modèle de séance (S4+, lecture méthodique). Formulaire à
+// placeholders : AUCUN appel IA, substitution + rendu déterministe côté
+// serveur (/api/modeles/:niveau/:discipline/:activite/:lecon/:seance pour la
+// liste des champs, /api/modeles/generer pour produire la fiche). Limité à
+// 2nde/Français/Étude de l'œuvre intégrale/Leçon 1/Séance 4 dans ce lot.
+// ===========================================================================
+let modeleSeanceChargeUneFois = false;
+let modeleSeanceChamps = [];
+const MODELE_SEANCE_ENVELOPPE = { niveau: '2nde', discipline: 'Français', activite: "Étude de l'œuvre intégrale", lecon: 1, seance: 4 };
+const MODELE_SEANCE_GROUPES = [
+  { cle: 'oeuvre', titre: '📖 Œuvre et passage étudiés' },
+  { cle: 'hypothese', titre: '💡 Hypothèse générale' },
+  { cle: 'axe1', titre: '🔎 Axe de lecture 1' },
+  { cle: 'axe2', titre: '🔎 Axe de lecture 2 (entrée 2 réservée à l\'évaluation)' },
+  { cle: 'autre', titre: 'Autres champs' }
+];
+
+function cleBrouillonModeleSeance() {
+  const e = MODELE_SEANCE_ENVELOPPE;
+  return `brouillonModeleSeance:${e.niveau}|${e.discipline}|${e.activite}|${e.lecon}|${e.seance}`;
+}
+
+function idChampModeleSeance(nom) { return 'ms_champ_' + nom; }
+
+async function chargerChampsModeleSeance() {
+  const e = MODELE_SEANCE_ENVELOPPE;
+  const url = `/api/modeles/${encodeURIComponent(e.niveau)}/${encodeURIComponent(e.discipline)}/${encodeURIComponent(e.activite)}/${e.lecon}/${e.seance}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || 'Erreur de chargement du modèle');
+    modeleSeanceChamps = data.champs;
+    construireFormulaireModeleSeance(modeleSeanceChamps);
+    chargerBrouillonModeleSeance();
+    document.getElementById('msChargement').style.display = 'none';
+    document.getElementById('msFormulaire').style.display = 'block';
+    document.getElementById('msBtnGenerer').disabled = false;
+  } catch (e2) {
+    document.getElementById('msChargement').textContent = '❌ ' + e2.message;
+  }
+}
+
+function construireFormulaireModeleSeance(champs) {
+  const parGroupe = {};
+  champs.forEach((c) => { (parGroupe[c.groupe] = parGroupe[c.groupe] || []).push(c); });
+
+  const html = MODELE_SEANCE_GROUPES
+    .filter((g) => parGroupe[g.cle] && parGroupe[g.cle].length)
+    .map((g) => {
+      const champsHtml = parGroupe[g.cle].map((c) => {
+        const id = idChampModeleSeance(c.nom);
+        const aide = c.aide ? `<p style="font-size:11px;color:var(--gris2);margin:2px 0 4px">${c.aide}</p>` : '';
+        const listeId = c.suggestions ? id + '_liste' : '';
+        const datalist = c.suggestions
+          ? `<datalist id="${listeId}">${c.suggestions.map((s) => `<option value="${s}">`).join('')}</datalist>`
+          : '';
+        const champInput = c.type === 'texte_long'
+          ? `<textarea id="${id}" data-nom="${c.nom}" style="min-height:70px" oninput="sauvegarderBrouillonModeleSeance()"></textarea>`
+          : `<input id="${id}" data-nom="${c.nom}" type="text" ${listeId ? `list="${listeId}"` : ''} oninput="sauvegarderBrouillonModeleSeance()"/>${datalist}`;
+        return `<div class="form-group" style="min-width:260px;margin-bottom:10px">
+          <label>${c.libelle}${c.obligatoire ? ' *' : ''}</label>
+          ${aide}
+          ${champInput}
+        </div>`;
+      }).join('');
+      return `<h3 style="font-size:13px;background:#F77F00;color:#fff;padding:6px 10px;margin:14px 0 8px;border-radius:5px">${g.titre}</h3>
+        <div class="form-row" style="flex-wrap:wrap">${champsHtml}</div>`;
+    }).join('');
+
+  document.getElementById('msFormulaire').innerHTML = html;
+}
+
+function valeursSaisiesModeleSeance() {
+  const valeurs = {};
+  modeleSeanceChamps.forEach((c) => {
+    const el = document.getElementById(idChampModeleSeance(c.nom));
+    valeurs[c.nom] = el ? el.value.trim() : '';
+  });
+  return valeurs;
+}
+
+function sauvegarderBrouillonModeleSeance() {
+  try {
+    const brouillon = {
+      classe: document.getElementById('msClasse').value,
+      duree: document.getElementById('msDuree').value,
+      etablissement: document.getElementById('msEtablissement').value,
+      nomEnseignant: document.getElementById('msNomEnseignant').value,
+      valeurs: valeursSaisiesModeleSeance()
+    };
+    localStorage.setItem(cleBrouillonModeleSeance(), JSON.stringify(brouillon));
+  } catch (e) { /* stockage indisponible (navigation privée...) -- tant pis, pas bloquant */ }
+}
+
+function chargerBrouillonModeleSeance() {
+  let brouillon = null;
+  try { brouillon = JSON.parse(localStorage.getItem(cleBrouillonModeleSeance()) || 'null'); } catch (e) { brouillon = null; }
+  if (!brouillon) return;
+  if (brouillon.classe != null) document.getElementById('msClasse').value = brouillon.classe;
+  if (brouillon.duree != null) document.getElementById('msDuree').value = brouillon.duree;
+  if (brouillon.etablissement != null) document.getElementById('msEtablissement').value = brouillon.etablissement;
+  if (brouillon.nomEnseignant != null) document.getElementById('msNomEnseignant').value = brouillon.nomEnseignant;
+  Object.keys(brouillon.valeurs || {}).forEach((nom) => {
+    const el = document.getElementById(idChampModeleSeance(nom));
+    if (el) el.value = brouillon.valeurs[nom];
+  });
+}
+
+function viderBrouillonModeleSeance() {
+  try { localStorage.removeItem(cleBrouillonModeleSeance()); } catch (e) { /* ignore */ }
+  modeleSeanceChamps.forEach((c) => { const el = document.getElementById(idChampModeleSeance(c.nom)); if (el) el.value = ''; });
+  document.getElementById('msClasse').value = '';
+  document.getElementById('msEtablissement').value = '';
+  document.getElementById('msNomEnseignant').value = '';
+  toast('🗑️ Brouillon vidé');
+}
+
+function afficherFicheSimpleModeleSeance(html) {
+  const STYLE = `<style>
+    * { box-sizing:border-box; }
+    body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px; padding:16px; color:#0D0D0D; }
+    table { width:100%; border-collapse:collapse; margin-bottom:12px; font-size:12px; }
+    th, td { border:1px solid #ddd; padding:6px 8px; vertical-align:top; }
+    th { background:#0D0D0D; color:#fff; font-size:11px; text-transform:uppercase; }
+  </style>`;
+  const container = document.getElementById('msFicheContainer');
+  container.innerHTML = '';
+  const iframe = document.createElement('iframe');
+  iframe.className = 'fiche-iframe-modeleseance';
+  iframe.style.width = '100%';
+  iframe.style.border = 'none';
+  iframe.style.minHeight = '600px';
+  container.appendChild(iframe);
+  iframe.onload = () => {
+    const h = iframe.contentDocument?.body?.scrollHeight;
+    if (h) iframe.style.height = (h + 30) + 'px';
+  };
+  iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8">${STYLE}</head><body>${html}</body></html>`;
+}
+
+async function genererFicheModeleSeance() {
+  document.getElementById('msErreurs').style.display = 'none';
+  document.getElementById('msResultat').style.display = 'none';
+  const btn = document.getElementById('msBtnGenerer');
+  btn.disabled = true;
+  try {
+    const corps = {
+      ...MODELE_SEANCE_ENVELOPPE,
+      valeurs: valeursSaisiesModeleSeance(),
+      classe: document.getElementById('msClasse').value.trim(),
+      duree: document.getElementById('msDuree').value.trim() || '1 heure',
+      etablissement: document.getElementById('msEtablissement').value.trim(),
+      nomEnseignant: document.getElementById('msNomEnseignant').value.trim(),
+      enseignantId: (document.getElementById('modeleEnseignantId')?.value || '').trim() || 'anonyme'
+    };
+    const res = await fetch('/api/modeles/generer', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corps)
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      const zoneErreurs = document.getElementById('msErreurs');
+      if (Array.isArray(data.champsManquants) && data.champsManquants.length) {
+        const libelles = data.champsManquants.map((nom) => {
+          const champ = modeleSeanceChamps.find((c) => c.nom === nom);
+          return champ ? champ.libelle : nom;
+        });
+        zoneErreurs.innerHTML = '❗ Champ(s) obligatoire(s) non rempli(s) :<br>' + libelles.map((l) => '• ' + l).join('<br>');
+      } else if (Array.isArray(data.erreurs) && data.erreurs.length) {
+        zoneErreurs.innerHTML = '❌ Fiche non conforme :<br>' + data.erreurs.map((er) => `• ${er.section} : ${er.message}`).join('<br>');
+      } else {
+        zoneErreurs.textContent = '❌ ' + (data.error || 'Erreur inconnue');
+      }
+      zoneErreurs.style.display = 'block';
+      toast('❌ La fiche n\'a pas pu être générée');
+      return;
+    }
+    ficheEnCours = { id: data.ficheId, contenu: data.contenuFinal };
+    afficherFicheSimpleModeleSeance(data.contenuFinal);
+    document.getElementById('msResultat').style.display = 'block';
+    document.getElementById('msResultat').scrollIntoView({ behavior: 'smooth' });
+    toast('✅ Fiche générée avec succès !');
+  } catch (e) {
+    toast('❌ ' + e.message);
+  } finally {
+    btn.disabled = false;
   }
 }
 

@@ -147,7 +147,11 @@ function validerFicheJSON(ficheJSON, seanceCatalogue) {
 
   const consignes = (ficheJSON.evaluation && ficheJSON.evaluation.consignes) || [];
   if (consignes.length !== 3) ajoute('evaluation', `${consignes.length} consigne(s) au lieu de 3`);
-  const niveauxAttendus = [['N1', 'N2'], ['N3'], ['N4']];
+  // Lot 13 (server.js) : "N1/N2" (littéral) est accepté pour la 1re consigne
+  // depuis le lot 13 (modèles de séance, lecture méthodique) -- reporté ici
+  // pour rester synchronisé, cf. l'avertissement de duplication en tête de
+  // ce fichier.
+  const niveauxAttendus = [['N1', 'N2', 'N1/N2'], ['N3'], ['N4']];
   consignes.forEach((c, j) => {
     const section = `evaluation.consignes[${j}]`;
     if (niveauxAttendus[j] && !niveauxAttendus[j].includes(c.niveau)) {
