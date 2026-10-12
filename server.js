@@ -744,6 +744,13 @@ const FicheSchema = new mongoose.Schema({
   // d'un appel modèle -- utile pour distinguer après coup, sans deviner,
   // quelles fiches ont réellement consommé du budget API.
   serviDepuisBibliothequeLot11 : { type: Boolean, default: false },
+  // Lot 13 : true quand ce contenu provient d'un MODÈLE à placeholders
+  // (modeles/<niveau>/<discipline>/<activite>/L<lecon>-S<seance>.modele.json,
+  // substitué par les valeurs saisies par l'enseignant) -- zéro appel API
+  // comme pour la bibliothèque (serviDepuisBibliothequeLot11), mais une
+  // origine différente (contenu personnalisé par enseignant, jamais
+  // partagé entre enseignants, contrairement à une fiche de bibliothèque).
+  genereDepuisModeleLot13 : { type: Boolean, default: false },
   createdAt    : { type: Date, default: Date.now }
 });
 
@@ -6839,6 +6846,252 @@ app.get('/api/admin/fiche-bibliotheque/liste', verifierCleAdmin, async (req, res
   }
 });
 
+// ===========================================================================
+// LOT 13 -- Modèles de séance à placeholders (S4+, lecture méthodique). À
+// partir de la Séance 4, l'œuvre intégrale étudiée change selon
+// l'établissement/la région : on ne stocke PAS de fiche figée (contrairement
+// à S1/S2, lot 11) mais un MODÈLE {{PLACEHOLDER}} -- l'enseignant saisit son
+// œuvre, son passage et son plan de lecture méthodique via un formulaire, le
+// code substitue, la fiche est validée puis rendue par le MÊME moteur
+// déterministe que les lots 9-11 (rendreFicheJSONEnHTML). ZÉRO appel
+// Anthropic. Limité à L1-S4 dans ce lot (cf. modeles/2nde/francais/
+// oeuvre-integrale/L1-S4.modele.json) -- ne pas étendre à S5-S12 avant
+// validation réelle de S4 (décision explicite de l'enseignant).
+// ===========================================================================
+const DOSSIER_DISCIPLINE_MODELE_LOT13 = { 'Français': 'francais' };
+const DOSSIER_ACTIVITE_MODELE_LOT13 = { "Étude de l'œuvre intégrale": 'oeuvre-integrale' };
+
+// Repli générique (discipline/activité pas encore répertoriée ci-dessus) --
+// jamais utilisé pour les deux entrées déjà connues, qui passent par la
+// table exacte au-dessus (une vraie slugification de "Étude de l'œuvre
+// intégrale" donnerait "etude-de-l-oeuvre-integrale", pas "oeuvre-integrale",
+// le nom de dossier déjà choisi sur le disque -- cf. arborescence fournie).
+function genererSlugGeneriqueLot13(valeur) {
+  return (valeur || '').toString()
+    .replace(/œ/gi, 'oe').replace(/æ/gi, 'ae')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+function resoudreDossierModeleLot13(valeur, table) {
+  const valeurNormalisee = normaliserTexte(valeur);
+  const cleTrouvee = Object.keys(table).find((cle) => normaliserTexte(cle) === valeurNormalisee);
+  return cleTrouvee ? table[cleTrouvee] : genererSlugGeneriqueLot13(valeur);
+}
+function cheminFichierModeleLot13(niveau, discipline, activite, leconN, seanceN) {
+  const niveauSlug = genererSlugGeneriqueLot13(niveau);
+  const disciplineSlug = resoudreDossierModeleLot13(discipline, DOSSIER_DISCIPLINE_MODELE_LOT13);
+  const activiteSlug = resoudreDossierModeleLot13(activite, DOSSIER_ACTIVITE_MODELE_LOT13);
+  return path.join(__dirname, 'modeles', niveauSlug, disciplineSlug, activiteSlug, `L${leconN}-S${seanceN}.modele.json`);
+}
+function chargerModeleLot13(niveau, discipline, activite, leconN, seanceN) {
+  const chemin = cheminFichierModeleLot13(niveau, discipline, activite, leconN, seanceN);
+  try {
+    return JSON.parse(fs.readFileSync(chemin, 'utf8'));
+  } catch (e) {
+    return null;
+  }
+}
+function extrairePlaceholdersModeleLot13(ficheModele) {
+  const trouves = JSON.stringify(ficheModele).match(/\{\{(\w+)\}\}/g) || [];
+  return [...new Set(trouves.map((m) => m.slice(2, -2)))];
+}
+// Substitue récursivement {{NOM}} par valeurs[NOM] dans toute chaîne de
+// l'objet -- appelé UNIQUEMENT après confirmation qu'aucun placeholder
+// n'est manquant (cf. route POST ci-dessous), donc chaque jeton rencontré
+// ici a toujours une valeur correspondante.
+function substituerPlaceholdersLot13(valeur, valeurs) {
+  if (Array.isArray(valeur)) return valeur.map((v) => substituerPlaceholdersLot13(v, valeurs));
+  if (valeur && typeof valeur === 'object') {
+    const copie = {};
+    Object.keys(valeur).forEach((cle) => { copie[cle] = substituerPlaceholdersLot13(valeur[cle], valeurs); });
+    return copie;
+  }
+  if (typeof valeur !== 'string') return valeur;
+  return valeur.replace(/\{\{(\w+)\}\}/g, (match, nom) => (Object.prototype.hasOwnProperty.call(valeurs, nom) ? String(valeurs[nom]) : match));
+}
+
+// --- Descripteurs de champs (FR) pour le formulaire -------------------------
+// Exemples NON CONTRACTUELS (un cas fictif cohérent, jamais une donnée
+// réelle vérifiée) : affichés dans le formulaire pour montrer le niveau de
+// détail attendu, jamais pré-remplis ni envoyés tels quels -- l'enseignant
+// saisit systématiquement ses propres valeurs.
+const DESCRIPTEURS_CHAMPS_FIXES_LOT13 = {
+  OEUVRE: { libelle: "Titre de l'œuvre", aide: "Le titre exact de l'œuvre intégrale étudiée.", type: 'texte_court', groupe: 'oeuvre', exemple: "Sous l'orage" },
+  AUTEUR: { libelle: 'Auteur', aide: "Nom de l'auteur de l'œuvre.", type: 'texte_court', groupe: 'oeuvre', exemple: 'Seydou Badian' },
+  EDITION: { libelle: 'Édition', aide: "Maison d'édition (ex. CEDA, NEI, Hatier).", type: 'texte_court', groupe: 'oeuvre', exemple: 'Présence Africaine' },
+  PASSAGE: { libelle: 'Passage étudié', aide: 'Repère du passage (ex. chapitre, pages).', type: 'texte_court', groupe: 'oeuvre', exemple: 'le chapitre 3' },
+  EXTRAIT: { libelle: 'Extrait (texte intégral)', aide: "Le texte du passage étudié, tel qu'il sera donné aux élèves (développement ET évaluation -- en lecture méthodique, c'est le même texte).", type: 'texte_long', groupe: 'oeuvre', exemple: 'Kany regardait son père sans oser parler. Les paroles du vieillard résonnaient encore dans la case silencieuse.' },
+  HYPOTHESE_GENERALE: { libelle: 'Hypothèse générale', aide: "Nature/type de texte + thème (ex. « un récit qui dénonce l'injustice sociale »).", type: 'texte_long', groupe: 'hypothese', exemple: "Il s'agit d'un récit qui met en scène le conflit entre la tradition et la modernité." },
+  AXE1: { libelle: 'Axe de lecture 1', aide: 'Justifie la nature/le type de texte (cf. SKILL-lecture-methodique.md §3).', type: 'texte_court', groupe: 'axe1', exemple: 'la nature narrative du passage' },
+  AXE2: { libelle: 'Axe de lecture 2', aide: 'Justifie le thème (cf. SKILL-lecture-methodique.md §3).', type: 'texte_court', groupe: 'axe2', exemple: 'le thème du conflit entre tradition et modernité' }
+};
+const LIBELLES_SUFFIXES_ENTREE_LOT13 = {
+  CIBLE: { libelle: 'Ce que les élèves doivent repérer', aide: "Ce que l'indice relevé doit illustrer (ex. « la présence de verbes au passé simple »).", type: 'texte_court', exemple: "la présence de verbes d'action et de paroles rapportées" },
+  INDICES: { libelle: 'Indices textuels relevés', aide: 'Citations exactes du texte, entre guillemets.', type: 'texte_long', exemple: '« regardait », « résonnaient », « savait »' },
+  ANALYSE: { libelle: 'Analyse / justification du procédé', aide: 'Nom du procédé employé et sa justification.', type: 'texte_long', exemple: "Ce sont des verbes à l'imparfait qui installent une scène vécue dans la durée." },
+  NOM: { libelle: "Nom de l'entrée", aide: "Le nom de l'entrée elle-même (ex. « le lexique », « les temps verbaux ») -- choisissez dans la liste ou écrivez autre chose.", type: 'texte_court', exemple: 'Les temps verbaux' },
+  INTERPRETATION: { libelle: 'Interprétation', aide: 'Effet produit sur le lecteur, sens dégagé.', type: 'texte_long', exemple: "L'auteur installe un cadre narratif qui ancre la scène dans le vécu des personnages." }
+};
+const GROUPES_PREFIXE_ENTREE_LOT13 = { E11: 'axe1', E12: 'axe1', E21: 'axe2', E22: 'axe2' };
+const LIBELLES_PREFIXE_ENTREE_LOT13 = { E11: 'Axe 1, entrée 1', E12: 'Axe 1, entrée 2', E21: 'Axe 2, entrée 1', E22: "Axe 2, entrée 2 (réservée à l'évaluation)" };
+// Repli UNIQUEMENT si le catalogue n'a pas (ou plus) de habileté
+// "Identifier" pour cette séance -- en fonctionnement normal (séance 4,
+// catalogue/2nde.json), genererSuggestionsEntreesLot13 ci-dessous renvoie la
+// liste réellement sourcée du catalogue, jamais celle-ci.
+const SUGGESTIONS_ENTREES_REPLI_LOT13 = [
+  'Type de texte', 'Tonalité', 'Personnages et thèmes majeurs',
+  'Outils grammaticaux', 'Indices lexicaux', 'Figures de style', 'Schéma actantiel'
+];
+function descripteurChampModeleLot13(nomPlaceholder, suggestionsEntrees) {
+  if (DESCRIPTEURS_CHAMPS_FIXES_LOT13[nomPlaceholder]) {
+    return { nom: nomPlaceholder, obligatoire: true, ...DESCRIPTEURS_CHAMPS_FIXES_LOT13[nomPlaceholder] };
+  }
+  const correspondance = /^(E(?:11|12|21|22))_(.+)$/.exec(nomPlaceholder);
+  if (correspondance) {
+    const [, prefixe, suffixe] = correspondance;
+    const suffixeInfo = LIBELLES_SUFFIXES_ENTREE_LOT13[suffixe];
+    if (suffixeInfo) {
+      return {
+        nom: nomPlaceholder, obligatoire: true,
+        libelle: `${LIBELLES_PREFIXE_ENTREE_LOT13[prefixe]} -- ${suffixeInfo.libelle}`,
+        aide: suffixeInfo.aide, type: suffixeInfo.type, exemple: suffixeInfo.exemple,
+        groupe: GROUPES_PREFIXE_ENTREE_LOT13[prefixe],
+        ...(suffixe === 'NOM' ? { suggestions: suggestionsEntrees } : {})
+      };
+    }
+  }
+  // Placeholder inconnu (futur modèle, champ pas encore répertorié ici) --
+  // jamais planté : un descripteur générique reste utilisable par le
+  // formulaire (juste moins bien libellé).
+  return { nom: nomPlaceholder, obligatoire: true, libelle: nomPlaceholder, aide: '', type: 'texte_court', groupe: 'autre' };
+}
+
+// Charge le triplet catalogue/leçon/séance une seule fois, partagé par les
+// deux routes -- jamais une donnée de programme inventée : "competence"
+// (niveau discipline, déjà utilisé pour S1/S2), les Habiletés/Contenus de
+// la séance ET son titre viennent tous de catalogue/2nde.json, qui couvre
+// bien la Séance 4 ("Lecture méthodique n°1" -- corrigé après revue : le
+// catalogue existe pour cette séance, contrairement à ce qu'une 1re lecture
+// de l'intro du lot 13 laissait supposer ; seul le CONTENU de l'œuvre change
+// selon l'enseignant, pas la structure Habiletés/Contenus du programme).
+function chargerSeanceCatalogueLot13(niveau, leconN, seanceN) {
+  const catalogueNiveau = chargerCatalogueNiveau(niveau);
+  const leconCatalogue = obtenirLeconCatalogueJSON(catalogueNiveau, leconN);
+  const seanceCatalogue = obtenirSeanceCatalogueJSON(leconCatalogue, seanceN);
+  return { catalogueNiveau, leconCatalogue, seanceCatalogue };
+}
+// Dérive les suggestions de *_NOM directement de l'habileté "Identifier" du
+// catalogue (ex. séance 4 : "le type de texte", "la tonalité", "les
+// personnages et les thèmes majeurs"...) -- mise en forme minimale
+// (majuscule initiale, "  ;" final retiré), jamais un texte réécrit.
+function genererSuggestionsEntreesLot13(seanceCatalogue) {
+  const habiliteIdentifier = seanceCatalogue && (seanceCatalogue.habiletes_contenus || []).find((h) => h.habilete === 'Identifier');
+  if (!habiliteIdentifier || !habiliteIdentifier.contenu || !habiliteIdentifier.contenu.length) return SUGGESTIONS_ENTREES_REPLI_LOT13;
+  return habiliteIdentifier.contenu.map((texte) => texte.replace(/\s*[;.]\s*$/, '').replace(/^./, (premiereLettre) => premiereLettre.toUpperCase()));
+}
+
+app.get('/api/modeles/:niveau/:discipline/:activite/:lecon/:seance', (req, res) => {
+  try {
+    const { niveau, discipline, activite, lecon, seance } = req.params;
+    const leconN = parseInt(lecon, 10);
+    const seanceN = parseInt(seance, 10);
+    if (!Number.isFinite(leconN) || !Number.isFinite(seanceN)) {
+      return res.status(400).json({ success: false, error: 'Leçon et séance doivent être des nombres entiers.' });
+    }
+    const modele = chargerModeleLot13(niveau, discipline, activite, leconN, seanceN);
+    if (!modele || !modele.fiche) {
+      return res.status(404).json({ success: false, error: `Aucun modèle trouvé pour ${niveau}/${discipline}/${activite}, leçon ${leconN}, séance ${seanceN}.` });
+    }
+    const { seanceCatalogue } = chargerSeanceCatalogueLot13(niveau, leconN, seanceN);
+    const suggestionsEntrees = genererSuggestionsEntreesLot13(seanceCatalogue);
+    const champs = extrairePlaceholdersModeleLot13(modele.fiche).map((nom) => descripteurChampModeleLot13(nom, suggestionsEntrees));
+    res.json({ success: true, niveau, discipline, activite, lecon: leconN, seance: seanceN, champs });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/modeles/generer', async (req, res) => {
+  try {
+    const {
+      niveau, discipline, activite, lecon, seance, valeurs,
+      enseignantId, classe, duree, etablissement, nomEnseignant,
+      origineGeneration = 'enseignant'
+    } = req.body || {};
+    const leconN = parseInt(lecon, 10);
+    const seanceN = parseInt(seance, 10);
+    if (!niveau || !discipline || !activite || !Number.isFinite(leconN) || !Number.isFinite(seanceN) || !valeurs || typeof valeurs !== 'object' || Array.isArray(valeurs)) {
+      return res.status(400).json({ success: false, error: 'Champs requis manquants ou invalides : niveau, discipline, activite, lecon, seance (entiers), valeurs (objet).' });
+    }
+    const modele = chargerModeleLot13(niveau, discipline, activite, leconN, seanceN);
+    if (!modele || !modele.fiche) {
+      return res.status(404).json({ success: false, error: `Aucun modèle trouvé pour ${niveau}/${discipline}/${activite}, leçon ${leconN}, séance ${seanceN}.` });
+    }
+
+    const placeholders = extrairePlaceholdersModeleLot13(modele.fiche);
+    const champsManquants = placeholders.filter((p) => !valeurs[p] || !String(valeurs[p]).trim());
+    if (champsManquants.length) {
+      return res.status(400).json({ success: false, champsManquants });
+    }
+
+    // Correction orthographique déterministe du TEMPLATE d'abord (sa prose
+    // fixe uniquement -- aucun jeton {{X}} ne matche une faute connue),
+    // substitution ENSUITE -- jamais l'inverse, pour ne jamais corriger une
+    // citation ou un nom propre saisi par l'enseignant (cf. règle explicite
+    // du lot 13).
+    const ficheTemplateCorrige = corrigerOrthographeFicheJSON(modele.fiche);
+    const ficheSubstituee = substituerPlaceholdersLot13(ficheTemplateCorrige, valeurs);
+
+    const { catalogueNiveau, leconCatalogue, seanceCatalogue } = chargerSeanceCatalogueLot13(niveau, leconN, seanceN);
+
+    // Profil "modèle" (jamais le profil bibliothèque tel quel, cf. lot 13) :
+    // extrait dev/éval identique et attribution à l'œuvre réelle de
+    // l'enseignant sont tous deux attendus en lecture méthodique, jamais
+    // des défauts ici. "seanceCatalogue || {}" : notions_interdites_dans_situation
+    // de la vraie séance 4 (catalogue/2nde.json) est vide pour l'instant,
+    // mais on la lit réellement -- jamais un objet vide forcé alors qu'une
+    // entrée catalogue existe.
+    const { valide, erreurs } = validerFicheJSON(ficheSubstituee, seanceCatalogue || {}, {
+      autoriserExtraitDupliqueDevEval: true,
+      autoriserAttributionExtraitReel: true
+    });
+    if (!valide) {
+      return res.status(400).json({ success: false, erreurs });
+    }
+
+    const leconLabel = `${leconN} : ${(leconCatalogue && leconCatalogue.titre) || activite}`;
+    const seanceLabel = `${seanceN} : ${(seanceCatalogue && seanceCatalogue.titre) || 'Séance'}`;
+
+    const contenuHTML = rendreFicheJSONEnHTML(ficheSubstituee, {
+      discipline: (catalogueNiveau && catalogueNiveau.discipline) || discipline,
+      classe: classe || '', competence: (catalogueNiveau && catalogueNiveau.competence) || '',
+      activite, duree: duree || '1 heure', leconLabel, seanceLabel,
+      habiletesContenusSeance: (seanceCatalogue && seanceCatalogue.habiletes_contenus) || [],
+      etablissement: etablissement || '', nomEnseignant: nomEnseignant || '',
+      date: formaterDateFrLot11(new Date())
+    });
+
+    const ficheCreee = await Fiche.create({
+      enseignantId: enseignantId || 'anonyme',
+      discipline: discipline || 'Français', classe: classe || '',
+      lecon: leconLabel, seance: seanceLabel, duree: duree || '1 heure', niveau,
+      approche: 'APC', contenu: contenuHTML,
+      contenuBrutModele: JSON.stringify(ficheSubstituee),
+      numeroSequenceOeuvre: String(leconN),
+      estOeuvreIntegraleSecondCycle: true,
+      renduDeterministeLot9: true,
+      genereDepuisModeleLot13: true,
+      origineGeneration
+    });
+
+    res.json({ success: true, ficheId: ficheCreee._id, contenuFinal: contenuHTML });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get('/api/admin/progressions/resume', async (req, res) => {
   try {
     const toutes = await ProgressionLecon.find({});
@@ -10292,7 +10545,20 @@ const MOTIF_REFERENCE_TEXTE_NON_FOURNI_LOT10 = /\bces\s+(?:textes?|r[ée]cits?)\
 // construction une tâche à réponses multiples, quel que soit le reste de
 // l'énoncé -- jamais autorisés en tête de la consigne N4.
 const VERBES_N4_REPONSE_NON_UNIQUE_LOT10 = /^(Propose|Imagine|Donne\s+ton\s+avis|Choisis)\b/i;
-function validerFicheJSON(ficheJSON, seanceCatalogue) {
+// Lot 13 -- "options" permet au profil "modèle" (séances S4+, lecture
+// méthodique) de relâcher DEUX règles précises sans dupliquer tout le
+// validateur une 3e fois (après celui-ci et son miroir dans
+// scripts/lib/fiche-validateur.js, cf. lot 12) : en lecture méthodique,
+// l'évaluation porte délibérément sur le MÊME extrait que le développement
+// (Axe 2/entrée 2, cf. SKILL-lecture-methodique.md §6), et l'extrait est
+// toujours celui de l'œuvre RÉELLE que l'enseignant étudie en classe --
+// les deux non-conformités détectées par lots 9-10 pour la bibliothèque
+// (S1/S2, textes composés pour la séance) seraient donc des faux positifs
+// systématiques ici. Par défaut (aucune option passée), AUCUN changement
+// de comportement pour les appels existants (lots 9-11, bibliothèque) :
+// autoriserExtraitDupliqueDevEval et autoriserAttributionExtraitReel sont
+// toutes deux absentes/falsy par défaut.
+function validerFicheJSON(ficheJSON, seanceCatalogue, options = {}) {
   const erreurs = [];
   const ajoute = (section, message) => erreurs.push({ section, message });
 
@@ -10325,7 +10591,14 @@ function validerFicheJSON(ficheJSON, seanceCatalogue) {
 
   const consignes = (ficheJSON.evaluation && ficheJSON.evaluation.consignes) || [];
   if (consignes.length !== 3) ajoute('evaluation', `${consignes.length} consigne(s) au lieu de 3`);
-  const niveauxAttendus = [['N1', 'N2'], ['N3'], ['N4']];
+  // Lot 13 : "N1/N2" (littéral, avec la barre oblique) est la valeur
+  // utilisée par le modèle L1-S4 (lecture méthodique) pour la 1re consigne
+  // -- un seul champ d'évaluation y couvre volontairement les deux premiers
+  // niveaux de la taxonomie (relevé d'indices, N1/N2 confondus), plutôt que
+  // deux consignes séparées. Accepté ici pour TOUS les profils (jamais
+  // produit par le chemin bibliothèque/IA, donc aucun risque de régression
+  // lots 9-11) plutôt que réservé au seul profil "modèle".
+  const niveauxAttendus = [['N1', 'N2', 'N1/N2'], ['N3'], ['N4']];
   consignes.forEach((c, j) => {
     const section = `evaluation.consignes[${j}]`;
     if (niveauxAttendus[j] && !niveauxAttendus[j].includes(c.niveau)) {
@@ -10335,7 +10608,7 @@ function validerFicheJSON(ficheJSON, seanceCatalogue) {
       ajoute(section, `énoncé ne commence pas par un verbe à l'impératif "tu" : "${(c.enonce || '').slice(0, 60)}"`);
     }
     MOTIFS_CORRIGE_INTERDIT_LOT9.forEach(({ re, message }) => { if (re.test(c.corrige || '')) ajoute(section, `corrigé : ${message}`); });
-    if (c.extrait && c.extrait.trim() && texteTracesConcatene.includes(normaliserTexte(c.extrait.trim()))) {
+    if (!options.autoriserExtraitDupliqueDevEval && c.extrait && c.extrait.trim() && texteTracesConcatene.includes(normaliserTexte(c.extrait.trim()))) {
       ajoute(section, "extrait d'évaluation identique à un extrait déjà utilisé dans le développement");
     }
     // Lot 10 : consigne inexécutable (renvoi à un texte non fourni) et
@@ -10363,7 +10636,7 @@ function validerFicheJSON(ficheJSON, seanceCatalogue) {
   if (/activit[ée]\s+est\s+la\s+lecture|notre\s+activit[ée][^.?!]{0,20}[:»]?\s*lecture\b/i.test(texteComplet)) {
     ajoute('global', 'activité nommée "Lecture" au lieu de "Étude de l\'œuvre intégrale"');
   }
-  if (MOTIF_ATTRIBUTION_EXTRAIT_FICTIVE_LOT10.test(texteComplet)) {
+  if (!options.autoriserAttributionExtraitReel && MOTIF_ATTRIBUTION_EXTRAIT_FICTIVE_LOT10.test(texteComplet)) {
     ajoute('global', "un extrait est attribué à une œuvre réelle nommée (ex. « extrait du conte X ») -- utilisez une attribution neutre (\"Extraits composés pour la séance.\"), jamais un titre/auteur précis non vérifiable");
   }
   const notionsInterdites = (seanceCatalogue.notions_interdites_dans_situation || []);
