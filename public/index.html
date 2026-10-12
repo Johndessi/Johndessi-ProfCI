@@ -304,7 +304,7 @@ textarea { resize: vertical; min-height: 90px; }
         <label>Texte support (optionnel selon la leçon)</label>
         <p style="font-size:12px;color:var(--gris2);margin-bottom:8px">
           Pour une lecture méthodique, une expression écrite, un commentaire de texte... Le texte est
-          repris à l'identique dans la fiche générée, jamais reformulé par l'IA.
+          repris à l'identique dans la fiche générée, jamais reformulé.
         </p>
         <textarea id="texteSupport" style="min-height:120px"
           placeholder="Collez ici le texte support (jusqu'à environ 600 mots)..."></textarea>
@@ -734,7 +734,7 @@ textarea { resize: vertical; min-height: 90px; }
       <p style="font-size:13px;color:var(--gris2);margin-bottom:16px">
         À partir de la Séance 4, l'œuvre intégrale étudiée dépend de votre établissement : remplissez les
         champs ci-dessous (votre œuvre, votre passage, vos entrées de lecture) -- la fiche est générée
-        immédiatement, sans appel à l'IA. Votre brouillon est sauvegardé automatiquement sur cet appareil et
+        immédiatement. Votre brouillon est sauvegardé automatiquement sur cet appareil et
         réutilisable pour votre classe suivante.
       </p>
       <p style="font-size:12px;color:var(--gris2);margin-bottom:14px">
@@ -743,8 +743,12 @@ textarea { resize: vertical; min-height: 90px; }
 
       <div class="form-row">
         <div class="form-group">
-          <label>Classe</label>
-          <input id="msClasse" type="text" placeholder="Ex: 2nde A" oninput="sauvegarderBrouillonModeleSeance()"/>
+          <label>Classe (optionnel)</label>
+          <input id="msClasse" type="text" placeholder="Ex: 2nde A -- si vide : « 2nde »" oninput="sauvegarderBrouillonModeleSeance()"/>
+        </div>
+        <div class="form-group">
+          <label>Leçon (optionnel)</label>
+          <input id="msTitreLecon" type="text" placeholder="Par défaut : titre du programme (ex: « Œuvre narrative »)" oninput="sauvegarderBrouillonModeleSeance()"/>
         </div>
         <div class="form-group">
           <label>Durée</label>
@@ -760,13 +764,27 @@ textarea { resize: vertical; min-height: 90px; }
         </div>
       </div>
 
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Coller tout le remplissage (facultatif)</label>
+        <p style="font-size:12px;color:var(--gris2);margin-bottom:6px">
+          Une ligne par champ, au format <code>CLE: valeur</code> (les clés sont les noms des champs ci-dessous).
+          Pratique pour dupliquer d'un passage à l'autre.
+        </p>
+        <textarea id="msCollerTout" style="min-height:90px" placeholder="OEUVRE: Antigone&#10;AUTEUR: Jean Anouilh&#10;PASSAGE_COURT: la scène du dialogue d'Ismène et d'Antigone&#10;..."></textarea>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" type="button" onclick="remplirFormulaireModeleSeanceDepuisTexte()">📋 Remplir le formulaire</button>
+          <button class="btn" type="button" style="background:#999" onclick="exporterRemplissageModeleSeance()">💾 Exporter mon remplissage</button>
+        </div>
+        <div id="msCollerErreurs" style="display:none;margin-top:8px;padding:10px;border-radius:8px;background:#FFF0E0;color:#8a4b00;font-size:12px;line-height:1.5"></div>
+      </div>
+
       <div id="msChargement" style="padding:16px;text-align:center;color:var(--gris2)">Chargement des champs du modèle...</div>
       <div id="msFormulaire" style="display:none"></div>
 
       <div id="msErreurs" style="display:none;margin-top:12px;padding:12px;border-radius:8px;background:#FFF0E0;color:#8a4b00;font-size:13px;line-height:1.6"></div>
 
       <button class="btn vert" id="msBtnGenerer" style="margin-top:16px" onclick="genererFicheModeleSeance()" disabled>
-        ⚙️ Générer la fiche (zéro appel IA)
+        ⚙️ Générer la fiche
       </button>
       <button class="btn" style="margin-top:8px;background:#999" onclick="viderBrouillonModeleSeance()">
         🗑️ Vider le brouillon sauvegardé
@@ -2136,7 +2154,7 @@ async function sauvegarderModele() {
 
 // ===========================================================================
 // Lot 13 -- Modèle de séance (S4+, lecture méthodique). Formulaire à
-// placeholders : AUCUN appel IA, substitution + rendu déterministe côté
+// placeholders : aucun appel à un modèle de génération, substitution + rendu déterministe côté
 // serveur (/api/modeles/:niveau/:discipline/:activite/:lecon/:seance pour la
 // liste des champs, /api/modeles/generer pour produire la fiche). Limité à
 // 2nde/Français/Étude de l'œuvre intégrale/Leçon 1/Séance 4 dans ce lot.
@@ -2230,9 +2248,11 @@ function sauvegarderBrouillonModeleSeance() {
   try {
     const brouillon = {
       classe: document.getElementById('msClasse').value,
+      titreLecon: document.getElementById('msTitreLecon').value,
       duree: document.getElementById('msDuree').value,
       etablissement: document.getElementById('msEtablissement').value,
       nomEnseignant: document.getElementById('msNomEnseignant').value,
+      collerTout: document.getElementById('msCollerTout').value,
       valeurs: valeursSaisiesModeleSeance()
     };
     localStorage.setItem(cleBrouillonModeleSeance(), JSON.stringify(brouillon));
@@ -2244,9 +2264,11 @@ function chargerBrouillonModeleSeance() {
   try { brouillon = JSON.parse(localStorage.getItem(cleBrouillonModeleSeance()) || 'null'); } catch (e) { brouillon = null; }
   if (!brouillon) return;
   if (brouillon.classe != null) document.getElementById('msClasse').value = brouillon.classe;
+  if (brouillon.titreLecon != null) document.getElementById('msTitreLecon').value = brouillon.titreLecon;
   if (brouillon.duree != null) document.getElementById('msDuree').value = brouillon.duree;
   if (brouillon.etablissement != null) document.getElementById('msEtablissement').value = brouillon.etablissement;
   if (brouillon.nomEnseignant != null) document.getElementById('msNomEnseignant').value = brouillon.nomEnseignant;
+  if (brouillon.collerTout != null) document.getElementById('msCollerTout').value = brouillon.collerTout;
   Object.keys(brouillon.valeurs || {}).forEach((nom) => {
     const el = document.getElementById(idChampModeleSeance(nom));
     if (el) el.value = brouillon.valeurs[nom];
@@ -2257,9 +2279,67 @@ function viderBrouillonModeleSeance() {
   try { localStorage.removeItem(cleBrouillonModeleSeance()); } catch (e) { /* ignore */ }
   modeleSeanceChamps.forEach((c) => { const el = document.getElementById(idChampModeleSeance(c.nom)); if (el) el.value = ''; });
   document.getElementById('msClasse').value = '';
+  document.getElementById('msTitreLecon').value = '';
   document.getElementById('msEtablissement').value = '';
   document.getElementById('msNomEnseignant').value = '';
+  document.getElementById('msCollerTout').value = '';
+  document.getElementById('msCollerErreurs').style.display = 'none';
   toast('🗑️ Brouillon vidé');
+}
+
+// Lot 14 -- bloc "Coller tout le remplissage" : lignes `CLE: valeur`
+// (clé = nom du champ, cf. data-nom posé sur chaque input/textarea du
+// formulaire). Le séparateur est le PREMIER ":" de la ligne -- la valeur
+// peut donc elle-même contenir des ":" (ex. une citation, une heure).
+function analyserTexteRemplissageModeleSeance(texte) {
+  const paires = {};
+  (texte || '').split('\n').forEach((ligne) => {
+    const l = ligne.trim();
+    if (!l || l.startsWith('#')) return;
+    const i = l.indexOf(':');
+    if (i === -1) return;
+    const cle = l.slice(0, i).trim().toUpperCase();
+    const valeur = l.slice(i + 1).trim();
+    if (cle) paires[cle] = valeur;
+  });
+  return paires;
+}
+
+function remplirFormulaireModeleSeanceDepuisTexte() {
+  const zoneErreurs = document.getElementById('msCollerErreurs');
+  const texte = document.getElementById('msCollerTout').value;
+  const paires = analyserTexteRemplissageModeleSeance(texte);
+  const nomsConnus = new Set(modeleSeanceChamps.map((c) => c.nom));
+  const clesInconnues = [];
+  let nbRemplis = 0;
+  Object.keys(paires).forEach((cle) => {
+    if (!nomsConnus.has(cle)) { clesInconnues.push(cle); return; }
+    const el = document.getElementById(idChampModeleSeance(cle));
+    if (el) { el.value = paires[cle]; nbRemplis++; }
+  });
+  sauvegarderBrouillonModeleSeance();
+  const champsManquants = modeleSeanceChamps.filter((c) => c.obligatoire && !(document.getElementById(idChampModeleSeance(c.nom))?.value || '').trim());
+  const messages = [];
+  messages.push(`✅ ${nbRemplis} champ(s) rempli(s).`);
+  if (clesInconnues.length) messages.push(`⚠️ Clé(s) non reconnue(s), ignorée(s) : ${clesInconnues.join(', ')}.`);
+  if (champsManquants.length) messages.push(`❗ Champ(s) obligatoire(s) encore vide(s) : ${champsManquants.map((c) => c.libelle).join(', ')}.`);
+  zoneErreurs.innerHTML = messages.join('<br>');
+  zoneErreurs.style.display = 'block';
+  toast('📋 Formulaire rempli depuis le texte collé');
+}
+
+function exporterRemplissageModeleSeance() {
+  const lignes = modeleSeanceChamps.map((c) => `${c.nom}: ${(document.getElementById(idChampModeleSeance(c.nom))?.value || '').trim()}`);
+  const texte = lignes.join('\n');
+  document.getElementById('msCollerTout').value = texte;
+  sauvegarderBrouillonModeleSeance();
+  try {
+    const lien = document.createElement('a');
+    lien.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(texte);
+    lien.download = 'remplissage-S4.txt';
+    lien.click();
+  } catch (e) { /* le téléchargement a échoué -- le texte reste affiché dans la zone, copiable à la main */ }
+  toast('💾 Remplissage exporté');
 }
 
 function afficherFicheSimpleModeleSeance(html) {
@@ -2295,6 +2375,7 @@ async function genererFicheModeleSeance() {
       ...MODELE_SEANCE_ENVELOPPE,
       valeurs: valeursSaisiesModeleSeance(),
       classe: document.getElementById('msClasse').value.trim(),
+      titreLecon: document.getElementById('msTitreLecon').value.trim(),
       duree: document.getElementById('msDuree').value.trim() || '1 heure',
       etablissement: document.getElementById('msEtablissement').value.trim(),
       nomEnseignant: document.getElementById('msNomEnseignant').value.trim(),
