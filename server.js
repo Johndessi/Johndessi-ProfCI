@@ -6913,30 +6913,38 @@ function substituerPlaceholdersLot13(valeur, valeurs) {
 }
 
 // --- Descripteurs de champs (FR) pour le formulaire -------------------------
-const SUGGESTIONS_ENTREES_LOT13 = [
-  'Type de texte', 'Tonalité', 'Personnages et thèmes majeurs',
-  'Outils grammaticaux', 'Indices lexicaux', 'Figures de style', 'Schéma actantiel'
-];
+// Exemples NON CONTRACTUELS (un cas fictif cohérent, jamais une donnée
+// réelle vérifiée) : affichés dans le formulaire pour montrer le niveau de
+// détail attendu, jamais pré-remplis ni envoyés tels quels -- l'enseignant
+// saisit systématiquement ses propres valeurs.
 const DESCRIPTEURS_CHAMPS_FIXES_LOT13 = {
-  OEUVRE: { libelle: "Titre de l'œuvre", aide: "Le titre exact de l'œuvre intégrale étudiée.", type: 'texte_court', groupe: 'oeuvre' },
-  AUTEUR: { libelle: 'Auteur', aide: "Nom de l'auteur de l'œuvre.", type: 'texte_court', groupe: 'oeuvre' },
-  EDITION: { libelle: 'Édition', aide: "Maison d'édition (ex. CEDA, NEI, Hatier).", type: 'texte_court', groupe: 'oeuvre' },
-  PASSAGE: { libelle: 'Passage étudié', aide: 'Repère du passage (ex. chapitre, pages).', type: 'texte_court', groupe: 'oeuvre' },
-  EXTRAIT: { libelle: 'Extrait (texte intégral)', aide: "Le texte du passage étudié, tel qu'il sera donné aux élèves (développement ET évaluation -- en lecture méthodique, c'est le même texte).", type: 'texte_long', groupe: 'oeuvre' },
-  HYPOTHESE_GENERALE: { libelle: 'Hypothèse générale', aide: "Nature/type de texte + thème (ex. « un récit qui dénonce l'injustice sociale »).", type: 'texte_long', groupe: 'hypothese' },
-  AXE1: { libelle: 'Axe de lecture 1', aide: 'Justifie la nature/le type de texte (cf. SKILL-lecture-methodique.md §3).', type: 'texte_court', groupe: 'axe1' },
-  AXE2: { libelle: 'Axe de lecture 2', aide: 'Justifie le thème (cf. SKILL-lecture-methodique.md §3).', type: 'texte_court', groupe: 'axe2' }
+  OEUVRE: { libelle: "Titre de l'œuvre", aide: "Le titre exact de l'œuvre intégrale étudiée.", type: 'texte_court', groupe: 'oeuvre', exemple: "Sous l'orage" },
+  AUTEUR: { libelle: 'Auteur', aide: "Nom de l'auteur de l'œuvre.", type: 'texte_court', groupe: 'oeuvre', exemple: 'Seydou Badian' },
+  EDITION: { libelle: 'Édition', aide: "Maison d'édition (ex. CEDA, NEI, Hatier).", type: 'texte_court', groupe: 'oeuvre', exemple: 'Présence Africaine' },
+  PASSAGE: { libelle: 'Passage étudié', aide: 'Repère du passage (ex. chapitre, pages).', type: 'texte_court', groupe: 'oeuvre', exemple: 'le chapitre 3' },
+  EXTRAIT: { libelle: 'Extrait (texte intégral)', aide: "Le texte du passage étudié, tel qu'il sera donné aux élèves (développement ET évaluation -- en lecture méthodique, c'est le même texte).", type: 'texte_long', groupe: 'oeuvre', exemple: 'Kany regardait son père sans oser parler. Les paroles du vieillard résonnaient encore dans la case silencieuse.' },
+  HYPOTHESE_GENERALE: { libelle: 'Hypothèse générale', aide: "Nature/type de texte + thème (ex. « un récit qui dénonce l'injustice sociale »).", type: 'texte_long', groupe: 'hypothese', exemple: "Il s'agit d'un récit qui met en scène le conflit entre la tradition et la modernité." },
+  AXE1: { libelle: 'Axe de lecture 1', aide: 'Justifie la nature/le type de texte (cf. SKILL-lecture-methodique.md §3).', type: 'texte_court', groupe: 'axe1', exemple: 'la nature narrative du passage' },
+  AXE2: { libelle: 'Axe de lecture 2', aide: 'Justifie le thème (cf. SKILL-lecture-methodique.md §3).', type: 'texte_court', groupe: 'axe2', exemple: 'le thème du conflit entre tradition et modernité' }
 };
 const LIBELLES_SUFFIXES_ENTREE_LOT13 = {
-  CIBLE: { libelle: 'Ce que les élèves doivent repérer', aide: "Ce que l'indice relevé doit illustrer (ex. « la présence de verbes au passé simple »).", type: 'texte_court' },
-  INDICES: { libelle: 'Indices textuels relevés', aide: 'Citations exactes du texte, entre guillemets.', type: 'texte_long' },
-  ANALYSE: { libelle: 'Analyse / justification du procédé', aide: 'Nom du procédé employé et sa justification.', type: 'texte_long' },
-  NOM: { libelle: "Nom de l'entrée", aide: "Le nom de l'entrée elle-même (ex. « le lexique », « les temps verbaux ») -- choisissez dans la liste ou écrivez autre chose.", type: 'texte_court', suggestions: SUGGESTIONS_ENTREES_LOT13 },
-  INTERPRETATION: { libelle: 'Interprétation', aide: 'Effet produit sur le lecteur, sens dégagé.', type: 'texte_long' }
+  CIBLE: { libelle: 'Ce que les élèves doivent repérer', aide: "Ce que l'indice relevé doit illustrer (ex. « la présence de verbes au passé simple »).", type: 'texte_court', exemple: "la présence de verbes d'action et de paroles rapportées" },
+  INDICES: { libelle: 'Indices textuels relevés', aide: 'Citations exactes du texte, entre guillemets.', type: 'texte_long', exemple: '« regardait », « résonnaient », « savait »' },
+  ANALYSE: { libelle: 'Analyse / justification du procédé', aide: 'Nom du procédé employé et sa justification.', type: 'texte_long', exemple: "Ce sont des verbes à l'imparfait qui installent une scène vécue dans la durée." },
+  NOM: { libelle: "Nom de l'entrée", aide: "Le nom de l'entrée elle-même (ex. « le lexique », « les temps verbaux ») -- choisissez dans la liste ou écrivez autre chose.", type: 'texte_court', exemple: 'Les temps verbaux' },
+  INTERPRETATION: { libelle: 'Interprétation', aide: 'Effet produit sur le lecteur, sens dégagé.', type: 'texte_long', exemple: "L'auteur installe un cadre narratif qui ancre la scène dans le vécu des personnages." }
 };
 const GROUPES_PREFIXE_ENTREE_LOT13 = { E11: 'axe1', E12: 'axe1', E21: 'axe2', E22: 'axe2' };
 const LIBELLES_PREFIXE_ENTREE_LOT13 = { E11: 'Axe 1, entrée 1', E12: 'Axe 1, entrée 2', E21: 'Axe 2, entrée 1', E22: "Axe 2, entrée 2 (réservée à l'évaluation)" };
-function descripteurChampModeleLot13(nomPlaceholder) {
+// Repli UNIQUEMENT si le catalogue n'a pas (ou plus) de habileté
+// "Identifier" pour cette séance -- en fonctionnement normal (séance 4,
+// catalogue/2nde.json), genererSuggestionsEntreesLot13 ci-dessous renvoie la
+// liste réellement sourcée du catalogue, jamais celle-ci.
+const SUGGESTIONS_ENTREES_REPLI_LOT13 = [
+  'Type de texte', 'Tonalité', 'Personnages et thèmes majeurs',
+  'Outils grammaticaux', 'Indices lexicaux', 'Figures de style', 'Schéma actantiel'
+];
+function descripteurChampModeleLot13(nomPlaceholder, suggestionsEntrees) {
   if (DESCRIPTEURS_CHAMPS_FIXES_LOT13[nomPlaceholder]) {
     return { nom: nomPlaceholder, obligatoire: true, ...DESCRIPTEURS_CHAMPS_FIXES_LOT13[nomPlaceholder] };
   }
@@ -6948,9 +6956,9 @@ function descripteurChampModeleLot13(nomPlaceholder) {
       return {
         nom: nomPlaceholder, obligatoire: true,
         libelle: `${LIBELLES_PREFIXE_ENTREE_LOT13[prefixe]} -- ${suffixeInfo.libelle}`,
-        aide: suffixeInfo.aide, type: suffixeInfo.type,
+        aide: suffixeInfo.aide, type: suffixeInfo.type, exemple: suffixeInfo.exemple,
         groupe: GROUPES_PREFIXE_ENTREE_LOT13[prefixe],
-        ...(suffixeInfo.suggestions ? { suggestions: suffixeInfo.suggestions } : {})
+        ...(suffixe === 'NOM' ? { suggestions: suggestionsEntrees } : {})
       };
     }
   }
@@ -6960,20 +6968,29 @@ function descripteurChampModeleLot13(nomPlaceholder) {
   return { nom: nomPlaceholder, obligatoire: true, libelle: nomPlaceholder, aide: '', type: 'texte_court', groupe: 'autre' };
 }
 
-// Aucune entrée catalogue n'existe pour S4+ (le modèle REMPLACE le
-// catalogue pour ces séances, cf. intro du lot) : "competence" est réutilisée
-// du catalogue existant (champ partagé au niveau de la discipline, pas de la
-// séance -- déjà valable pour S1/S2) ; Habiletés/Contenus et libellé de
-// séance sont dérivés directement de SKILL-lecture-methodique.md §1 --
-// jamais une donnée de programme officiel inventée, puisqu'aucun catalogue
-// officiel n'existe pour cette séance précise.
-const HABILETES_CONTENUS_LECTURE_METHODIQUE_LOT13 = [
-  { habilete: 'Connaître', contenu: ['la source du passage étudié (titre, auteur, édition).'] },
-  { habilete: 'Identifier', contenu: ['la nature, la tonalité et le thème du passage pour formuler une hypothèse générale de lecture.'] },
-  { habilete: 'Analyser', contenu: ["les procédés d'écriture (indices textuels) qui justifient chaque axe de lecture."] },
-  { habilete: 'Interpréter', contenu: ["l'effet produit par ces procédés et vérifier l'hypothèse générale."] }
-];
-const TITRES_SEANCES_MODELES_LOT13 = { 'L1-S4': 'Lecture méthodique' };
+// Charge le triplet catalogue/leçon/séance une seule fois, partagé par les
+// deux routes -- jamais une donnée de programme inventée : "competence"
+// (niveau discipline, déjà utilisé pour S1/S2), les Habiletés/Contenus de
+// la séance ET son titre viennent tous de catalogue/2nde.json, qui couvre
+// bien la Séance 4 ("Lecture méthodique n°1" -- corrigé après revue : le
+// catalogue existe pour cette séance, contrairement à ce qu'une 1re lecture
+// de l'intro du lot 13 laissait supposer ; seul le CONTENU de l'œuvre change
+// selon l'enseignant, pas la structure Habiletés/Contenus du programme).
+function chargerSeanceCatalogueLot13(niveau, leconN, seanceN) {
+  const catalogueNiveau = chargerCatalogueNiveau(niveau);
+  const leconCatalogue = obtenirLeconCatalogueJSON(catalogueNiveau, leconN);
+  const seanceCatalogue = obtenirSeanceCatalogueJSON(leconCatalogue, seanceN);
+  return { catalogueNiveau, leconCatalogue, seanceCatalogue };
+}
+// Dérive les suggestions de *_NOM directement de l'habileté "Identifier" du
+// catalogue (ex. séance 4 : "le type de texte", "la tonalité", "les
+// personnages et les thèmes majeurs"...) -- mise en forme minimale
+// (majuscule initiale, "  ;" final retiré), jamais un texte réécrit.
+function genererSuggestionsEntreesLot13(seanceCatalogue) {
+  const habiliteIdentifier = seanceCatalogue && (seanceCatalogue.habiletes_contenus || []).find((h) => h.habilete === 'Identifier');
+  if (!habiliteIdentifier || !habiliteIdentifier.contenu || !habiliteIdentifier.contenu.length) return SUGGESTIONS_ENTREES_REPLI_LOT13;
+  return habiliteIdentifier.contenu.map((texte) => texte.replace(/\s*[;.]\s*$/, '').replace(/^./, (premiereLettre) => premiereLettre.toUpperCase()));
+}
 
 app.get('/api/modeles/:niveau/:discipline/:activite/:lecon/:seance', (req, res) => {
   try {
@@ -6987,7 +7004,9 @@ app.get('/api/modeles/:niveau/:discipline/:activite/:lecon/:seance', (req, res) 
     if (!modele || !modele.fiche) {
       return res.status(404).json({ success: false, error: `Aucun modèle trouvé pour ${niveau}/${discipline}/${activite}, leçon ${leconN}, séance ${seanceN}.` });
     }
-    const champs = extrairePlaceholdersModeleLot13(modele.fiche).map(descripteurChampModeleLot13);
+    const { seanceCatalogue } = chargerSeanceCatalogueLot13(niveau, leconN, seanceN);
+    const suggestionsEntrees = genererSuggestionsEntreesLot13(seanceCatalogue);
+    const champs = extrairePlaceholdersModeleLot13(modele.fiche).map((nom) => descripteurChampModeleLot13(nom, suggestionsEntrees));
     res.json({ success: true, niveau, discipline, activite, lecon: leconN, seance: seanceN, champs });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
@@ -7025,11 +7044,16 @@ app.post('/api/modeles/generer', async (req, res) => {
     const ficheTemplateCorrige = corrigerOrthographeFicheJSON(modele.fiche);
     const ficheSubstituee = substituerPlaceholdersLot13(ficheTemplateCorrige, valeurs);
 
+    const { catalogueNiveau, leconCatalogue, seanceCatalogue } = chargerSeanceCatalogueLot13(niveau, leconN, seanceN);
+
     // Profil "modèle" (jamais le profil bibliothèque tel quel, cf. lot 13) :
     // extrait dev/éval identique et attribution à l'œuvre réelle de
     // l'enseignant sont tous deux attendus en lecture méthodique, jamais
-    // des défauts ici.
-    const { valide, erreurs } = validerFicheJSON(ficheSubstituee, {}, {
+    // des défauts ici. "seanceCatalogue || {}" : notions_interdites_dans_situation
+    // de la vraie séance 4 (catalogue/2nde.json) est vide pour l'instant,
+    // mais on la lit réellement -- jamais un objet vide forcé alors qu'une
+    // entrée catalogue existe.
+    const { valide, erreurs } = validerFicheJSON(ficheSubstituee, seanceCatalogue || {}, {
       autoriserExtraitDupliqueDevEval: true,
       autoriserAttributionExtraitReel: true
     });
@@ -7037,17 +7061,14 @@ app.post('/api/modeles/generer', async (req, res) => {
       return res.status(400).json({ success: false, erreurs });
     }
 
-    const catalogueNiveau = chargerCatalogueNiveau(niveau);
-    const leconCatalogue = obtenirLeconCatalogueJSON(catalogueNiveau, leconN);
-    const cleTitreSeance = `L${leconN}-S${seanceN}`;
     const leconLabel = `${leconN} : ${(leconCatalogue && leconCatalogue.titre) || activite}`;
-    const seanceLabel = `${seanceN} : ${TITRES_SEANCES_MODELES_LOT13[cleTitreSeance] || 'Séance'}`;
+    const seanceLabel = `${seanceN} : ${(seanceCatalogue && seanceCatalogue.titre) || 'Séance'}`;
 
     const contenuHTML = rendreFicheJSONEnHTML(ficheSubstituee, {
       discipline: (catalogueNiveau && catalogueNiveau.discipline) || discipline,
       classe: classe || '', competence: (catalogueNiveau && catalogueNiveau.competence) || '',
       activite, duree: duree || '1 heure', leconLabel, seanceLabel,
-      habiletesContenusSeance: HABILETES_CONTENUS_LECTURE_METHODIQUE_LOT13,
+      habiletesContenusSeance: (seanceCatalogue && seanceCatalogue.habiletes_contenus) || [],
       etablissement: etablissement || '', nomEnseignant: nomEnseignant || '',
       date: formaterDateFrLot11(new Date())
     });

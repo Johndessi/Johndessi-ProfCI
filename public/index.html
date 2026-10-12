@@ -2187,16 +2187,26 @@ function construireFormulaireModeleSeance(champs) {
       const champsHtml = parGroupe[g.cle].map((c) => {
         const id = idChampModeleSeance(c.nom);
         const aide = c.aide ? `<p style="font-size:11px;color:var(--gris2);margin:2px 0 4px">${c.aide}</p>` : '';
+        // Exemple NON CONTRACTUEL (lot 13) : montre le niveau de détail
+        // attendu sans jamais être pré-rempli ni envoyé -- affiché en texte
+        // visible (pas seulement un placeholder qui disparaît à la saisie)
+        // ET comme attribut placeholder, pour que l'enseignant le voie même
+        // avant de lire l'aide.
+        const exemple = c.exemple
+          ? `<p style="font-size:11px;color:#1a7a3c;font-style:italic;margin:2px 0 6px">💡 Exemple (non contractuel) : ${c.exemple}</p>`
+          : '';
+        const placeholderAttr = c.exemple ? ` placeholder="${c.exemple.replace(/"/g, '&quot;')}"` : '';
         const listeId = c.suggestions ? id + '_liste' : '';
         const datalist = c.suggestions
           ? `<datalist id="${listeId}">${c.suggestions.map((s) => `<option value="${s}">`).join('')}</datalist>`
           : '';
         const champInput = c.type === 'texte_long'
-          ? `<textarea id="${id}" data-nom="${c.nom}" style="min-height:70px" oninput="sauvegarderBrouillonModeleSeance()"></textarea>`
-          : `<input id="${id}" data-nom="${c.nom}" type="text" ${listeId ? `list="${listeId}"` : ''} oninput="sauvegarderBrouillonModeleSeance()"/>${datalist}`;
+          ? `<textarea id="${id}" data-nom="${c.nom}" style="min-height:70px"${placeholderAttr} oninput="sauvegarderBrouillonModeleSeance()"></textarea>`
+          : `<input id="${id}" data-nom="${c.nom}" type="text" ${listeId ? `list="${listeId}"` : ''}${placeholderAttr} oninput="sauvegarderBrouillonModeleSeance()"/>${datalist}`;
         return `<div class="form-group" style="min-width:260px;margin-bottom:10px">
           <label>${c.libelle}${c.obligatoire ? ' *' : ''}</label>
           ${aide}
+          ${exemple}
           ${champInput}
         </div>`;
       }).join('');
