@@ -782,6 +782,7 @@ textarea { resize: vertical; min-height: 90px; }
       <div id="msFormulaire" style="display:none"></div>
 
       <div id="msErreurs" style="display:none;margin-top:12px;padding:12px;border-radius:8px;background:#FFF0E0;color:#8a4b00;font-size:13px;line-height:1.6"></div>
+      <div id="msAvertissements" style="display:none;margin-top:12px;padding:12px;border-radius:8px;background:#FFF8D6;color:#6b5400;font-size:13px;line-height:1.6"></div>
 
       <button class="btn vert" id="msBtnGenerer" style="margin-top:16px" onclick="genererFicheModeleSeance()" disabled>
         ⚙️ Générer la fiche
@@ -2219,13 +2220,25 @@ function construireFormulaireModeleSeance(champs) {
           ? `<datalist id="${listeId}">${c.suggestions.map((s) => `<option value="${s}">`).join('')}</datalist>`
           : '';
         const champInput = c.type === 'texte_long'
-          ? `<textarea id="${id}" data-nom="${c.nom}" style="min-height:70px"${placeholderAttr} oninput="sauvegarderBrouillonModeleSeance()"></textarea>`
+          ? `<textarea id="${id}" data-nom="${c.nom}" style="min-height:${c.nom === 'EXTRAIT' ? 160 : 70}px"${placeholderAttr} oninput="sauvegarderBrouillonModeleSeance()"></textarea>`
           : `<input id="${id}" data-nom="${c.nom}" type="text" ${listeId ? `list="${listeId}"` : ''}${placeholderAttr} oninput="sauvegarderBrouillonModeleSeance()"/>${datalist}`;
+        // Lot 14b : import du passage depuis un .docx ou un .pdf (texte
+        // extrait côté serveur, modifiable avant la génération).
+        const importPassage = c.nom === 'EXTRAIT'
+          ? `<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input id="msFichierPassage" type="file" accept=".docx,.pdf" style="font-size:12px"/>
+              <button class="btn" type="button" style="padding:6px 10px;font-size:12px" onclick="importerPassageModeleSeance()">📄 Importer le passage (.docx ou .pdf)</button>
+            </div>
+            <div id="msImportPassageMessage" style="display:none;margin-top:6px;font-size:12px;line-height:1.5"></div>`
+          : '';
+        // Lot 14b : la clé exacte attendue par « Coller tout le remplissage »
+        // est affichée à côté du libellé.
         return `<div class="form-group" style="min-width:260px;margin-bottom:10px">
-          <label>${c.libelle}${c.obligatoire ? ' *' : ''}</label>
+          <label>${c.libelle}${c.obligatoire ? ' *' : ''} <code style="font-size:10px;color:var(--gris2);font-weight:normal">${c.nom}</code></label>
           ${aide}
           ${exemple}
           ${champInput}
+          ${importPassage}
         </div>`;
       }).join('');
       return `<h3 style="font-size:13px;background:#F77F00;color:#fff;padding:6px 10px;margin:14px 0 8px;border-radius:5px">${g.titre}</h3>
@@ -2287,48 +2300,108 @@ function viderBrouillonModeleSeance() {
   toast('🗑️ Brouillon vidé');
 }
 
-// Lot 14 -- bloc "Coller tout le remplissage" : lignes `CLE: valeur`
-// (clé = nom du champ, cf. data-nom posé sur chaque input/textarea du
-// formulaire). Le séparateur est le PREMIER ":" de la ligne -- la valeur
-// peut donc elle-même contenir des ":" (ex. une citation, une heure).
-function analyserTexteRemplissageModeleSeance(texte) {
-  const paires = {};
-  (texte || '').split('\n').forEach((ligne) => {
+// Lot 14 puis 14b -- bloc "Coller tout le remplissage".
+// Une ligne qui commence par une clé connue (ex. "PASSAGE_COURT", aussi
+// acceptée sous la forme "{{PASSAGE_COURT}}", "- PASSAGE_COURT", "Passage
+// court", ou le libellé du champ) ouvre ce champ ; le séparateur peut être
+// ":", "=", une tabulation ou un tiret long, et la valeur peut aussi
+// commencer à la ligne suivante. Toute autre ligne CONTINUE le champ en
+// cours : un extrait sur plusieurs lignes (répliques "ISMÈNE : ...")
+// arrive donc entier dans EXTRAIT au lieu d'être découpé en fausses clés.
+// Une ligne qui n'est que le libellé d'un champ (ex. "Nom de l'entree")
+// n'est jamais ajoutée à la valeur du champ précédent (Lot 14b : cause
+// probable de « ... Nom de l'entree. » à la fin d'une cellule Analyse).
+function normaliserLibelleModeleSeance(texte) {
+  return String(texte || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[’`]/g, "'").replace(/œ/gi, 'oe').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+function normaliserCleModeleSeance(brut) {
+  return String(brut || '').replace(/[{}*`[\]]/g, '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .trim().toUpperCase().replace(/[\s\-–—]+/g, '_');
+}
+const LIBELLES_FORMULAIRE_DETECTABLES_MS = [
+  "Nom de l'entrée", 'Indices textuels relevés', 'Analyse / justification du procédé',
+  'Ce que les élèves doivent repérer', 'Passage étudié (mention courte)', 'Extrait (texte intégral)',
+  "Titre de l'œuvre", 'Axe de lecture 1', 'Axe de lecture 2'
+].map(normaliserLibelleModeleSeance);
+
+function analyserTexteRemplissageModeleSeance(texte, champs) {
+  const nomsConnus = new Set(champs.map((c) => c.nom));
+  const parLibelle = {};
+  champs.forEach((c) => { parLibelle[normaliserLibelleModeleSeance(c.libelle)] = c.nom; });
+  const valeurs = {};
+  const clesInconnues = [];
+  const libellesRetires = [];
+  let lignesIgnorees = 0;
+  let courant = null;
+
+  const reconnaitreCle = (brut) => {
+    const cle = normaliserCleModeleSeance(brut);
+    if (nomsConnus.has(cle)) return { cle };
+    const parNom = parLibelle[normaliserLibelleModeleSeance(String(brut).replace(/^[-•*]\s*/, ''))];
+    if (parNom) return { cle: parNom };
+    // Clé inconnue seulement si elle est ÉCRITE comme une clé (majuscules
+    // et "_" littéral) : un nom de personnage en tête de réplique
+    // ("LE ROI — ...") reste une ligne de texte, jamais une fausse clé.
+    if (/^\{{0,2}[A-Z][A-Z0-9]*(_[A-Z0-9]+)+\}{0,2}$/.test(String(brut).trim())) return { inconnue: cle };
+    return null;
+  };
+
+  String(texte || '').replace(/\r\n?/g, '\n').split('\n').forEach((ligneBrute) => {
+    const ligne = ligneBrute.replace(/ /g, ' ');
     const l = ligne.trim();
-    if (!l || l.startsWith('#')) return;
-    const i = l.indexOf(':');
-    if (i === -1) return;
-    const cle = l.slice(0, i).trim().toUpperCase();
-    const valeur = l.slice(i + 1).trim();
-    if (cle) paires[cle] = valeur;
+    // Ligne "CLE" seule (valeur sur les lignes suivantes).
+    const seule = l.replace(/^[-•*]\s*/, '').replace(/\s*:\s*$/, '');
+    const cleSeule = l ? reconnaitreCle(seule) : null;
+    if (cleSeule && cleSeule.cle && (/^[-•*]?\s*\{{0,2}\s*[A-Za-z0-9_ ]+\s*\}{0,2}\s*:?\s*$/.test(l) || parLibelle[normaliserLibelleModeleSeance(seule)])) {
+      courant = cleSeule.cle; valeurs[courant] = ''; return;
+    }
+    const m = /^\s*(?:[-•*]\s*)?(.{1,80}?)\s*(?::|=|\t|\s[—–]\s|->)\s*([\s\S]*)$/.exec(ligne);
+    const candidat = m ? reconnaitreCle(m[1]) : null;
+    if (candidat && candidat.cle) {
+      courant = candidat.cle; valeurs[courant] = m[2].trim(); return;
+    }
+    if (candidat && candidat.inconnue) {
+      clesInconnues.push(candidat.inconnue); courant = null; return;
+    }
+    if (!l) { if (courant && valeurs[courant]) valeurs[courant] += '\n'; return; }
+    if (LIBELLES_FORMULAIRE_DETECTABLES_MS.includes(normaliserLibelleModeleSeance(l.replace(/[\s:.]+$/, '')))) {
+      libellesRetires.push(l); return;
+    }
+    if (!courant) { lignesIgnorees += 1; return; }
+    valeurs[courant] = valeurs[courant] ? `${valeurs[courant]}\n${l}` : l;
   });
-  return paires;
+  Object.keys(valeurs).forEach((k) => { valeurs[k] = valeurs[k].replace(/\n{2,}/g, '\n').trim(); });
+  return { valeurs, clesInconnues, libellesRetires, lignesIgnorees };
 }
 
 function remplirFormulaireModeleSeanceDepuisTexte() {
   const zoneErreurs = document.getElementById('msCollerErreurs');
   const texte = document.getElementById('msCollerTout').value;
-  const paires = analyserTexteRemplissageModeleSeance(texte);
-  const nomsConnus = new Set(modeleSeanceChamps.map((c) => c.nom));
-  const clesInconnues = [];
-  let nbRemplis = 0;
-  Object.keys(paires).forEach((cle) => {
-    if (!nomsConnus.has(cle)) { clesInconnues.push(cle); return; }
+  const { valeurs, clesInconnues, libellesRetires, lignesIgnorees } = analyserTexteRemplissageModeleSeance(texte, modeleSeanceChamps);
+  const remplis = [];
+  Object.keys(valeurs).forEach((cle) => {
     const el = document.getElementById(idChampModeleSeance(cle));
-    if (el) { el.value = paires[cle]; nbRemplis++; }
+    if (el) { el.value = valeurs[cle]; remplis.push(cle); }
   });
   sauvegarderBrouillonModeleSeance();
   const champsManquants = modeleSeanceChamps.filter((c) => c.obligatoire && !(document.getElementById(idChampModeleSeance(c.nom))?.value || '').trim());
+  const echapper = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const messages = [];
-  messages.push(`✅ ${nbRemplis} champ(s) rempli(s).`);
-  if (clesInconnues.length) messages.push(`⚠️ Clé(s) non reconnue(s), ignorée(s) : ${clesInconnues.join(', ')}.`);
-  if (champsManquants.length) messages.push(`❗ Champ(s) obligatoire(s) encore vide(s) : ${champsManquants.map((c) => c.libelle).join(', ')}.`);
+  messages.push(`✅ ${remplis.length} champ(s) rempli(s)${remplis.length ? ' : ' + remplis.join(', ') : ''}.`);
+  if (!remplis.length) messages.push('❗ Aucune clé reconnue. Chaque ligne doit commencer par le nom du champ (affiché à côté de son libellé, ex. <code>PASSAGE_COURT</code>) suivi de « : » et de la valeur.');
+  if (clesInconnues.length) messages.push(`⚠️ Clé(s) collée(s) non reconnue(s), ignorée(s) : ${clesInconnues.map(echapper).join(', ')}.`);
+  if (libellesRetires.length) messages.push(`⚠️ Libellé(s) de formulaire retiré(s) du texte (ce n'est pas du contenu) : ${libellesRetires.map((l) => '« ' + echapper(l) + ' »').join(', ')}.`);
+  if (lignesIgnorees) messages.push(`⚠️ ${lignesIgnorees} ligne(s) ignorée(s) car placée(s) avant toute clé reconnue.`);
+  if (champsManquants.length) messages.push(`❗ Champ(s) obligatoire(s) encore vide(s) : ${champsManquants.map((c) => `${echapper(c.libelle)} (<code>${c.nom}</code>)`).join(', ')}.`);
   zoneErreurs.innerHTML = messages.join('<br>');
   zoneErreurs.style.display = 'block';
   toast('📋 Formulaire rempli depuis le texte collé');
 }
 
 function exporterRemplissageModeleSeance() {
+  // Valeur sur plusieurs lignes (ex. EXTRAIT) : lignes de continuation,
+  // relues telles quelles par analyserTexteRemplissageModeleSeance.
   const lignes = modeleSeanceChamps.map((c) => `${c.nom}: ${(document.getElementById(idChampModeleSeance(c.nom))?.value || '').trim()}`);
   const texte = lignes.join('\n');
   document.getElementById('msCollerTout').value = texte;
@@ -2365,9 +2438,69 @@ function afficherFicheSimpleModeleSeance(html) {
   iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8">${STYLE}</head><body>${html}</body></html>`;
 }
 
+// Lot 14b -- même règle que estReferenceDePassageLot14b côté serveur :
+// un Extrait court qui ressemble à une référence (pages, "p.", chapitre...)
+// sans guillemets ni réplique en capitales.
+const MESSAGE_EXTRAIT_REFERENCE_MS = "Collez le texte du passage dans ce champ, pas sa référence (la référence va dans « Passage étudié »).";
+function estReferenceDePassageModeleSeance(texte) {
+  const t = String(texte || '').trim();
+  if (!t || t.length >= 150) return false;
+  if (/^(pages?|pp?\.)\s*\d|^chap(?:itre|\.)?\s*[\dIVXLC]/i.test(t)) return true;
+  if (/[«»"“”]/.test(t)) return false;
+  if (/\b[A-ZÀÂÉÈÊËÎÏÔÛÙÇ]{3,}\s*[.:—–-]\s/.test(t)) return false;
+  return /\b(pages?|pp?\.)\s*\d|\bchap(?:itre|\.)?\s*[\dIVXLC]|\b(acte|sc[eè]ne)\s+[\dIVXLC]/i.test(t);
+}
+
+function signalerChampModeleSeance(nom, message) {
+  const zoneErreurs = document.getElementById('msErreurs');
+  zoneErreurs.textContent = '❗ ' + message;
+  zoneErreurs.style.display = 'block';
+  const el = nom ? document.getElementById(idChampModeleSeance(nom)) : null;
+  if (el) { el.style.outline = '2px solid #d97706'; el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+}
+
+async function importerPassageModeleSeance() {
+  const input = document.getElementById('msFichierPassage');
+  const zone = document.getElementById('msImportPassageMessage');
+  const afficher = (message, ok) => {
+    zone.textContent = message;
+    zone.style.color = ok ? '#1a7a3c' : '#8a4b00';
+    zone.style.display = 'block';
+  };
+  const fichier = input && input.files && input.files[0];
+  if (!fichier) return afficher('Choisissez d\'abord un fichier .docx ou .pdf.', false);
+  if (!/\.(docx|pdf)$/i.test(fichier.name)) return afficher('Format non pris en charge : importez un fichier .docx ou .pdf.', false);
+  if (fichier.size > 5 * 1024 * 1024) return afficher('Fichier trop volumineux : 5 Mo maximum.', false);
+  const donnees = new FormData();
+  donnees.append('fichier', fichier);
+  afficher('Import en cours...', true);
+  try {
+    const res = await fetch('/api/modeles/importer-passage', { method: 'POST', body: donnees });
+    const data = await res.json();
+    if (!res.ok || !data.success) return afficher('❌ ' + (data.error || 'Import impossible.'), false);
+    const champ = document.getElementById(idChampModeleSeance('EXTRAIT'));
+    if (champ.value.trim() && !confirm('Remplacer le texte déjà présent dans le champ Extrait ?')) return afficher('Import annulé : le champ Extrait n\'a pas été modifié.', false);
+    champ.value = data.texte;
+    champ.style.outline = '';
+    sauvegarderBrouillonModeleSeance();
+    input.value = '';
+    afficher(`✅ Passage importé (${data.nbCaracteres} caractères). Relisez-le et corrigez-le si besoin avant de générer la fiche.`, true);
+  } catch (e) {
+    afficher('❌ ' + e.message, false);
+  }
+}
+
 async function genererFicheModeleSeance() {
   document.getElementById('msErreurs').style.display = 'none';
+  document.getElementById('msAvertissements').style.display = 'none';
   document.getElementById('msResultat').style.display = 'none';
+  modeleSeanceChamps.forEach((c) => { const el = document.getElementById(idChampModeleSeance(c.nom)); if (el) el.style.outline = ''; });
+  const extraitSaisi = document.getElementById(idChampModeleSeance('EXTRAIT'))?.value || '';
+  if (estReferenceDePassageModeleSeance(extraitSaisi)) {
+    signalerChampModeleSeance('EXTRAIT', MESSAGE_EXTRAIT_REFERENCE_MS);
+    toast('❌ La fiche n\'a pas pu être générée');
+    return;
+  }
   const btn = document.getElementById('msBtnGenerer');
   btn.disabled = true;
   try {
@@ -2393,6 +2526,8 @@ async function genererFicheModeleSeance() {
           return champ ? champ.libelle : nom;
         });
         zoneErreurs.innerHTML = '❗ Champ(s) obligatoire(s) non rempli(s) :<br>' + libelles.map((l) => '• ' + l).join('<br>');
+      } else if (data.champ && data.error) {
+        signalerChampModeleSeance(data.champ, data.error);
       } else if (Array.isArray(data.erreurs) && data.erreurs.length) {
         zoneErreurs.innerHTML = '❌ Fiche non conforme :<br>' + data.erreurs.map((er) => `• ${er.section} : ${er.message}`).join('<br>');
       } else {
@@ -2401,6 +2536,11 @@ async function genererFicheModeleSeance() {
       zoneErreurs.style.display = 'block';
       toast('❌ La fiche n\'a pas pu être générée');
       return;
+    }
+    if (Array.isArray(data.avertissements) && data.avertissements.length) {
+      const zoneAvert = document.getElementById('msAvertissements');
+      zoneAvert.innerHTML = '⚠️ Fiche générée, mais vérifiez :<br>' + data.avertissements.map((a) => '• ' + String(a).replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>');
+      zoneAvert.style.display = 'block';
     }
     ficheEnCours = { id: data.ficheId, contenu: data.contenuFinal };
     afficherFicheSimpleModeleSeance(data.contenuFinal);
