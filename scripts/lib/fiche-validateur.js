@@ -113,6 +113,10 @@ const MOTIF_ATTRIBUTION_EXTRAIT_FICTIVE_LOT10 = /\bextraits?\s+(?:du|de\s+l['’
 const MOTIF_REFERENCE_TEXTE_NON_FOURNI_LOT10 = /\bces\s+(?:textes?|r[ée]cits?)\b|\bd[ée]couverts?\s+(?:à|a)\s+la\s+biblioth[èe]que\b|\bci-dessus\b/i;
 const VERBES_N4_REPONSE_NON_UNIQUE_LOT10 = /^(Propose|Imagine|Donne\s+ton\s+avis|Choisis)\b/i;
 const MOTIF_BIBLIOGRAPHIE_GENERIQUE_LOT10 = /manuels?\s+scolaires?|collectifs?\s+et\s+traduits?|ouvrages?\s+divers|anthologies?\s+diverses?/i;
+// Lot 14 (server.js) : "extrait" ne doit jamais être une référence de
+// pages -- reporté ici pour rester synchronisé, cf. l'avertissement de
+// duplication en tête de ce fichier.
+const MOTIF_EXTRAIT_REFERENCE_PAGE_LOT14 = /^(p\.?|pages?)\s*\d/i;
 
 function validerFicheJSON(ficheJSON, seanceCatalogue) {
   const erreurs = [];
@@ -163,6 +167,9 @@ function validerFicheJSON(ficheJSON, seanceCatalogue) {
     MOTIFS_CORRIGE_INTERDIT_LOT9.forEach(({ re, message }) => { if (re.test(c.corrige || '')) ajoute(section, `corrigé : ${message}`); });
     if (c.extrait && c.extrait.trim() && texteTracesConcatene.includes(normaliserTexte(c.extrait.trim()))) {
       ajoute(section, "extrait d'évaluation identique à un extrait déjà utilisé dans le développement");
+    }
+    if (c.extrait && MOTIF_EXTRAIT_REFERENCE_PAGE_LOT14.test(c.extrait.trim())) {
+      ajoute(section, `"extrait" contient une référence de pages au lieu du texte intégral du passage : "${c.extrait.trim().slice(0, 60)}"`);
     }
     if (MOTIF_REFERENCE_TEXTE_NON_FOURNI_LOT10.test(c.enonce || '') && !(c.extrait && c.extrait.trim())) {
       ajoute(section, `consigne non autonome -- renvoie à un texte non fourni ("extrait" vide) : "${(c.enonce || '').slice(0, 80)}"`);

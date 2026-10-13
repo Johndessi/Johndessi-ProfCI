@@ -232,6 +232,23 @@ function pxVersDemiPoints(px) {
   return Math.round(px * 1.5);
 }
 
+// Lot 14 : lit une couleur hexadécimale explicite (#rgb ou #rrggbb) posée en
+// inline CSS -- jamais devinée depuis un nom de couleur ("gray", "white"...),
+// puisque le seul code qui pose ces styles (le rendu "modèle" compact) écrit
+// toujours un hex explicite.
+function backgroundColorFromStyleLot14(style) {
+  const m = /background(?:-color)?\s*:\s*#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b/i.exec(style || '');
+  if (!m) return null;
+  const hex = m[1];
+  return (hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex).toUpperCase();
+}
+function textColorFromStyleLot14(style) {
+  const m = /(?:^|[;"'\s])color\s*:\s*#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b/i.exec(style || '');
+  if (!m) return null;
+  const hex = m[1];
+  return (hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex).toUpperCase();
+}
+
 // Convertit récursivement un <div> "texte support" (texte-support,
 // texte-support-page-unique, texte-support-copie...) -- avec son éventuel
 // <h3> de titre et ses sous-divs à taille de police réduite (cf.
@@ -361,6 +378,11 @@ function tableCellFromNode($, node, opts = {}) {
   else if (opts.widthDxa) cellProps.width = { size: opts.widthDxa, type: WidthType.DXA };
   if (opts.shadingFill) cellProps.shading = { fill: opts.shadingFill, type: ShadingType.CLEAR, color: 'auto' };
   if (opts.columnSpan) cellProps.columnSpan = opts.columnSpan;
+  // Lot 14 : cellule "Axe" du tableau récapitulatif, fusionnée verticalement
+  // sur 2 lignes (rowspan="2" côté HTML) -- la librairie docx insère
+  // elle-même la cellule de continuation (w:vMerge) dans la ligne suivante
+  // à partir de cette seule propriété, cf. Table ci-dessous.
+  if (opts.rowSpan) cellProps.rowSpan = opts.rowSpan;
   return new TableCell(cellProps);
 }
 
@@ -394,19 +416,37 @@ function buildDocxTable($, $table) {
       const widthPct = widthPctFromStyle(style);
       const colspanAttr = $(cellEl).attr('colspan');
       const columnSpan = colspanAttr ? parseInt(colspanAttr, 10) : undefined;
+      const rowspanAttr = $(cellEl).attr('rowspan');
+      const rowSpan = rowspanAttr ? parseInt(rowspanAttr, 10) : undefined;
+      // Lot 14 : une <th>/<td> peut fixer SA PROPRE couleur de fond/texte
+      // (ex. en-tête gris clair du rendu "modèle" compact) -- repli sur le
+      // gris foncé/blanc habituel quand rien n'est précisé, donc AUCUN
+      // changement pour les tableaux existants (S1/S2/S3), qui ne posent
+      // jamais ces 2 propriétés CSS sur leurs <th>.
+      const bgOverride = backgroundColorFromStyleLot14(style);
+      const colorOverride = textColorFromStyleLot14(style);
       cells.push(tableCellFromNode($, cellEl, {
         forceBold: isHeader || /font-weight\s*:\s*bold/i.test(style),
-        forceColor: isHeader ? 'FFFFFF' : undefined,
+        forceColor: isHeader ? (colorOverride || 'FFFFFF') : colorOverride,
         widthPct,
-        shadingFill: isHeader ? '333333' : undefined,
-        columnSpan
+        shadingFill: isHeader ? (bgOverride || '333333') : bgOverride,
+        columnSpan,
+        rowSpan
       }));
     });
     if (cells.length) rows.push(new TableRow({ children: cells, tableHeader: false }));
   }
 
   if (!rows.length) return null;
-  return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, borders: DOCX_BORDERS });
+  // Lot 14 : largeur du TABLEAU lui-même (pas de ses cellules, déjà lue
+  // ci-dessus) -- repli sur 100% (comportement actuel, inchangé) si le
+  // <table> source ne précise rien, comme TOUS les tableaux S1/S2/S3
+  // (toujours "width:100%" explicite, qui se relit d'ailleurs identique à
+  // 100 par widthPctFromStyle -- zéro changement de comportement pour eux).
+  const tableWidthPct = widthPctFromStyle($table.attr('style') || '') || 100;
+  const tableProps = { rows, width: { size: tableWidthPct, type: WidthType.PERCENTAGE }, borders: DOCX_BORDERS };
+  if (tableWidthPct < 100) tableProps.alignment = AlignmentType.CENTER;
+  return new Table(tableProps);
 }
 
 // Largeur fixe de la colonne "label" de l'entête, en twips (1/1440 de pouce).
@@ -572,7 +612,17 @@ const RFONTS_TIMES_NEW_ROMAN = '<w:rFonts w:ascii="Times New Roman" w:hAnsi="Tim
 // forme n'a aucun <w:rPr> du tout. D'où les regex non imbriquées ci-dessous,
 // volontairement plus simples qu'un vrai parseur XML (inutile ici : on ne
 // traite QUE la sortie de notre propre générateur, jamais un XML arbitraire).
-function appliquerPoliceEtInterligneXml(xml) {
+// Lot 14 : "options" généralise cette fonction au profil "modèle" compact
+// (lecture méthodique, S4+) sans dupliquer la police Times New Roman une 2e
+// fois -- SEULS l'interligne (ligneValeur) et, nouveau, une taille de police
+// forcée (tailleDemiPoints) sont paramétrables. Appelée SANS options (comme
+// avant ce lot), le comportement est STRICTEMENT identique à avant : 1,5
+// (w:line="360") et aucune taille forcée -- donc aucun changement pour
+// appliquerMiseEnFormeSecondCycleDocx (S1/S2/S3).
+function appliquerPoliceEtInterligneXml(xml, options = {}) {
+  const ligneValeur = options.ligneValeur || '360';
+  const tailleDemiPoints = options.tailleDemiPoints || null;
+
   // 1) Police -- chaque <w:r> doit porter Times New Roman : remplace son
   // <w:rFonts> existant, ou en crée un (avec son <w:rPr>) s'il n'en a aucun.
   xml = xml.replace(/<w:r>(?:(?!<\/w:r>)[\s\S])*?<\/w:r>|<w:r\/>/g, (run) => {
@@ -586,11 +636,44 @@ function appliquerPoliceEtInterligneXml(xml) {
     return run.replace('<w:r>', `<w:r><w:rPr>${RFONTS_TIMES_NEW_ROMAN}</w:rPr>`);
   });
 
-  // 2) Interligne 1,5 (w:line="360", 240 = simple) + espacement entre
-  // paragraphes -- sur CHAQUE <w:p>, y compris les paragraphes vides
-  // (<w:p/>, espaceurs entre tableaux) et ceux des cellules de tableau.
-  // w:before/w:after existants (ex. titrePar, data-docx-titre) sont
-  // conservés tels quels -- seuls w:line/w:lineRule sont forcés.
+  // 1bis) Taille de police forcée (Lot 14, profil "modèle" compact
+  // UNIQUEMENT -- tailleDemiPoints reste null par défaut, donc ce bloc ne
+  // s'exécute jamais pour S1/S2/S3). Remplace un <w:sz>/<w:szCs> existant,
+  // ou les crée, sur CHAQUE run -- garantit la taille réellement visible
+  // dans Word quelle que soit la taille (absente aujourd'hui) posée par
+  // rendreFicheJSONEnHTML, plutôt que de dépendre d'une cascade CSS que la
+  // conversion docx ne simule pas.
+  if (tailleDemiPoints) {
+    // Ordre CT_RPr (OOXML) : w:sz/w:szCs se placent APRÈS rFonts/b/bCs/i/
+    // iCs/color -- jamais au tout début de <w:rPr>, sous peine de produire
+    // un document.xml dont l'ordre des enfants ne respecte plus le schéma
+    // (Word/LibreOffice tolèrent parfois, mais ce n'est jamais garanti).
+    // On insère donc juste AVANT la fermeture </w:rPr> (ou on remplace un
+    // <w:sz>/<w:szCs> déjà présent là où il se trouve), jamais au début.
+    xml = xml.replace(/<w:r>(?:(?!<\/w:r>)[\s\S])*?<\/w:r>|<w:r\/>/g, (run) => {
+      if (run === '<w:r/>') return run;
+      if (/<w:sz\b[^>]*\/>/.test(run)) {
+        run = run.replace(/<w:sz\b[^>]*\/>/, `<w:sz w:val="${tailleDemiPoints}"/>`);
+      } else if (/<w:rPr>/.test(run)) {
+        run = run.replace('</w:rPr>', `<w:sz w:val="${tailleDemiPoints}"/></w:rPr>`);
+      } else {
+        run = run.replace('<w:r>', `<w:r><w:rPr><w:sz w:val="${tailleDemiPoints}"/></w:rPr>`);
+      }
+      if (/<w:szCs\b[^>]*\/>/.test(run)) {
+        run = run.replace(/<w:szCs\b[^>]*\/>/, `<w:szCs w:val="${tailleDemiPoints}"/>`);
+      } else {
+        run = run.replace(/<w:sz w:val="\d+"\/>/, `<w:sz w:val="${tailleDemiPoints}"/><w:szCs w:val="${tailleDemiPoints}"/>`);
+      }
+      return run;
+    });
+  }
+
+  // 2) Interligne (w:line="360" = 1,5 par défaut ; "240" = simple, demandé
+  // par le profil "modèle" compact) + espacement entre paragraphes -- sur
+  // CHAQUE <w:p>, y compris les paragraphes vides (<w:p/>, espaceurs entre
+  // tableaux) et ceux des cellules de tableau. w:before/w:after existants
+  // (ex. titrePar, data-docx-titre) sont conservés tels quels -- seuls
+  // w:line/w:lineRule sont forcés.
   xml = xml.replace(/<w:p\/>|<w:p>(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g, (paragraphe) => {
     const estVide = paragraphe === '<w:p/>';
     const corps = estVide ? '' : paragraphe.slice(5, -6);
@@ -599,7 +682,7 @@ function appliquerPoliceEtInterligneXml(xml) {
     const mAfter = mSpacing && /w:after="(\d+)"/.exec(mSpacing[1]);
     const before = mBefore ? mBefore[1] : '0';
     const after = mAfter ? mAfter[1] : '140';
-    const nouvelleSpacing = `<w:spacing w:before="${before}" w:after="${after}" w:line="360" w:lineRule="auto"/>`;
+    const nouvelleSpacing = `<w:spacing w:before="${before}" w:after="${after}" w:line="${ligneValeur}" w:lineRule="auto"/>`;
     if (/<w:pPr>/.test(corps)) {
       const nouveauCorps = mSpacing
         ? corps.replace(mSpacing[0], nouvelleSpacing)
@@ -622,8 +705,34 @@ async function appliquerMiseEnFormeSecondCycleDocx(buffer) {
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
-async function genererDocxDepuisHtml(contenuHTML, landscape, miseEnFormeSecondCycle) {
+// Lot 14 : profil "modèle" compact (lecture méthodique, S4+) -- interligne
+// simple (w:line="240", au lieu de 1,5) + police forcée à 10 pt (20
+// demi-points) sur tout le document, pour que titre + en-tête + situation +
+// Habiletés/Contenus tiennent sur la page 1 (constat réel, fiche_francais.docx
+// de test, Antigone). JAMAIS appliqué à S1/S2/S3 -- cf. dispatch dans
+// genererDocxDepuisHtml, gatée par fiche.genereDepuisModeleLot13 (lot 13),
+// jamais par estOeuvreIntegraleSecondCycle (qui reste réservé au profil
+// ci-dessus, inchangé).
+async function appliquerMiseEnFormeModeleCompacteDocx(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const chemin = 'word/document.xml';
+  const fichier = zip.file(chemin);
+  if (!fichier) return buffer;
+  const xml = await fichier.async('string');
+  zip.file(chemin, appliquerPoliceEtInterligneXml(xml, { ligneValeur: '240', tailleDemiPoints: '20' }));
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+// Lot 14 : "profilMiseEnForme" remplace le booléen "miseEnFormeSecondCycle"
+// par un identifiant de profil ('secondCycle' | 'modeleCompact' | falsy),
+// pour pouvoir ajouter le profil "modèle" compact SANS toucher à l'appel
+// existant 'secondCycle' (S1/S2/S3, inchangé -- cf. commentaire sur
+// appliquerMiseEnFormeModeleCompacteDocx). Une valeur booléenne `true`
+// passée par un appelant pas encore mis à jour est traitée comme
+// 'secondCycle' (comportement actuel), jamais comme une erreur.
+async function genererDocxDepuisHtml(contenuHTML, landscape, profilMiseEnForme) {
   const doc = new Document({
+    creator: 'ProfCI', description: 'Fiche de cours', title: 'Fiche de cours',
     sections: [{
       properties: {
         page: {
@@ -637,7 +746,9 @@ async function genererDocxDepuisHtml(contenuHTML, landscape, miseEnFormeSecondCy
     }]
   });
   let buffer = await Packer.toBuffer(doc);
-  if (miseEnFormeSecondCycle) {
+  if (profilMiseEnForme === 'modeleCompact') {
+    buffer = await appliquerMiseEnFormeModeleCompacteDocx(buffer);
+  } else if (profilMiseEnForme) {
     buffer = await appliquerMiseEnFormeSecondCycleDocx(buffer);
   }
   return buffer;
@@ -6925,7 +7036,11 @@ const DESCRIPTEURS_CHAMPS_FIXES_LOT13 = {
   EXTRAIT: { libelle: 'Extrait (texte intégral)', aide: "Le texte du passage étudié, tel qu'il sera donné aux élèves (développement ET évaluation -- en lecture méthodique, c'est le même texte).", type: 'texte_long', groupe: 'oeuvre', exemple: 'Kany regardait son père sans oser parler. Les paroles du vieillard résonnaient encore dans la case silencieuse.' },
   HYPOTHESE_GENERALE: { libelle: 'Hypothèse générale', aide: "Nature/type de texte + thème (ex. « un récit qui dénonce l'injustice sociale »).", type: 'texte_long', groupe: 'hypothese', exemple: "Il s'agit d'un récit qui met en scène le conflit entre la tradition et la modernité." },
   AXE1: { libelle: 'Axe de lecture 1', aide: 'Justifie la nature/le type de texte (cf. SKILL-lecture-methodique.md §3).', type: 'texte_court', groupe: 'axe1', exemple: 'la nature narrative du passage' },
-  AXE2: { libelle: 'Axe de lecture 2', aide: 'Justifie le thème (cf. SKILL-lecture-methodique.md §3).', type: 'texte_court', groupe: 'axe2', exemple: 'le thème du conflit entre tradition et modernité' }
+  AXE2: { libelle: 'Axe de lecture 2', aide: 'Justifie le thème (cf. SKILL-lecture-methodique.md §3).', type: 'texte_court', groupe: 'axe2', exemple: 'le thème du conflit entre tradition et modernité' },
+  // Lot 14 (constat n°10) : mention courte pour la phrase de situation --
+  // la référence précise (pages, chapitre) reste dans PASSAGE (Supports),
+  // jamais injectée en entier dans la phrase de situation.
+  PASSAGE_COURT: { libelle: 'Passage étudié (mention courte)', aide: "Courte mention du passage pour la phrase de situation (ex. « la scène du dialogue d'Ismène et d'Antigone »). La référence précise (pages, chapitre) va dans le champ « Passage étudié ».", type: 'texte_court', groupe: 'oeuvre', exemple: "la scène du dialogue d'Ismène et d'Antigone" }
 };
 const LIBELLES_SUFFIXES_ENTREE_LOT13 = {
   CIBLE: { libelle: 'Ce que les élèves doivent repérer', aide: "Ce que l'indice relevé doit illustrer (ex. « la présence de verbes au passé simple »).", type: 'texte_court', exemple: "la présence de verbes d'action et de paroles rapportées" },
@@ -6954,7 +7069,12 @@ function descripteurChampModeleLot13(nomPlaceholder, suggestionsEntrees) {
     const suffixeInfo = LIBELLES_SUFFIXES_ENTREE_LOT13[suffixe];
     if (suffixeInfo) {
       return {
-        nom: nomPlaceholder, obligatoire: true,
+        // Lot 14 : CIBLE ("Ce que les élèves doivent repérer") est
+        // dérivable du NOM de l'entrée -- facultatif, préremplacé depuis
+        // *_NOM côté route si absent (cf. POST /api/modeles/generer).
+        // Jamais le cas pour les autres suffixes (INDICES/ANALYSE/NOM/
+        // INTERPRETATION), tous encore obligatoires comme avant ce lot.
+        nom: nomPlaceholder, obligatoire: suffixe !== 'CIBLE',
         libelle: `${LIBELLES_PREFIXE_ENTREE_LOT13[prefixe]} -- ${suffixeInfo.libelle}`,
         aide: suffixeInfo.aide, type: suffixeInfo.type, exemple: suffixeInfo.exemple,
         groupe: GROUPES_PREFIXE_ENTREE_LOT13[prefixe],
@@ -6992,6 +7112,125 @@ function genererSuggestionsEntreesLot13(seanceCatalogue) {
   return habiliteIdentifier.contenu.map((texte) => texte.replace(/\s*[;.]\s*$/, '').replace(/^./, (premiereLettre) => premiereLettre.toUpperCase()));
 }
 
+// Lot 14 (constat n°5, bug réel confirmé sur fiche_francais.docx :
+// "Polynice.." / "sœurs..") : normalise la ponctuation finale -- deux points
+// d'affilée -> un seul point. Négation lookahead "(?!\.)" : ne touche
+// jamais une vraie ellipse à 3 points. Appliqué aux VALEURS saisies par
+// l'enseignant (avant substitution) ET à la fiche substituée (après), pour
+// couvrir aussi bien une valeur saisie ainsi que toute jonction fortuite
+// entre la prose du gabarit et une valeur -- jamais au gabarit seul
+// (inutile : sa prose fixe ne contient aucune "..").
+function corrigerDoublePonctuationLot14(valeur) {
+  if (Array.isArray(valeur)) return valeur.map(corrigerDoublePonctuationLot14);
+  if (valeur && typeof valeur === 'object') {
+    const copie = {};
+    Object.keys(valeur).forEach((cle) => { copie[cle] = corrigerDoublePonctuationLot14(valeur[cle]); });
+    return copie;
+  }
+  if (typeof valeur !== 'string') return valeur;
+  return valeur.replace(/([^.])\.\.(?!\.)/g, '$1.');
+}
+
+// Lot 14 (constat n°4) : "Nom de l'entree" (avec ou sans accent/apostrophe
+// courbe) recopié comme VALEUR d'un champ *_NOM est très probablement
+// l'enseignant qui a recopié par erreur le libellé du champ au lieu d'y
+// saisir l'entrée elle-même -- jamais une vraie entrée de lecture
+// méthodique. Rejeté en amont plutôt que laissé fuiter dans Analyse/Traces.
+const MOTIF_PLACEHOLDER_NOM_ECHO_LOT14 = /^nom de l['’]entree$/;
+
+// Lot 14 (constat n°3) : construit le tableau récapitulatif "Vérification"
+// (Axes | Entrées | Indices textuels | Analyse | Interprétation), toujours
+// à partir des VALEURS saisies par l'enseignant (jamais reconstruit par
+// une extraction fragile du texte déjà rendu) -- E22 (axe 2, entrée 2) est
+// réservée à l'évaluation (cf. LIBELLES_PREFIXE_ENTREE_LOT13) mais figure
+// ici au même titre que les 3 autres entrées, puisque ses valeurs *_NOM/
+// *_INDICES/*_ANALYSE/*_INTERPRETATION existent déjà dans "valeurs".
+// Fonction confinée à la route /api/modeles/generer -- jamais appelée par
+// le chemin bibliothèque/IA (S1/S2/S3), donc aucun risque de régression.
+function construireTableauVerificationLot14(valeurs) {
+  const v = (nom) => echapperHtml((valeurs[nom] || '').toString());
+  const celluleEntree = (nom, indices, analyse, interpretation) => `
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${v(nom)}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${v(indices)}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${v(analyse)}</td>
+    <td style="border:1px solid #000;padding:6px;vertical-align:top;">${v(interpretation)}</td>`;
+  const celluleAxe = (libelleAxe) => `<td rowspan="2" style="border:1px solid #000;padding:6px;vertical-align:top;font-weight:bold;">${libelleAxe}</td>`;
+  return `<table style="width:100%;border-collapse:collapse;margin-top:12px;">
+  <tr>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Axes</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Entrées</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Indices textuels</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Analyse</th>
+    <th style="border:1px solid #000;padding:6px;background:#333;color:#fff;">Interprétation</th>
+  </tr>
+  <tr>
+    ${celluleAxe(`Axe 1 : ${v('AXE1')}`)}
+    ${celluleEntree('E11_NOM', 'E11_INDICES', 'E11_ANALYSE', 'E11_INTERPRETATION')}
+  </tr>
+  <tr>
+    ${celluleEntree('E12_NOM', 'E12_INDICES', 'E12_ANALYSE', 'E12_INTERPRETATION')}
+  </tr>
+  <tr>
+    ${celluleAxe(`Axe 2 : ${v('AXE2')}`)}
+    ${celluleEntree('E21_NOM', 'E21_INDICES', 'E21_ANALYSE', 'E21_INTERPRETATION')}
+  </tr>
+  <tr>
+    ${celluleEntree('E22_NOM', 'E22_INDICES', 'E22_ANALYSE', 'E22_INTERPRETATION')}
+  </tr>
+</table>`;
+}
+
+// Lot 14 (constat n°3) : simplifie la colonne "Traces écrites" du tableau
+// principal pour le chemin modèle -- ne garde que les titres I/II/III/IV,
+// la mention de l'hypothèse générale, et le nom des entrées (+ renvoi
+// "voir tableau") : tout le détail (indices/analyse/interprétation) est
+// désormais dans le tableau récapitulatif à 5 colonnes, jamais dupliqué.
+// Copie profonde d'abord -- la fiche substituée d'origine (avec ses
+// traces complètes) reste intacte pour contenuBrutModele et pour
+// construireTableauVerificationLot14 ci-dessus. Règle volontairement
+// générique (jamais indexée sur un numéro de partie précis) pour rester
+// valide même si un futur modèle (S5+) ajoute/retire un axe.
+function simplifierTracesPourModeleLot14(ficheSubstituee) {
+  const copie = JSON.parse(JSON.stringify(ficheSubstituee));
+  (copie.developpement || []).forEach((partie) => {
+    partie.traces = (partie.traces || []).reduce((acc, bloc) => {
+      if (bloc.type === 'titre') { acc.push(bloc); return acc; }
+      if (bloc.type === 'paragraphe' && /entr[ée]e\s*\d/i.test(bloc.texte || '')) {
+        acc.push({ type: 'paragraphe', texte: `${bloc.texte} (voir tableau)` });
+        return acc;
+      }
+      if (bloc.type === 'paragraphe' && /hypoth[eè]se\s+g[ée]n[ée]rale/i.test(bloc.texte || '')) {
+        acc.push(bloc);
+        return acc;
+      }
+      // Tout le reste (paragraphe "source" du passage, bloc "extrait", bloc
+      // "liste" d'indices/analyse/interprétation) : déjà couvert ailleurs
+      // (Présentation/Supports, tableau récapitulatif) -- retiré d'ici.
+      return acc;
+    }, []);
+  });
+  return copie;
+}
+
+// Lot 14 (constat n°1) : post-traitement du HTML déjà rendu (jamais de
+// rendreFicheJSONEnHTML elle-même -- cf. règle du lot, S1/S2/S3 intouchés) :
+// tableaux resserrés (~85 %), bordures 0,5 pt, en-tête gris clair, police
+// ~10 pt (via .fiche-cours, héritée en cascade par le navigateur/puppeteer,
+// jamais par le convertisseur docx -- cf. profilMiseEnForme pour son
+// équivalent .docx), interlignes serrés, lignes d'en-tête libre sans
+// espace. Ajoute aussi ici le tableau récapitulatif Lot 14 (toujours juste
+// après le tableau principal). Confiné à la route /api/modeles/generer.
+function appliquerMiseEnFormeCompacteModeleLot14(contenuHTML, tableauVerificationHtml) {
+  const $ = cheerio.load(contenuHTML || '');
+  $('.fiche-cours').append(tableauVerificationHtml);
+  $('.fiche-cours').css({ 'font-size': '13.333px', 'line-height': '1.15' });
+  $('table').css({ width: '85%', margin: '0 auto' });
+  $('table td, table th').css('border', '0.5pt solid #000');
+  $('th').css({ background: '#ddd', color: '#000' });
+  $('.entete-libre').css('row-gap', '0');
+  return $.html($('body').length ? $('body') : $.root());
+}
+
 app.get('/api/modeles/:niveau/:discipline/:activite/:lecon/:seance', (req, res) => {
   try {
     const { niveau, discipline, activite, lecon, seance } = req.params;
@@ -7017,7 +7256,7 @@ app.post('/api/modeles/generer', async (req, res) => {
   try {
     const {
       niveau, discipline, activite, lecon, seance, valeurs,
-      enseignantId, classe, duree, etablissement, nomEnseignant,
+      enseignantId, classe, duree, etablissement, nomEnseignant, titreLecon,
       origineGeneration = 'enseignant'
     } = req.body || {};
     const leconN = parseInt(lecon, 10);
@@ -7030,11 +7269,41 @@ app.post('/api/modeles/generer', async (req, res) => {
       return res.status(404).json({ success: false, error: `Aucun modèle trouvé pour ${niveau}/${discipline}/${activite}, leçon ${leconN}, séance ${seanceN}.` });
     }
 
+    // Lot 14 (constat n°2 "Ce que les élèves doivent repérer") : préremplit
+    // *_CIBLE depuis *_NOM quand absent -- AVANT le calcul de
+    // champsManquants, pour que ce préremplissage compte comme "rempli".
+    const valeursEffectives = { ...valeurs };
+    ['E11', 'E12', 'E21', 'E22'].forEach((prefixe) => {
+      const cibleCle = `${prefixe}_CIBLE`;
+      const nomCle = `${prefixe}_NOM`;
+      if ((!valeursEffectives[cibleCle] || !String(valeursEffectives[cibleCle]).trim()) && valeursEffectives[nomCle] && String(valeursEffectives[nomCle]).trim()) {
+        valeursEffectives[cibleCle] = valeursEffectives[nomCle];
+      }
+    });
+
+    // Lot 14 (constat n°4) : rejet défensif AVANT toute autre étape -- une
+    // valeur de *_NOM qui n'est que le libellé du champ recopié ("Nom de
+    // l'entree") n'est jamais une vraie entrée saisie par l'enseignant.
+    const cleEntreeEchoInvalide = Object.keys(valeursEffectives).find((cle) => /_NOM$/.test(cle) && MOTIF_PLACEHOLDER_NOM_ECHO_LOT14.test(normaliserTexte(valeursEffectives[cle])));
+    if (cleEntreeEchoInvalide) {
+      return res.status(400).json({
+        success: false,
+        error: `Le champ "${cleEntreeEchoInvalide}" contient "${valeursEffectives[cleEntreeEchoInvalide]}", qui recopie le libellé du champ au lieu du nom réel de l'entrée. Indiquez l'entrée elle-même (ex. « Les temps verbaux »).`
+      });
+    }
+
     const placeholders = extrairePlaceholdersModeleLot13(modele.fiche);
-    const champsManquants = placeholders.filter((p) => !valeurs[p] || !String(valeurs[p]).trim());
+    const champsManquants = placeholders.filter((p) => {
+      if (descripteurChampModeleLot13(p, []).obligatoire === false) return false;
+      return !valeursEffectives[p] || !String(valeursEffectives[p]).trim();
+    });
     if (champsManquants.length) {
       return res.status(400).json({ success: false, champsManquants });
     }
+
+    // Lot 14 (constat n°5) : corrige la ponctuation finale double DANS les
+    // valeurs saisies, avant toute substitution.
+    const valeursCorrigees = corrigerDoublePonctuationLot14(valeursEffectives);
 
     // Correction orthographique déterministe du TEMPLATE d'abord (sa prose
     // fixe uniquement -- aucun jeton {{X}} ne matche une faute connue),
@@ -7042,7 +7311,10 @@ app.post('/api/modeles/generer', async (req, res) => {
     // citation ou un nom propre saisi par l'enseignant (cf. règle explicite
     // du lot 13).
     const ficheTemplateCorrige = corrigerOrthographeFicheJSON(modele.fiche);
-    const ficheSubstituee = substituerPlaceholdersLot13(ficheTemplateCorrige, valeurs);
+    // Lot 14 : seconde passe de corrigerDoublePonctuationLot14 APRÈS
+    // substitution -- couvre la jonction fortuite entre la prose fixe du
+    // gabarit et une valeur saisie, en plus de la valeur saisie seule.
+    const ficheSubstituee = corrigerDoublePonctuationLot14(substituerPlaceholdersLot13(ficheTemplateCorrige, valeursCorrigees));
 
     const { catalogueNiveau, leconCatalogue, seanceCatalogue } = chargerSeanceCatalogueLot13(niveau, leconN, seanceN);
 
@@ -7061,21 +7333,36 @@ app.post('/api/modeles/generer', async (req, res) => {
       return res.status(400).json({ success: false, erreurs });
     }
 
-    const leconLabel = `${leconN} : ${(leconCatalogue && leconCatalogue.titre) || activite}`;
+    // Lot 14 (constat n°2 "Classe vide") : repli sur le niveau du catalogue
+    // (ex. "2nde") quand la classe n'a pas été saisie -- jamais une cellule
+    // vide dans l'entête.
+    const classeEffective = (classe && String(classe).trim()) || niveau || '';
+    // Lot 14 (constat n°9) : Leçon modifiable -- défaut = titre du
+    // catalogue, jamais "1 : Œuvre narrative" codé en dur pour une pièce de
+    // théâtre.
+    const titreLeconEffectif = (titreLecon && String(titreLecon).trim()) || (leconCatalogue && leconCatalogue.titre) || activite;
+    const leconLabel = `${leconN} : ${titreLeconEffectif}`;
     const seanceLabel = `${seanceN} : ${(seanceCatalogue && seanceCatalogue.titre) || 'Séance'}`;
 
-    const contenuHTML = rendreFicheJSONEnHTML(ficheSubstituee, {
+    // Lot 14 (constat n°3) : la colonne "Traces écrites" du tableau
+    // principal reste simplifiée (titres I-IV, hypothèse générale, nom des
+    // entrées, renvoi "voir tableau") -- jamais en modifiant
+    // rendreFicheJSONEnHTML elle-même, seulement la copie passée ici.
+    const ficheAffichage = simplifierTracesPourModeleLot14(ficheSubstituee);
+    const contenuHTMLBrut = rendreFicheJSONEnHTML(ficheAffichage, {
       discipline: (catalogueNiveau && catalogueNiveau.discipline) || discipline,
-      classe: classe || '', competence: (catalogueNiveau && catalogueNiveau.competence) || '',
+      classe: classeEffective, competence: (catalogueNiveau && catalogueNiveau.competence) || '',
       activite, duree: duree || '1 heure', leconLabel, seanceLabel,
       habiletesContenusSeance: (seanceCatalogue && seanceCatalogue.habiletes_contenus) || [],
       etablissement: etablissement || '', nomEnseignant: nomEnseignant || '',
       date: formaterDateFrLot11(new Date())
     });
+    const tableauVerificationHtml = construireTableauVerificationLot14(valeursCorrigees);
+    const contenuHTML = appliquerMiseEnFormeCompacteModeleLot14(contenuHTMLBrut, tableauVerificationHtml);
 
     const ficheCreee = await Fiche.create({
       enseignantId: enseignantId || 'anonyme',
-      discipline: discipline || 'Français', classe: classe || '',
+      discipline: discipline || 'Français', classe: classeEffective,
       lecon: leconLabel, seance: seanceLabel, duree: duree || '1 heure', niveau,
       approche: 'APC', contenu: contenuHTML,
       contenuBrutModele: JSON.stringify(ficheSubstituee),
@@ -10545,6 +10832,11 @@ const MOTIF_REFERENCE_TEXTE_NON_FOURNI_LOT10 = /\bces\s+(?:textes?|r[ée]cits?)\
 // construction une tâche à réponses multiples, quel que soit le reste de
 // l'énoncé -- jamais autorisés en tête de la consigne N4.
 const VERBES_N4_REPONSE_NON_UNIQUE_LOT10 = /^(Propose|Imagine|Donne\s+ton\s+avis|Choisis)\b/i;
+// Lot 14 (constat n°8) : un "extrait" qui commence par une référence de
+// pages ("pages 23 à 25...", "p. 12...") n'est jamais le texte intégral
+// attendu -- utilisé par le validateur partagé ci-dessous, sans option de
+// contournement (cf. commentaire sur son appel).
+const MOTIF_EXTRAIT_REFERENCE_PAGE_LOT14 = /^(p\.?|pages?)\s*\d/i;
 // Lot 13 -- "options" permet au profil "modèle" (séances S4+, lecture
 // méthodique) de relâcher DEUX règles précises sans dupliquer tout le
 // validateur une 3e fois (après celui-ci et son miroir dans
@@ -10610,6 +10902,15 @@ function validerFicheJSON(ficheJSON, seanceCatalogue, options = {}) {
     MOTIFS_CORRIGE_INTERDIT_LOT9.forEach(({ re, message }) => { if (re.test(c.corrige || '')) ajoute(section, `corrigé : ${message}`); });
     if (!options.autoriserExtraitDupliqueDevEval && c.extrait && c.extrait.trim() && texteTracesConcatene.includes(normaliserTexte(c.extrait.trim()))) {
       ajoute(section, "extrait d'évaluation identique à un extrait déjà utilisé dans le développement");
+    }
+    // Lot 14 (constat n°8, bug réel confirmé sur fiche_francais.docx :
+    // "pages 23 a 25, de « Ismène…") : "extrait" doit être le texte
+    // intégral du passage, jamais la référence qui le repère -- vérifié
+    // pour TOUS les profils (jamais produit légitimement, ni par le chemin
+    // bibliothèque/IA ni par le chemin modèle), donc aucune option de
+    // contournement nécessaire ici.
+    if (c.extrait && MOTIF_EXTRAIT_REFERENCE_PAGE_LOT14.test(c.extrait.trim())) {
+      ajoute(section, `"extrait" contient une référence de pages au lieu du texte intégral du passage : "${c.extrait.trim().slice(0, 60)}"`);
     }
     // Lot 10 : consigne inexécutable (renvoi à un texte non fourni) et
     // consigne N4 à réponse non unique.
@@ -10803,7 +11104,13 @@ function rendreFicheJSONEnHTML(ficheJSON, contexte) {
   let tracesEvaluation = '<p>ÉVALUATION</p>';
   if (aUnExtrait) tracesEvaluation += '<p>Extraits composés pour la séance.</p>';
   consignes.forEach((c, j) => {
-    tracesEvaluation += `<p>Consigne ${j + 1} (Niveau ${c.niveau} : ${libelleNiveauTaxonomiqueLot9(c.niveau)})</p>`;
+    // Lot 14 : "niveauLibelle" (optionnel) permet à une consigne de montrer
+    // le libellé de SA PROPRE taxonomie (ex. catalogue/2nde.json, lecture
+    // méthodique : Identifier/Analyser/Interpréter) au lieu de la taxonomie
+    // générique (Connaître/Comprendre/Appliquer/Traiter une situation) --
+    // jamais posé par le chemin bibliothèque/IA (lots 9-11), donc aucun
+    // changement pour S1/S2/S3 tant que ce champ reste absent.
+    tracesEvaluation += `<p>Consigne ${j + 1} (Niveau ${c.niveau} : ${c.niveauLibelle || libelleNiveauTaxonomiqueLot9(c.niveau)})</p>`;
     tracesEvaluation += `<p>${echapperHtml(c.enonce || '')}</p>`;
     // Lot 10 (défaut g, bug réel confirmé sur S2) : si l'extrait est déjà
     // recopié dans l'énoncé, ne jamais l'afficher une 2e fois sur une ligne
@@ -13452,7 +13759,12 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
       contenuExport = envelopperConsignesElevesDansDemande(contenuExport);
       contenuExport = corrigerDureeAnnonceeEvaluation(contenuExport);
     }
-    const docxBuffer = await genererDocxDepuisHtml(contenuExport, landscape, fiche.estOeuvreIntegraleSecondCycle);
+    // Lot 14 : une fiche "modèle" (genereDepuisModeleLot13) utilise le
+    // profil de mise en forme compact, jamais le profil second cycle
+    // habituel -- même si estOeuvreIntegraleSecondCycle est aussi posé à
+    // true pour elle (cf. POST /api/modeles/generer).
+    const profilMiseEnForme = fiche.genereDepuisModeleLot13 ? 'modeleCompact' : fiche.estOeuvreIntegraleSecondCycle;
+    const docxBuffer = await genererDocxDepuisHtml(contenuExport, landscape, profilMiseEnForme);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${slugFichier(fiche)}.docx"`);
@@ -13467,3 +13779,16 @@ app.get('*', (_, res) => res.sendFile('index.html', { root: 'public' }));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🎓 Prof CI démarré sur le port ${PORT}`));
+
+// Lot 14 : exporte les fonctions pures (aucun effet sur `node server.js` en
+// production, qui ignore module.exports -- utilisé UNIQUEMENT par les
+// scripts de test en dehors du repo, pour appeler la logique réelle plutôt
+// que d'en dupliquer une copie qui dériverait du code réel avec le temps).
+module.exports = {
+  chargerModeleLot13, extrairePlaceholdersModeleLot13, descripteurChampModeleLot13,
+  substituerPlaceholdersLot13, corrigerOrthographeFicheJSON, corrigerDoublePonctuationLot14,
+  chargerSeanceCatalogueLot13, validerFicheJSON, rendreFicheJSONEnHTML,
+  simplifierTracesPourModeleLot14, construireTableauVerificationLot14,
+  appliquerMiseEnFormeCompacteModeleLot14, genererDocxDepuisHtml, genererPdfDepuisHtml,
+  MOTIF_PLACEHOLDER_NOM_ECHO_LOT14, normaliserTexte
+};

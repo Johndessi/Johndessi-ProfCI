@@ -6,7 +6,7 @@
  "seance": 4,
  "modele": true,
  "fiche": {
-  "situation": "Dans le cadre de l'étude de l'œuvre {{OEUVRE}} de {{AUTEUR}}, votre classe aborde le passage {{PASSAGE}}. Après une première lecture, un camarade affirme qu'il n'y a rien de plus à dire que ce que tout le monde a compris. Pourtant, le passage semble contenir plus que ce qu'on voit au premier regard. Vous voulez lui montrer comment ce passage construit son sens. Comment procéder pour lire ce passage de façon rigoureuse ?",
+  "situation": "Dans le cadre de l'étude de l'œuvre {{OEUVRE}} de {{AUTEUR}}, votre classe aborde {{PASSAGE_COURT}}. Après une première lecture, un camarade affirme qu'il n'y a rien de plus à dire que ce que tout le monde a compris. Pourtant, le passage semble contenir plus que ce qu'on voit au premier regard. Vous voulez lui montrer comment ce passage construit son sens. Comment procéder pour lire ce passage de façon rigoureuse ?",
   "supports": [
    "{{OEUVRE}}, {{AUTEUR}}, {{EDITION}}",
    "Passage étudié : {{PASSAGE}}"
@@ -20,7 +20,7 @@
    "enseignant": [
     {
      "type": "action",
-     "texte": "Salue la classe, fais l'appel, rappelle la séance précédente et annonce l'étude du passage {{PASSAGE}} de l'œuvre {{OEUVRE}}."
+     "texte": "Salue la classe, fais l'appel et rappelle la séance précédente."
     },
     {
      "type": "demande",
@@ -97,7 +97,7 @@
      },
      {
       "type": "demande",
-      "texte": "Relève dans le texte les indices qui renvoient à {{E11_CIBLE}}."
+      "texte": "Relève dans le texte les indices concernant {{E11_CIBLE}}."
      },
      {
       "type": "demande",
@@ -113,7 +113,7 @@
      },
      {
       "type": "demande",
-      "texte": "Relève dans le texte les indices qui renvoient à {{E12_CIBLE}}."
+      "texte": "Relève dans le texte les indices concernant {{E12_CIBLE}}."
      },
      {
       "type": "demande",
@@ -179,7 +179,7 @@
      },
      {
       "type": "demande",
-      "texte": "Relève dans le texte les indices qui renvoient à {{E21_CIBLE}}."
+      "texte": "Relève dans le texte les indices concernant {{E21_CIBLE}}."
      },
      {
       "type": "demande",
@@ -242,19 +242,22 @@
    "consignes": [
     {
      "niveau": "N1/N2",
-     "enonce": "Relève dans le passage les indices qui renvoient à {{E22_CIBLE}}.",
+     "niveauLibelle": "Identifier",
+     "enonce": "Identifie dans le passage les indices concernant {{E22_CIBLE}}.",
      "extrait": "{{EXTRAIT}}",
      "corrige": "{{E22_INDICES}}"
     },
     {
      "niveau": "N3",
-     "enonce": "Nomme les procédés relevés et justifie leur emploi dans le passage.",
+     "niveauLibelle": "Analyser",
+     "enonce": "Analyse les procédés relevés et justifie leur emploi dans le passage.",
      "extrait": "{{EXTRAIT}}",
      "corrige": "{{E22_ANALYSE}}"
     },
     {
      "niveau": "N4",
-     "enonce": "Détermine l'entrée correspondant à ces indices, puis interprète-les en une phrase.",
+     "niveauLibelle": "Interpréter",
+     "enonce": "Interprète ces indices en déterminant l'entrée à laquelle ils correspondent, en une phrase.",
      "extrait": "{{EXTRAIT}}",
      "corrige": "Entrée : {{E22_NOM}}. {{E22_INTERPRETATION}}"
     }
