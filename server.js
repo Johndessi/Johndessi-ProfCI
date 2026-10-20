@@ -7093,9 +7093,10 @@ app.get('/api/admin/fiche-bibliotheque/liste', verifierCleAdmin, async (req, res
 // œuvre, son passage et son plan de lecture méthodique via un formulaire, le
 // code substitue, la fiche est validée puis rendue par le MÊME moteur
 // déterministe que les lots 9-11 (rendreFicheJSONEnHTML). ZÉRO appel
-// Anthropic. Limité à L1-S4 dans ce lot (cf. modeles/2nde/francais/
-// oeuvre-integrale/L1-S4.modele.json) -- ne pas étendre à S5-S12 avant
-// validation réelle de S4 (décision explicite de l'enseignant).
+// Anthropic. L1-S4 validé dans Word par l'enseignant (lot 14b) ; L1-S6 et
+// L1-S9 (lectures méthodiques n°2 et n°3, mêmes Habiletés/Contenus au
+// catalogue) en sont des copies conformes (cf. modeles/2nde/francais/
+// oeuvre-integrale/). Les autres types de séance ne sont pas couverts ici.
 // ===========================================================================
 const DOSSIER_DISCIPLINE_MODELE_LOT13 = { 'Français': 'francais' };
 const DOSSIER_ACTIVITE_MODELE_LOT13 = { "Étude de l'œuvre intégrale": 'oeuvre-integrale' };
