@@ -7503,6 +7503,34 @@ function detecterLibelleRecopieLot14b(valeur) {
   return LIBELLES_FORMULAIRE_DETECTABLES_LOT14B.find((libelle) => v.includes(normaliserLibelleLot14b(libelle))) || null;
 }
 
+// Lot 14b (revue du docx de contrôle) : *_CIBLE est insérée en milieu de
+// phrase (« Relève dans le texte les indices concernant {{E11_CIBLE}}. »)
+// alors que *_NOM, dont elle est préremplie, porte une majuscule initiale
+// (suggestions du catalogue, cf. genererSuggestionsEntreesLot13) -- d'où
+// « concernant Le type de texte ». Seul l'article initial est mis en
+// minuscule, et seulement s'il est suivi d'un mot en minuscule : jamais
+// « La Fontaine » ou « L'Étranger », jamais une CIBLE saisie par
+// l'enseignant (laissée telle quelle).
+function minusculeArticleInitialLot14b(texte) {
+  return String(texte)
+    .replace(/^(\s*)(Les|Le|La|Une|Un|Des|Du|De)(\s+)(?=\p{Ll})/u, (_, avant, article, espace) => avant + article.toLowerCase() + espace)
+    .replace(/^(\s*)([LD])(['’])(?=\p{Ll})/u, (_, avant, lettre, apostrophe) => avant + lettre.toLowerCase() + apostrophe);
+}
+// Lot 14 (constat n°2 "Ce que les élèves doivent repérer") : préremplit
+// *_CIBLE depuis *_NOM quand absent -- appelé AVANT le calcul de
+// champsManquants, pour que ce préremplissage compte comme "rempli".
+function preremplirCiblesLot14b(valeurs) {
+  const valeursEffectives = { ...valeurs };
+  ['E11', 'E12', 'E21', 'E22'].forEach((prefixe) => {
+    const cibleCle = `${prefixe}_CIBLE`;
+    const nomCle = `${prefixe}_NOM`;
+    if ((!valeursEffectives[cibleCle] || !String(valeursEffectives[cibleCle]).trim()) && valeursEffectives[nomCle] && String(valeursEffectives[nomCle]).trim()) {
+      valeursEffectives[cibleCle] = minusculeArticleInitialLot14b(valeursEffectives[nomCle]);
+    }
+  });
+  return valeursEffectives;
+}
+
 // Lot 14b (constat n°6) : import du passage depuis un .docx ou un .pdf
 // contenant du texte. Extraction locale (mammoth / pdf-parse) -- jamais
 // extraireTexteFichier, qui envoie les images à Anthropic. Fichier gardé en
@@ -7614,17 +7642,8 @@ app.post('/api/modeles/generer', async (req, res) => {
       return res.status(404).json({ success: false, error: `Aucun modèle trouvé pour ${niveau}/${discipline}/${activite}, leçon ${leconN}, séance ${seanceN}.` });
     }
 
-    // Lot 14 (constat n°2 "Ce que les élèves doivent repérer") : préremplit
-    // *_CIBLE depuis *_NOM quand absent -- AVANT le calcul de
-    // champsManquants, pour que ce préremplissage compte comme "rempli".
-    const valeursEffectives = { ...valeurs };
-    ['E11', 'E12', 'E21', 'E22'].forEach((prefixe) => {
-      const cibleCle = `${prefixe}_CIBLE`;
-      const nomCle = `${prefixe}_NOM`;
-      if ((!valeursEffectives[cibleCle] || !String(valeursEffectives[cibleCle]).trim()) && valeursEffectives[nomCle] && String(valeursEffectives[nomCle]).trim()) {
-        valeursEffectives[cibleCle] = valeursEffectives[nomCle];
-      }
-    });
+    // Préremplissage des *_CIBLE -- AVANT champsManquants (cf. preremplirCiblesLot14b).
+    const valeursEffectives = preremplirCiblesLot14b(valeurs);
 
     const placeholders = extrairePlaceholdersModeleLot13(modele.fiche);
 
@@ -14170,5 +14189,5 @@ module.exports = {
   simplifierTracesPourModeleLot14, construireTableauVerificationLot14,
   appliquerMiseEnFormeCompacteModeleLot14, genererDocxDepuisHtml, genererPdfDepuisHtml,
   normaliserTexte, estReferenceDePassageLot14b, verifierGuillemetsLot14b, detecterLibelleRecopieLot14b,
-  extraireTextePassageLot14b
+  extraireTextePassageLot14b, minusculeArticleInitialLot14b, preremplirCiblesLot14b
 };
