@@ -102,8 +102,12 @@ async function extraireTexteFichier(file) {
   return result.value;
 }
 
-function slugFichier(fiche) {
-  const brut = `fiche_${fiche.discipline || ''}_${fiche.classe || ''}`;
+// options.avecSeance : suffixe "_s<n>" tiré de fiche.seance ("6 : Lecture
+// méthodique n°2" -> "_s6") -- utilisé uniquement pour le Word des fiches
+// "Modèle de séance", qui sinon portaient toutes le même nom (S4/S6/S9).
+function slugFichier(fiche, options = {}) {
+  const numeroSeance = options.avecSeance ? (String(fiche.seance || '').match(/^\s*(\d+)/) || [])[1] : null;
+  const brut = `fiche_${fiche.discipline || ''}_${fiche.classe || ''}${numeroSeance ? `_s${numeroSeance}` : ''}`;
   const slug = brut.toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '_')
@@ -7093,9 +7097,10 @@ app.get('/api/admin/fiche-bibliotheque/liste', verifierCleAdmin, async (req, res
 // œuvre, son passage et son plan de lecture méthodique via un formulaire, le
 // code substitue, la fiche est validée puis rendue par le MÊME moteur
 // déterministe que les lots 9-11 (rendreFicheJSONEnHTML). ZÉRO appel
-// Anthropic. Limité à L1-S4 dans ce lot (cf. modeles/2nde/francais/
-// oeuvre-integrale/L1-S4.modele.json) -- ne pas étendre à S5-S12 avant
-// validation réelle de S4 (décision explicite de l'enseignant).
+// Anthropic. L1-S4 validé dans Word par l'enseignant (lot 14b) ; L1-S6 et
+// L1-S9 (lectures méthodiques n°2 et n°3, mêmes Habiletés/Contenus au
+// catalogue) en sont des copies conformes (cf. modeles/2nde/francais/
+// oeuvre-integrale/). Les autres types de séance ne sont pas couverts ici.
 // ===========================================================================
 const DOSSIER_DISCIPLINE_MODELE_LOT13 = { 'Français': 'francais' };
 const DOSSIER_ACTIVITE_MODELE_LOT13 = { "Étude de l'œuvre intégrale": 'oeuvre-integrale' };
@@ -14165,7 +14170,7 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
     const docxBuffer = await genererDocxDepuisHtml(contenuExport, landscape, profilMiseEnForme);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', `attachment; filename="${slugFichier(fiche)}.docx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${slugFichier(fiche, { avecSeance: fiche.genereDepuisModeleLot13 })}.docx"`);
     res.send(docxBuffer);
   } catch (e) {
     console.error('❌ Erreur génération DOCX:', e.message);
