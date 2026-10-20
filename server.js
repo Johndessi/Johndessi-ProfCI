@@ -13,7 +13,7 @@ const cheerio = require('cheerio');
 const JSZip = require('jszip');
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  WidthType, ShadingType, PageOrientation, BorderStyle, VerticalAlign, AlignmentType
+  WidthType, ShadingType, PageOrientation, BorderStyle, VerticalAlign, AlignmentType, TableLayoutType
 } = require('docx');
 
 const app = express();
@@ -216,6 +216,16 @@ const DOCX_NO_BORDERS = {
   insideVertical: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
 };
 
+// Lot 14b : largeur utile de la page (A4, marges 850 twips -- cf.
+// genererDocxDepuisHtml), utilisée UNIQUEMENT par les tableaux à colonnes
+// fixes (data-docx-colonnes) et l'entête pleine largeur du rendu "modèle".
+// Posée par genererDocxDepuisHtml juste avant contenuToDocxChildren, qui
+// est synchrone : aucune requête concurrente ne peut s'intercaler.
+const MARGE_PAGE_DOCX_DXA = 850;
+const LARGEUR_UTILE_PORTRAIT_DXA = 11906 - 2 * MARGE_PAGE_DOCX_DXA;
+const LARGEUR_UTILE_PAYSAGE_DXA = 16838 - 2 * MARGE_PAGE_DOCX_DXA;
+let largeurUtileDocxCouranteDxa = null;
+
 function widthPctFromStyle(style) {
   const m = /width\s*:\s*([\d.]+)\s*%/i.exec(style || '');
   return m ? parseFloat(m[1]) : null;
@@ -316,13 +326,25 @@ function collectRuns($, el, fmt = {}) {
   return runs;
 }
 
-function blockChildrenToParagraphs($, el, fmt = {}) {
+// Lot 14b : taille de police explicite (demi-points) posée par le rendu
+// "modèle" via data-docx-taille -- jamais posé ailleurs, donc sans effet sur
+// les autres fiches (S1/S2/S3 et 1er cycle).
+function tailleDemiPointsDepuisAttribut($node) {
+  const v = parseInt($node.attr('data-docx-taille') || '', 10);
+  return Number.isFinite(v) && v > 0 ? v : undefined;
+}
+
+// Lot 14b : "paraOpts.keepNext" -- posé uniquement pour les lignes de tableau
+// marquées data-docx-entete / data-docx-garder-suivant (rendu "modèle").
+// Absent partout ailleurs : les Paragraph produits restent identiques.
+function blockChildrenToParagraphs($, el, fmt = {}, paraOpts = {}) {
   const paragraphs = [];
   const directBlocks = $(el).children('p, ul, ol, div, table').toArray();
+  const propsPara = paraOpts.keepNext ? { keepNext: true } : {};
 
   if (directBlocks.length === 0) {
     const runs = collectRuns($, el, fmt);
-    if (runs.length) paragraphs.push(new Paragraph({ children: runs }));
+    if (runs.length) paragraphs.push(new Paragraph({ children: runs, ...propsPara }));
     return paragraphs;
   }
 
@@ -349,10 +371,11 @@ function blockChildrenToParagraphs($, el, fmt = {}) {
     } else if (tag === 'ul' || tag === 'ol') {
       $(node).children('li').each((_, li) => {
         const runs = collectRuns($, li, fmt);
-        paragraphs.push(new Paragraph({ children: [new TextRun({ text: '- ', bold: fmt.bold, color: fmt.color }), ...runs] }));
+        paragraphs.push(new Paragraph({ children: [new TextRun({ text: '- ', bold: fmt.bold, color: fmt.color }), ...runs], ...propsPara }));
       });
     } else {
-      const runs = collectRuns($, node, fmt);
+      const taille = tailleDemiPointsDepuisAttribut($(node));
+      const runs = collectRuns($, node, taille ? { ...fmt, size: taille } : fmt);
       // data-docx-titre (04/10, chantier A -- mise en forme Œuvre intégrale
       // lycée) : espacement avant/après pour un <p> marqué comme titre de
       // partie (ex. "I-", "1)") par restructurerCellulesEnParagraphes,
@@ -360,7 +383,7 @@ function blockChildrenToParagraphs($, el, fmt = {}) {
       // préexistant ailleurs dans l'appli (jamais posé), donc sans impact
       // sur le 1er cycle ni sur les autres types de séance.
       const estTitreSection = tag === 'p' && $(node).attr('data-docx-titre');
-      if (runs.length) paragraphs.push(new Paragraph({ children: runs, spacing: estTitreSection ? { before: 160, after: 80 } : undefined }));
+      if (runs.length) paragraphs.push(new Paragraph({ children: runs, spacing: estTitreSection ? { before: 160, after: 80 } : undefined, ...propsPara }));
     }
   });
   return paragraphs;
@@ -368,7 +391,7 @@ function blockChildrenToParagraphs($, el, fmt = {}) {
 
 function tableCellFromNode($, node, opts = {}) {
   const fmt = { bold: opts.forceBold, color: opts.forceColor };
-  const paragraphs = blockChildrenToParagraphs($, node, fmt);
+  const paragraphs = blockChildrenToParagraphs($, node, fmt, { keepNext: opts.keepNext });
   const cellProps = {
     children: paragraphs.length ? paragraphs : [new Paragraph({ children: [] })],
     verticalAlign: VerticalAlign.TOP,
@@ -400,6 +423,22 @@ function buildDocxTable($, $table) {
   // le <table> imbriqué lui-même est construit indépendamment par
   // blockChildrenToParagraphs/tableCellFromNode, qui l'inclut comme un vrai
   // Table imbriqué dans les children du TableCell parent.
+  // Lot 14b : data-docx-colonnes="13,14,26,26,21" (pourcentages) -- posé
+  // UNIQUEMENT par le rendu "modèle" (S4+). Active une mise en page fixe
+  // (tblLayout fixed) avec des largeurs explicites en twips dont la somme
+  // vaut exactement la largeur utile de la page. Absent partout ailleurs :
+  // le chemin historique ci-dessous reste strictement inchangé.
+  const colonnesPct = ($table.attr('data-docx-colonnes') || '').split(',').map((v) => parseFloat(v)).filter((v) => Number.isFinite(v) && v > 0);
+  const largeurFixe = colonnesPct.length > 0;
+  let colonnesDxa = [];
+  const rowspanRestant = [];
+  if (largeurFixe) {
+    const largeurUtile = largeurUtileDocxCouranteDxa || LARGEUR_UTILE_PORTRAIT_DXA;
+    const totalPct = colonnesPct.reduce((a, b) => a + b, 0);
+    colonnesDxa = colonnesPct.map((p) => Math.round((p / totalPct) * largeurUtile));
+    colonnesDxa[colonnesDxa.length - 1] += largeurUtile - colonnesDxa.reduce((a, b) => a + b, 0);
+  }
+
   $table.children('tr').each((_, tr) => {
     buildRow(tr);
   });
@@ -409,7 +448,12 @@ function buildDocxTable($, $table) {
 
   function buildRow(tr) {
     const cells = [];
-    $(tr).children('td, th').each((_, cellEl) => {
+    const $tr = $(tr);
+    const estEnteteRepetee = largeurFixe && !!$tr.attr('data-docx-entete');
+    const garderAvecSuivante = largeurFixe && (estEnteteRepetee || !!$tr.attr('data-docx-garder-suivant'));
+    const insecable = largeurFixe && (estEnteteRepetee || !!$tr.attr('data-docx-insecable'));
+    let colonneCourante = 0;
+    $tr.children('td, th').each((_, cellEl) => {
       const tag = cellEl.name.toLowerCase();
       const isHeader = tag === 'th';
       const style = $(cellEl).attr('style') || '';
@@ -425,19 +469,57 @@ function buildDocxTable($, $table) {
       // jamais ces 2 propriétés CSS sur leurs <th>.
       const bgOverride = backgroundColorFromStyleLot14(style);
       const colorOverride = textColorFromStyleLot14(style);
+      if (!largeurFixe) {
+        cells.push(tableCellFromNode($, cellEl, {
+          forceBold: isHeader || /font-weight\s*:\s*bold/i.test(style),
+          forceColor: isHeader ? (colorOverride || 'FFFFFF') : colorOverride,
+          widthPct,
+          shadingFill: isHeader ? (bgOverride || '333333') : bgOverride,
+          columnSpan,
+          rowSpan
+        }));
+        return;
+      }
+      // Colonnes déjà occupées par une cellule fusionnée verticalement
+      // (rowspan) d'une ligne précédente : la librairie docx y insère
+      // elle-même la cellule de continuation, on saute donc ces colonnes.
+      while (rowspanRestant[colonneCourante] > 0) colonneCourante += 1;
+      const portee = columnSpan || 1;
+      const largeurCelluleDxa = colonnesDxa.slice(colonneCourante, colonneCourante + portee).reduce((a, b) => a + b, 0);
+      if (rowSpan > 1) for (let k = 0; k < portee; k++) rowspanRestant[colonneCourante + k] = rowSpan;
+      colonneCourante += portee;
       cells.push(tableCellFromNode($, cellEl, {
         forceBold: isHeader || /font-weight\s*:\s*bold/i.test(style),
         forceColor: isHeader ? (colorOverride || 'FFFFFF') : colorOverride,
-        widthPct,
+        widthDxa: largeurCelluleDxa || undefined,
         shadingFill: isHeader ? (bgOverride || '333333') : bgOverride,
         columnSpan,
-        rowSpan
+        rowSpan,
+        keepNext: garderAvecSuivante
       }));
     });
+    if (largeurFixe) {
+      // Décompte des lignes restantes pour chaque fusion verticale en cours
+      // -- les colonnes posées sur CETTE ligne ont été initialisées à rowSpan,
+      // la ligne courante en consomme une.
+      for (let k = 0; k < rowspanRestant.length; k++) if (rowspanRestant[k] > 0) rowspanRestant[k] -= 1;
+      if (cells.length) rows.push(new TableRow({ children: cells, tableHeader: estEnteteRepetee, cantSplit: insecable }));
+      return;
+    }
     if (cells.length) rows.push(new TableRow({ children: cells, tableHeader: false }));
   }
 
   if (!rows.length) return null;
+  if (largeurFixe) {
+    return new Table({
+      rows,
+      width: { size: colonnesDxa.reduce((a, b) => a + b, 0), type: WidthType.DXA },
+      columnWidths: colonnesDxa,
+      layout: TableLayoutType.FIXED,
+      indent: { size: 0, type: WidthType.DXA },
+      borders: DOCX_BORDERS
+    });
+  }
   // Lot 14 : largeur du TABLEAU lui-même (pas de ses cellules, déjà lue
   // ci-dessus) -- repli sur 100% (comportement actuel, inchangé) si le
   // <table> source ne précise rien, comme TOUS les tableaux S1/S2/S3
@@ -470,6 +552,12 @@ function estDivLibelleEntete($, node) {
 function buildEnteteTable($, $entete) {
   const champs = $entete.children('div').toArray();
   const rows = [];
+  // Lot 14b : data-docx-pleine-largeur (rendu "modèle" uniquement) -- même
+  // largeur explicite que les autres tableaux de la fiche, colonne valeur
+  // de largeur explicite elle aussi. Absent ailleurs : inchangé.
+  const pleineLargeur = !!$entete.attr('data-docx-pleine-largeur');
+  const largeurUtile = largeurUtileDocxCouranteDxa || LARGEUR_UTILE_PORTRAIT_DXA;
+  const optsValeur = pleineLargeur ? { widthDxa: largeurUtile - ENTETE_LABEL_WIDTH_DXA } : {};
   let i = 0;
   while (i < champs.length) {
     const el = champs[i];
@@ -477,18 +565,28 @@ function buildEnteteTable($, $entete) {
       const valueEl = champs[i + 1];
       const labelCell = tableCellFromNode($, el, { forceBold: true, widthDxa: ENTETE_LABEL_WIDTH_DXA });
       const valueCell = valueEl
-        ? tableCellFromNode($, valueEl, {})
+        ? tableCellFromNode($, valueEl, optsValeur)
         : new TableCell({ children: [new Paragraph({})] });
       rows.push(new TableRow({ children: [labelCell, valueCell] }));
       i += 2;
     } else {
       const labelCell = new TableCell({ children: [new Paragraph({})], width: { size: ENTETE_LABEL_WIDTH_DXA, type: WidthType.DXA } });
-      const valueCell = tableCellFromNode($, el, {});
+      const valueCell = tableCellFromNode($, el, optsValeur);
       rows.push(new TableRow({ children: [labelCell, valueCell] }));
       i += 1;
     }
   }
   if (!rows.length) return null;
+  if (pleineLargeur) {
+    return new Table({
+      rows,
+      width: { size: largeurUtile, type: WidthType.DXA },
+      columnWidths: [ENTETE_LABEL_WIDTH_DXA, largeurUtile - ENTETE_LABEL_WIDTH_DXA],
+      layout: TableLayoutType.FIXED,
+      indent: { size: 0, type: WidthType.DXA },
+      borders: DOCX_NO_BORDERS
+    });
+  }
   return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, borders: DOCX_NO_BORDERS });
 }
 
@@ -557,7 +655,11 @@ function contenuToDocxChildren(html) {
       elements.push(...elementsTexteSupportDepuisDiv($, $node));
       elements.push(new Paragraph({ text: '' }));
     } else if (tag === 'p') {
-      const runs = collectRuns($, $node);
+      // Lot 14b : data-docx-taille / data-docx-saut-page -- posés uniquement
+      // par l'annexe "Feuille d'évaluation" du rendu "modèle". Absents
+      // ailleurs : mêmes runs et mêmes propriétés de paragraphe qu'avant.
+      const taille = tailleDemiPointsDepuisAttribut($node);
+      const runs = taille ? collectRuns($, $node, { size: taille }) : collectRuns($, $node);
       // Chantier A (lot 3) : titre "FICHE DE COURS", centré, gras -- posé par
       // injecterTitreFicheDeCours, jamais par un <p> préexistant ailleurs
       // (attribut inerte pour tout autre <p>).
@@ -566,7 +668,8 @@ function contenuToDocxChildren(html) {
         elements.push(new Paragraph({
           children: runs,
           spacing: { after: 120 },
-          alignment: estTitreFiche ? AlignmentType.CENTER : undefined
+          alignment: estTitreFiche ? AlignmentType.CENTER : undefined,
+          ...($node.attr('data-docx-saut-page') ? { pageBreakBefore: true } : {})
         }));
       }
     } else if (tag === 'table') {
@@ -619,9 +722,17 @@ const RFONTS_TIMES_NEW_ROMAN = '<w:rFonts w:ascii="Times New Roman" w:hAnsi="Tim
 // avant ce lot), le comportement est STRICTEMENT identique à avant : 1,5
 // (w:line="360") et aucune taille forcée -- donc aucun changement pour
 // appliquerMiseEnFormeSecondCycleDocx (S1/S2/S3).
+// Lot 14b : "apresDefaut" (espacement après un paragraphe qui n'en précise
+// aucun) reste '140' par défaut -- seul le profil "modèle" compact le
+// réduit. Taille forcée : une taille DÉJÀ explicite sur un run (libellés
+// PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION réduits, annexe en 12 pt) est
+// désormais conservée ; seuls les runs sans taille reçoivent la taille
+// forcée (profil "modèle" uniquement -- tailleDemiPoints reste null pour
+// S1/S2/S3).
 function appliquerPoliceEtInterligneXml(xml, options = {}) {
   const ligneValeur = options.ligneValeur || '360';
   const tailleDemiPoints = options.tailleDemiPoints || null;
+  const apresDefaut = options.apresDefaut || '140';
 
   // 1) Police -- chaque <w:r> doit porter Times New Roman : remplace son
   // <w:rFonts> existant, ou en crée un (avec son <w:rPr>) s'il n'en a aucun.
@@ -652,9 +763,13 @@ function appliquerPoliceEtInterligneXml(xml, options = {}) {
     // <w:sz>/<w:szCs> déjà présent là où il se trouve), jamais au début.
     xml = xml.replace(/<w:r>(?:(?!<\/w:r>)[\s\S])*?<\/w:r>|<w:r\/>/g, (run) => {
       if (run === '<w:r/>') return run;
-      if (/<w:sz\b[^>]*\/>/.test(run)) {
-        run = run.replace(/<w:sz\b[^>]*\/>/, `<w:sz w:val="${tailleDemiPoints}"/>`);
-      } else if (/<w:rPr>/.test(run)) {
+      const mSzExistant = /<w:sz w:val="(\d+)"\/>/.exec(run);
+      if (mSzExistant) {
+        // Taille explicite conservée ; on aligne seulement w:szCs dessus.
+        if (!/<w:szCs\b[^>]*\/>/.test(run)) run = run.replace(mSzExistant[0], `${mSzExistant[0]}<w:szCs w:val="${mSzExistant[1]}"/>`);
+        return run;
+      }
+      if (/<w:rPr>/.test(run)) {
         run = run.replace('</w:rPr>', `<w:sz w:val="${tailleDemiPoints}"/></w:rPr>`);
       } else {
         run = run.replace('<w:r>', `<w:r><w:rPr><w:sz w:val="${tailleDemiPoints}"/></w:rPr>`);
@@ -681,12 +796,24 @@ function appliquerPoliceEtInterligneXml(xml, options = {}) {
     const mBefore = mSpacing && /w:before="(\d+)"/.exec(mSpacing[1]);
     const mAfter = mSpacing && /w:after="(\d+)"/.exec(mSpacing[1]);
     const before = mBefore ? mBefore[1] : '0';
-    const after = mAfter ? mAfter[1] : '140';
+    const after = mAfter ? mAfter[1] : apresDefaut;
     const nouvelleSpacing = `<w:spacing w:before="${before}" w:after="${after}" w:line="${ligneValeur}" w:lineRule="auto"/>`;
     if (/<w:pPr>/.test(corps)) {
-      const nouveauCorps = mSpacing
-        ? corps.replace(mSpacing[0], nouvelleSpacing)
-        : corps.replace('<w:pPr>', `<w:pPr>${nouvelleSpacing}`);
+      // Ordre CT_PPr (OOXML) : w:spacing vient APRÈS pStyle/keepNext/
+      // keepLines/pageBreakBefore/framePr/widowControl/numPr... (Lot 14b :
+      // keepNext et pageBreakBefore sont désormais possibles). Quand pPr
+      // commence par un élément qui suit w:spacing (jc, ind, rPr... -- seul
+      // cas existant avant ce lot), le résultat reste identique à avant.
+      let nouveauCorps;
+      if (mSpacing) {
+        nouveauCorps = corps.replace(mSpacing[0], nouvelleSpacing);
+      } else {
+        const mPPr = /<w:pPr>([\s\S]*?)<\/w:pPr>/.exec(corps);
+        const interieur = mPPr[1];
+        const mAvant = /^((?:<w:(?:pStyle|keepNext|keepLines|pageBreakBefore|framePr|widowControl|numPr|suppressLineNumbers|pBdr|shd|tabs|suppressAutoHyphens|kinsoku|wordWrap|overflowPunct|topLinePunct|autoSpaceDE|autoSpaceDN|bidi|adjustRightInd|snapToGrid)\b[^>]*?(?:\/>|>[\s\S]*?<\/w:(?:pStyle|keepNext|keepLines|pageBreakBefore|framePr|widowControl|numPr|suppressLineNumbers|pBdr|shd|tabs|suppressAutoHyphens|kinsoku|wordWrap|overflowPunct|topLinePunct|autoSpaceDE|autoSpaceDN|bidi|adjustRightInd|snapToGrid)>))*)/.exec(interieur);
+        const prefixe = mAvant ? mAvant[1] : '';
+        nouveauCorps = corps.replace(mPPr[0], `<w:pPr>${prefixe}${nouvelleSpacing}${interieur.slice(prefixe.length)}</w:pPr>`);
+      }
       return `<w:p>${nouveauCorps}</w:p>`;
     }
     return `<w:p><w:pPr>${nouvelleSpacing}</w:pPr>${corps}</w:p>`;
@@ -719,7 +846,7 @@ async function appliquerMiseEnFormeModeleCompacteDocx(buffer) {
   const fichier = zip.file(chemin);
   if (!fichier) return buffer;
   const xml = await fichier.async('string');
-  zip.file(chemin, appliquerPoliceEtInterligneXml(xml, { ligneValeur: '240', tailleDemiPoints: '20' }));
+  zip.file(chemin, appliquerPoliceEtInterligneXml(xml, { ligneValeur: '240', tailleDemiPoints: '20', apresDefaut: '40' }));
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
@@ -731,6 +858,7 @@ async function appliquerMiseEnFormeModeleCompacteDocx(buffer) {
 // passée par un appelant pas encore mis à jour est traitée comme
 // 'secondCycle' (comportement actuel), jamais comme une erreur.
 async function genererDocxDepuisHtml(contenuHTML, landscape, profilMiseEnForme) {
+  largeurUtileDocxCouranteDxa = landscape ? LARGEUR_UTILE_PAYSAGE_DXA : LARGEUR_UTILE_PORTRAIT_DXA;
   const doc = new Document({
     creator: 'ProfCI', description: 'Fiche de cours', title: 'Fiche de cours',
     sections: [{
@@ -739,7 +867,7 @@ async function genererDocxDepuisHtml(contenuHTML, landscape, profilMiseEnForme) 
           size: {
             orientation: landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT
           },
-          margin: { top: 850, bottom: 850, left: 850, right: 850 }
+          margin: { top: MARGE_PAGE_DOCX_DXA, bottom: MARGE_PAGE_DOCX_DXA, left: MARGE_PAGE_DOCX_DXA, right: MARGE_PAGE_DOCX_DXA }
         }
       },
       children: contenuToDocxChildren(contenuHTML)
@@ -7131,12 +7259,6 @@ function corrigerDoublePonctuationLot14(valeur) {
   return valeur.replace(/([^.])\.\.(?!\.)/g, '$1.');
 }
 
-// Lot 14 (constat n°4) : "Nom de l'entree" (avec ou sans accent/apostrophe
-// courbe) recopié comme VALEUR d'un champ *_NOM est très probablement
-// l'enseignant qui a recopié par erreur le libellé du champ au lieu d'y
-// saisir l'entrée elle-même -- jamais une vraie entrée de lecture
-// méthodique. Rejeté en amont plutôt que laissé fuiter dans Analyse/Traces.
-const MOTIF_PLACEHOLDER_NOM_ECHO_LOT14 = /^nom de l['’]entree$/;
 
 // Lot 14 (constat n°3) : construit le tableau récapitulatif "Vérification"
 // (Axes | Entrées | Indices textuels | Analyse | Interprétation), toujours
@@ -7212,24 +7334,275 @@ function simplifierTracesPourModeleLot14(ficheSubstituee) {
   return copie;
 }
 
-// Lot 14 (constat n°1) : post-traitement du HTML déjà rendu (jamais de
-// rendreFicheJSONEnHTML elle-même -- cf. règle du lot, S1/S2/S3 intouchés) :
-// tableaux resserrés (~85 %), bordures 0,5 pt, en-tête gris clair, police
-// ~10 pt (via .fiche-cours, héritée en cascade par le navigateur/puppeteer,
-// jamais par le convertisseur docx -- cf. profilMiseEnForme pour son
-// équivalent .docx), interlignes serrés, lignes d'en-tête libre sans
-// espace. Ajoute aussi ici le tableau récapitulatif Lot 14 (toujours juste
-// après le tableau principal). Confiné à la route /api/modeles/generer.
-function appliquerMiseEnFormeCompacteModeleLot14(contenuHTML, tableauVerificationHtml) {
+// Lot 14b (constat n°1) : l'extrait n'est imprimé qu'UNE fois, en annexe
+// pleine largeur, après le tableau de vérification -- jamais dans la colonne
+// étroite "Traces écrites" (cause des 11 pages au lieu de ~4). Une ligne du
+// champ EXTRAIT = un paragraphe (répliques, vers et alinéas conservés).
+function construireAnnexeExtraitLot14b(valeurs) {
+  const lignes = String(valeurs.EXTRAIT || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const source = [valeurs.OEUVRE, valeurs.AUTEUR, valeurs.EDITION].filter((v) => v && String(v).trim()).join(', ');
+  const passage = valeurs.PASSAGE && String(valeurs.PASSAGE).trim() ? ` — ${valeurs.PASSAGE}` : '';
+  return `<p data-docx-saut-page="1" data-docx-taille="28" style="page-break-before:always;break-before:page;font-size:18.667px;margin:0 0 8px 0"><strong>Feuille d'évaluation — extrait</strong></p>
+<p data-docx-taille="22" style="font-size:14.667px;margin:0 0 10px 0"><em>${echapperHtml(source + passage)}</em></p>
+${lignes.map((l) => `<p data-docx-taille="24" style="font-size:16px;margin:0 0 6px 0">${echapperHtml(l)}</p>`).join('\n')}`;
+}
+
+// Lot 14b (constat n°2) : largeurs du tableau des moments (somme 100 %) --
+// cf. data-docx-colonnes, lu par buildDocxTable.
+const COLONNES_MOMENTS_LOT14B = [13, 14, 26, 26, 21];
+const LIBELLES_ENTETE_MOMENTS_LOT14B = ['Moments didactiques / Durée', 'Stratégies pédagogiques', "Activités de l'enseignant", 'Activités des élèves', 'Traces écrites'];
+// Chasses (1/1000 em) des capitales de Times New Roman gras -- mêmes
+// métriques que Liberation Serif Bold. Sert à choisir la plus grande taille
+// à laquelle PRÉSENTATION / DÉVELOPPEMENT / ÉVALUATION tiennent sur une
+// seule ligne dans la colonne "Moments" (13 %) sans aucune coupure de mot.
+const CHASSES_CAPITALES_TNR_GRAS = { A: 722, C: 722, D: 722, E: 667, 'É': 667, I: 389, L: 667, M: 944, N: 722, O: 778, P: 611, R: 722, S: 556, T: 667, U: 722, V: 722 };
+const LIBELLES_MOMENTS_LOT14B = ['PRÉSENTATION', 'DÉVELOPPEMENT', 'ÉVALUATION'];
+function tailleLibelleMomentDemiPointsLot14b() {
+  // Largeur calculée en portrait (cas par défaut, le plus étroit) : en
+  // paysage, la colonne est plus large, le libellé tient a fortiori.
+  const largeurColonneDxa = (COLONNES_MOMENTS_LOT14B[0] / 100) * LARGEUR_UTILE_PORTRAIT_DXA;
+  const disponiblePt = (largeurColonneDxa - 2 * 100) / 20; // marges de cellule 100 twips (tableCellFromNode)
+  const plusLongEm = Math.max(...LIBELLES_MOMENTS_LOT14B.map((l) => [...l].reduce((s, c) => s + (CHASSES_CAPITALES_TNR_GRAS[c] || 778), 0) / 1000));
+  const taillePt = Math.min(10, disponiblePt / (plusLongEm * 1.02)); // 2 % de marge de sécurité
+  return Math.max(10, Math.floor(taillePt * 2)); // demi-points, jamais sous 5 pt
+}
+
+function lignesTableauLot14b($, $table) {
+  return $table.children('tbody, thead').children('tr').add($table.children('tr'));
+}
+
+// Lot 14b : post-traitement du HTML déjà rendu (jamais de
+// rendreFicheJSONEnHTML elle-même -- S1/S2/S3 intouchés), confiné à la
+// route /api/modeles/generer :
+// - tous les tableaux pleine largeur, même retrait (constat n°3), colonnes
+//   explicites (data-docx-colonnes) ;
+// - tableau des moments : en-tête renommé, répété à chaque page, insécable
+//   (constat n°2) ; plan numéroté une seule fois (colonne Moments), stratégies
+//   seules dans leur colonne, titres numérotés retirés de la colonne Traces ;
+//   libellés PRÉSENTATION/DÉVELOPPEMENT/ÉVALUATION sur une ligne ;
+// - Traces de l'évaluation : "Extrait : voir annexe" (constat n°1) ;
+// - tableau de vérification : en-tête répété, lignes insécables, lignes d'un
+//   même axe gardées ensemble (constat n°4) ;
+// - annexe "Feuille d'évaluation — extrait" en fin de fiche.
+function appliquerMiseEnFormeCompacteModeleLot14(contenuHTML, { tableauVerificationHtml, annexeHtml, developpement }) {
   const $ = cheerio.load(contenuHTML || '');
-  $('.fiche-cours').append(tableauVerificationHtml);
-  $('.fiche-cours').css({ 'font-size': '13.333px', 'line-height': '1.15' });
-  $('table').css({ width: '85%', margin: '0 auto' });
+  const $fiche = $('.fiche-cours').first();
+  $fiche.append(tableauVerificationHtml).append(annexeHtml);
+  $fiche.css({ 'font-size': '13.333px', 'line-height': '1.15' });
+  $('.entete-libre').css('row-gap', '0').attr('data-docx-pleine-largeur', '1');
+  $('table').css({ width: '100%', margin: '0 0 12px 0' });
   $('table td, table th').css('border', '0.5pt solid #000');
   $('th').css({ background: '#ddd', color: '#000' });
-  $('.entete-libre').css('row-gap', '0');
+
+  const tailleLibelle = tailleLibelleMomentDemiPointsLot14b();
+  $fiche.children('table').each((_, table) => {
+    const $table = $(table);
+    const $lignes = lignesTableauLot14b($, $table);
+    const $entete = $lignes.first();
+    const libellesEntete = $entete.children('th').toArray().map((th) => $(th).text().trim());
+
+    if (libellesEntete[0] === 'Habiletés') {
+      $table.attr('data-docx-colonnes', '25,75');
+      $entete.attr('data-docx-entete', '1');
+    } else if (libellesEntete[0] === 'Axes') {
+      $table.attr('data-docx-colonnes', '14,16,24,23,23');
+      $entete.attr('data-docx-entete', '1');
+      $lignes.slice(1).each((__, tr) => {
+        const $tr = $(tr);
+        $tr.attr('data-docx-insecable', '1');
+        // 1re ligne d'un axe (porte la cellule fusionnée) : gardée avec la
+        // suivante -- la fusion ne traverse jamais un saut de page.
+        if ($tr.children('td[rowspan]').length) $tr.attr('data-docx-garder-suivant', '1');
+      });
+    } else if (libellesEntete.length === 5 && /^Moments didactiques/.test(libellesEntete[0])) {
+      $table.attr('data-docx-colonnes', COLONNES_MOMENTS_LOT14B.join(','));
+      $entete.attr('data-docx-entete', '1');
+      $entete.children('th').each((i, th) => {
+        $(th).text(LIBELLES_ENTETE_MOMENTS_LOT14B[i]).css('width', `${COLONNES_MOMENTS_LOT14B[i]}%`);
+      });
+      $lignes.slice(1).each((__, tr) => {
+        const $cellules = $(tr).children('td');
+        const $moment = $cellules.eq(0);
+        const $paras = $moment.children('p');
+        const libelle = $paras.eq(0).text().trim();
+        const duree = $paras.eq(1).text().trim();
+        $moment.css('font-weight', 'normal');
+        $moment.html(`<p data-docx-taille="${tailleLibelle}" style="font-size:${(tailleLibelle / 2) * (4 / 3)}px;white-space:nowrap;margin:0"><strong>${echapperHtml(libelle)}</strong></p><p style="margin:0 0 6px 0"><strong>${echapperHtml(duree)}</strong></p>`);
+        if (libelle === 'DÉVELOPPEMENT') {
+          (developpement || []).forEach((partie, i) => {
+            $moment.append(`<p style="margin:0 0 4px 0">${i + 1}. ${echapperHtml((partie.titre || '').trim())} (15 mn)</p>`);
+          });
+          // Stratégie seule, numérotée comme sa partie du plan -- jamais le
+          // titre de la partie (déjà dans la colonne Moments).
+          $cellules.eq(1).html((developpement || []).map((partie, i) => `<p style="margin:0 0 6px 0">${i + 1}. ${echapperHtml((partie.strategie || '').trim())}</p>`).join(''));
+          $cellules.eq(4).children('p[data-docx-titre]').each((___, p) => {
+            if (/^\d+\.\s/.test($(p).text().trim())) $(p).remove();
+          });
+        }
+        if (libelle === 'ÉVALUATION') {
+          $cellules.eq(4).children('p').each((___, p) => {
+            if (/^Réponse attendue\s*:/.test($(p).text().trim())) $(p).before('<p>Extrait : voir annexe</p>');
+          });
+        }
+      });
+    } else if (!$entete.children('th').length && /Supports didactiques/.test($table.text())) {
+      $table.attr('data-docx-colonnes', '50,50');
+    }
+  });
   return $.html($('body').length ? $('body') : $.root());
 }
+
+// Lot 14b (constat n°5) : un EXTRAIT qui ressemble à une référence (pages,
+// "p.", chapitre...) plutôt qu'au texte du passage -- court (< 150
+// caractères), sans guillemets ni nom de personnage en capitales suivi
+// d'une réplique. Message destiné à l'enseignant, jamais technique.
+const MESSAGE_EXTRAIT_REFERENCE_LOT14B = "Collez le texte du passage dans ce champ, pas sa référence (la référence va dans « Passage étudié »).";
+function estReferenceDePassageLot14b(texte) {
+  const t = String(texte || '').trim();
+  if (!t || t.length >= 150) return false;
+  // Commence par la référence (cas réel : « pages 23 a 25, de « Ismène… ») :
+  // référence, même suivie d'un début de citation entre guillemets.
+  if (/^(pages?|pp?\.)\s*\d|^chap(?:itre|\.)?\s*[\dIVXLC]/i.test(t)) return true;
+  if (/[«»"“”]/.test(t)) return false;
+  if (/\b[A-ZÀÂÉÈÊËÎÏÔÛÙÇ]{3,}\s*[.:—–-]\s/.test(t)) return false;
+  return /\b(pages?|pp?\.)\s*\d|\bchap(?:itre|\.)?\s*[\dIVXLC]|\b(acte|sc[eè]ne)\s+[\dIVXLC]/i.test(t);
+}
+
+// Lot 14b (constat n°5) : guillemets « » déséquilibrés dans les indices
+// relevés (cas réel : `Nous ne pouvons pas. » ; « Il nous ferait mourir. »`).
+// Avertissement seulement -- jamais bloquant.
+function verifierGuillemetsLot14b(texte) {
+  let profondeur = 0;
+  for (const caractere of String(texte || '')) {
+    if (caractere === '«') profondeur += 1;
+    else if (caractere === '»') {
+      if (profondeur === 0) return 'une citation se ferme par « » » sans avoir été ouverte par « « »';
+      profondeur -= 1;
+    }
+  }
+  if (profondeur > 0) return 'une citation ouverte par « « » n\'est jamais refermée par « » »';
+  return null;
+}
+
+// Lot 14b (constat n°5, cas réel : une cellule Analyse se terminant par
+// « Nom de l'entree. ») : libellés de champs du formulaire assez distinctifs
+// pour ne jamais apparaître dans un vrai contenu pédagogique. Un champ qui
+// en contient un est presque toujours un copier-coller qui a débordé sur le
+// champ suivant -- refusé, avec le libellé trouvé.
+const LIBELLES_FORMULAIRE_DETECTABLES_LOT14B = [
+  "Nom de l'entrée", 'Indices textuels relevés', 'Analyse / justification du procédé',
+  'Ce que les élèves doivent repérer', 'Passage étudié (mention courte)', 'Extrait (texte intégral)',
+  "Titre de l'œuvre", 'Axe de lecture 1', 'Axe de lecture 2',
+  'Axe 1, entrée 1', 'Axe 1, entrée 2', 'Axe 2, entrée 1', 'Axe 2, entrée 2'
+];
+function normaliserLibelleLot14b(texte) {
+  return normaliserTexte(texte).replace(/[’`]/g, "'").replace(/œ/g, 'oe');
+}
+function detecterLibelleRecopieLot14b(valeur) {
+  const v = normaliserLibelleLot14b(valeur);
+  return LIBELLES_FORMULAIRE_DETECTABLES_LOT14B.find((libelle) => v.includes(normaliserLibelleLot14b(libelle))) || null;
+}
+
+// Lot 14b (revue du docx de contrôle) : *_CIBLE est insérée en milieu de
+// phrase (« Relève dans le texte les indices concernant {{E11_CIBLE}}. »)
+// alors que *_NOM, dont elle est préremplie, porte une majuscule initiale
+// (suggestions du catalogue, cf. genererSuggestionsEntreesLot13) -- d'où
+// « concernant Le type de texte ». Seul l'article initial est mis en
+// minuscule, et seulement s'il est suivi d'un mot en minuscule : jamais
+// « La Fontaine » ou « L'Étranger », jamais une CIBLE saisie par
+// l'enseignant (laissée telle quelle).
+function minusculeArticleInitialLot14b(texte) {
+  return String(texte)
+    .replace(/^(\s*)(Les|Le|La|Une|Un|Des|Du|De)(\s+)(?=\p{Ll})/u, (_, avant, article, espace) => avant + article.toLowerCase() + espace)
+    .replace(/^(\s*)([LD])(['’])(?=\p{Ll})/u, (_, avant, lettre, apostrophe) => avant + lettre.toLowerCase() + apostrophe);
+}
+// Lot 14 (constat n°2 "Ce que les élèves doivent repérer") : préremplit
+// *_CIBLE depuis *_NOM quand absent -- appelé AVANT le calcul de
+// champsManquants, pour que ce préremplissage compte comme "rempli".
+function preremplirCiblesLot14b(valeurs) {
+  const valeursEffectives = { ...valeurs };
+  ['E11', 'E12', 'E21', 'E22'].forEach((prefixe) => {
+    const cibleCle = `${prefixe}_CIBLE`;
+    const nomCle = `${prefixe}_NOM`;
+    if ((!valeursEffectives[cibleCle] || !String(valeursEffectives[cibleCle]).trim()) && valeursEffectives[nomCle] && String(valeursEffectives[nomCle]).trim()) {
+      valeursEffectives[cibleCle] = minusculeArticleInitialLot14b(valeursEffectives[nomCle]);
+    }
+  });
+  return valeursEffectives;
+}
+
+// Lot 14b (constat n°6) : import du passage depuis un .docx ou un .pdf
+// contenant du texte. Extraction locale (mammoth / pdf-parse) -- jamais
+// extraireTexteFichier, qui envoie les images à Anthropic. Fichier gardé en
+// mémoire le temps de la requête uniquement, jamais écrit sur disque.
+const TAILLE_MAX_PASSAGE_OCTETS = 5 * 1024 * 1024;
+const uploadPassageLot14b = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: TAILLE_MAX_PASSAGE_OCTETS, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const ext = (file.originalname.split('.').pop() || '').toLowerCase();
+    if (ext === 'docx' || ext === 'pdf') return cb(null, true);
+    cb(new Error('FORMAT_PASSAGE'));
+  }
+});
+const MESSAGE_FORMAT_PASSAGE_LOT14B = 'Format non pris en charge : importez un fichier .docx ou .pdf.';
+
+class ErreurImportPassageLot14b extends Error {
+  constructor(message, statut) { super(message); this.statut = statut; }
+}
+
+function normaliserTextePassageLot14b(brut) {
+  return String(brut || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t ]+/g, ' ')
+    .replace(/-\s*\n(?=\S)/g, '-')
+    .split('\n').map((l) => l.trim()).join('\n')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+}
+
+async function extraireTextePassageLot14b(buffer, nomFichier) {
+  const ext = (String(nomFichier || '').split('.').pop() || '').toLowerCase();
+  if (ext === 'pdf') {
+    let donnees;
+    try { donnees = await pdfParse(buffer); } catch (e) {
+      throw new ErreurImportPassageLot14b("Ce PDF n'a pas pu être lu (fichier protégé ou endommagé ?). Collez le texte à la place.", 422);
+    }
+    const texte = normaliserTextePassageLot14b(donnees.text);
+    // Pas d'OCR dans ce lot : un PDF scanné ne contient aucun texte extractible.
+    if (texte.replace(/\s/g, '').length < 20) throw new ErreurImportPassageLot14b('Ce PDF est une image, collez le texte à la place.', 422);
+    return texte;
+  }
+  if (ext === 'docx') {
+    let resultat;
+    try { resultat = await mammoth.extractRawText({ buffer }); } catch (e) {
+      throw new ErreurImportPassageLot14b("Ce document Word n'a pas pu être lu. Enregistrez-le au format .docx ou collez le texte à la place.", 422);
+    }
+    const texte = normaliserTextePassageLot14b(resultat.value);
+    if (!texte) throw new ErreurImportPassageLot14b('Ce document Word ne contient pas de texte.', 422);
+    return texte;
+  }
+  throw new ErreurImportPassageLot14b(MESSAGE_FORMAT_PASSAGE_LOT14B, 400);
+}
+
+app.post('/api/modeles/importer-passage', (req, res) => {
+  uploadPassageLot14b.single('fichier')(req, res, async (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ success: false, error: 'Fichier trop volumineux : 5 Mo maximum.' });
+      if (err.message === 'FORMAT_PASSAGE') return res.status(400).json({ success: false, error: MESSAGE_FORMAT_PASSAGE_LOT14B });
+      return res.status(400).json({ success: false, error: "Le fichier n'a pas pu être reçu." });
+    }
+    if (!req.file) return res.status(400).json({ success: false, error: 'Aucun fichier reçu.' });
+    try {
+      const texte = await extraireTextePassageLot14b(req.file.buffer, req.file.originalname);
+      res.json({ success: true, texte, nbCaracteres: texte.length });
+    } catch (e) {
+      res.status(e.statut || 500).json({ success: false, error: e.statut ? e.message : "Le fichier n'a pas pu être lu." });
+    } finally {
+      req.file.buffer = null;
+    }
+  });
+});
 
 app.get('/api/modeles/:niveau/:discipline/:activite/:lecon/:seance', (req, res) => {
   try {
@@ -7269,30 +7642,30 @@ app.post('/api/modeles/generer', async (req, res) => {
       return res.status(404).json({ success: false, error: `Aucun modèle trouvé pour ${niveau}/${discipline}/${activite}, leçon ${leconN}, séance ${seanceN}.` });
     }
 
-    // Lot 14 (constat n°2 "Ce que les élèves doivent repérer") : préremplit
-    // *_CIBLE depuis *_NOM quand absent -- AVANT le calcul de
-    // champsManquants, pour que ce préremplissage compte comme "rempli".
-    const valeursEffectives = { ...valeurs };
-    ['E11', 'E12', 'E21', 'E22'].forEach((prefixe) => {
-      const cibleCle = `${prefixe}_CIBLE`;
-      const nomCle = `${prefixe}_NOM`;
-      if ((!valeursEffectives[cibleCle] || !String(valeursEffectives[cibleCle]).trim()) && valeursEffectives[nomCle] && String(valeursEffectives[nomCle]).trim()) {
-        valeursEffectives[cibleCle] = valeursEffectives[nomCle];
-      }
-    });
-
-    // Lot 14 (constat n°4) : rejet défensif AVANT toute autre étape -- une
-    // valeur de *_NOM qui n'est que le libellé du champ recopié ("Nom de
-    // l'entree") n'est jamais une vraie entrée saisie par l'enseignant.
-    const cleEntreeEchoInvalide = Object.keys(valeursEffectives).find((cle) => /_NOM$/.test(cle) && MOTIF_PLACEHOLDER_NOM_ECHO_LOT14.test(normaliserTexte(valeursEffectives[cle])));
-    if (cleEntreeEchoInvalide) {
-      return res.status(400).json({
-        success: false,
-        error: `Le champ "${cleEntreeEchoInvalide}" contient "${valeursEffectives[cleEntreeEchoInvalide]}", qui recopie le libellé du champ au lieu du nom réel de l'entrée. Indiquez l'entrée elle-même (ex. « Les temps verbaux »).`
-      });
-    }
+    // Préremplissage des *_CIBLE -- AVANT champsManquants (cf. preremplirCiblesLot14b).
+    const valeursEffectives = preremplirCiblesLot14b(valeurs);
 
     const placeholders = extrairePlaceholdersModeleLot13(modele.fiche);
+
+    // Lot 14 (constat n°4) puis Lot 14b (constat n°5, cas réel : une cellule
+    // Analyse finissant par « Nom de l'entree. ») : rejet AVANT toute autre
+    // étape de tout champ contenant le libellé d'un champ du formulaire --
+    // jamais du contenu pédagogique, presque toujours un copier-coller qui a
+    // débordé sur le champ suivant (le modèle JSON et le code ne contiennent
+    // pas cette chaîne : vérifié, cf. compte rendu du lot 14b).
+    // Contrôlé sur les valeurs ENVOYÉES (avant le préremplissage des
+    // *_CIBLE) : le message désigne toujours le champ réellement saisi.
+    for (const cle of placeholders) {
+      const libelleTrouve = valeurs[cle] ? detecterLibelleRecopieLot14b(valeurs[cle]) : null;
+      if (libelleTrouve) {
+        const libelleChamp = descripteurChampModeleLot13(cle, []).libelle;
+        return res.status(400).json({
+          success: false, champ: cle,
+          error: `Le champ « ${libelleChamp} » (${cle}) contient « ${libelleTrouve} », qui est le nom d'un champ du formulaire et non du contenu. Retirez-le : c'est souvent un copier-coller qui a débordé sur le champ suivant.`
+        });
+      }
+    }
+
     const champsManquants = placeholders.filter((p) => {
       if (descripteurChampModeleLot13(p, []).obligatoire === false) return false;
       return !valeursEffectives[p] || !String(valeursEffectives[p]).trim();
@@ -7300,6 +7673,22 @@ app.post('/api/modeles/generer', async (req, res) => {
     if (champsManquants.length) {
       return res.status(400).json({ success: false, champsManquants });
     }
+
+    // Lot 14b (constat n°5) : message clair pour l'enseignant au lieu du
+    // message technique du validateur ("evaluation.consignes[0] : ...").
+    if (estReferenceDePassageLot14b(valeursEffectives.EXTRAIT)) {
+      return res.status(400).json({ success: false, champ: 'EXTRAIT', error: MESSAGE_EXTRAIT_REFERENCE_LOT14B });
+    }
+
+    // Lot 14b (constat n°5) : guillemets « » déséquilibrés dans les indices
+    // relevés -- avertissement non bloquant renvoyé avec la fiche.
+    const avertissements = placeholders
+      .filter((p) => /_INDICES$/.test(p))
+      .map((p) => {
+        const probleme = verifierGuillemetsLot14b(valeursEffectives[p]);
+        return probleme ? `« ${descripteurChampModeleLot13(p, []).libelle} » : ${probleme}.` : null;
+      })
+      .filter(Boolean);
 
     // Lot 14 (constat n°5) : corrige la ponctuation finale double DANS les
     // valeurs saisies, avant toute substitution.
@@ -7349,6 +7738,12 @@ app.post('/api/modeles/generer', async (req, res) => {
     // entrées, renvoi "voir tableau") -- jamais en modifiant
     // rendreFicheJSONEnHTML elle-même, seulement la copie passée ici.
     const ficheAffichage = simplifierTracesPourModeleLot14(ficheSubstituee);
+    // Lot 14b (constat n°1) : l'extrait n'est plus imprimé dans les
+    // consignes (3 fois, colonne étroite) -- "Extrait : voir annexe" à la
+    // place, texte intégral une seule fois en annexe.
+    if (ficheAffichage.evaluation && Array.isArray(ficheAffichage.evaluation.consignes)) {
+      ficheAffichage.evaluation.consignes = ficheAffichage.evaluation.consignes.map((c) => ({ ...c, extrait: '' }));
+    }
     const contenuHTMLBrut = rendreFicheJSONEnHTML(ficheAffichage, {
       discipline: (catalogueNiveau && catalogueNiveau.discipline) || discipline,
       classe: classeEffective, competence: (catalogueNiveau && catalogueNiveau.competence) || '',
@@ -7357,8 +7752,11 @@ app.post('/api/modeles/generer', async (req, res) => {
       etablissement: etablissement || '', nomEnseignant: nomEnseignant || '',
       date: formaterDateFrLot11(new Date())
     });
-    const tableauVerificationHtml = construireTableauVerificationLot14(valeursCorrigees);
-    const contenuHTML = appliquerMiseEnFormeCompacteModeleLot14(contenuHTMLBrut, tableauVerificationHtml);
+    const contenuHTML = appliquerMiseEnFormeCompacteModeleLot14(contenuHTMLBrut, {
+      tableauVerificationHtml: construireTableauVerificationLot14(valeursCorrigees),
+      annexeHtml: construireAnnexeExtraitLot14b(valeursCorrigees),
+      developpement: ficheAffichage.developpement
+    });
 
     const ficheCreee = await Fiche.create({
       enseignantId: enseignantId || 'anonyme',
@@ -7373,7 +7771,7 @@ app.post('/api/modeles/generer', async (req, res) => {
       origineGeneration
     });
 
-    res.json({ success: true, ficheId: ficheCreee._id, contenuFinal: contenuHTML });
+    res.json({ success: true, ficheId: ficheCreee._id, contenuFinal: contenuHTML, avertissements });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -13790,5 +14188,6 @@ module.exports = {
   chargerSeanceCatalogueLot13, validerFicheJSON, rendreFicheJSONEnHTML,
   simplifierTracesPourModeleLot14, construireTableauVerificationLot14,
   appliquerMiseEnFormeCompacteModeleLot14, genererDocxDepuisHtml, genererPdfDepuisHtml,
-  MOTIF_PLACEHOLDER_NOM_ECHO_LOT14, normaliserTexte
+  normaliserTexte, estReferenceDePassageLot14b, verifierGuillemetsLot14b, detecterLibelleRecopieLot14b,
+  extraireTextePassageLot14b, minusculeArticleInitialLot14b, preremplirCiblesLot14b
 };
