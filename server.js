@@ -102,8 +102,12 @@ async function extraireTexteFichier(file) {
   return result.value;
 }
 
-function slugFichier(fiche) {
-  const brut = `fiche_${fiche.discipline || ''}_${fiche.classe || ''}`;
+// options.avecSeance : suffixe "_s<n>" tiré de fiche.seance ("6 : Lecture
+// méthodique n°2" -> "_s6") -- utilisé uniquement pour le Word des fiches
+// "Modèle de séance", qui sinon portaient toutes le même nom (S4/S6/S9).
+function slugFichier(fiche, options = {}) {
+  const numeroSeance = options.avecSeance ? (String(fiche.seance || '').match(/^\s*(\d+)/) || [])[1] : null;
+  const brut = `fiche_${fiche.discipline || ''}_${fiche.classe || ''}${numeroSeance ? `_s${numeroSeance}` : ''}`;
   const slug = brut.toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '_')
@@ -14166,7 +14170,7 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
     const docxBuffer = await genererDocxDepuisHtml(contenuExport, landscape, profilMiseEnForme);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', `attachment; filename="${slugFichier(fiche)}.docx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${slugFichier(fiche, { avecSeance: fiche.genereDepuisModeleLot13 })}.docx"`);
     res.send(docxBuffer);
   } catch (e) {
     console.error('❌ Erreur génération DOCX:', e.message);
