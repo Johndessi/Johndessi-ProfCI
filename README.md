@@ -28,3 +28,11 @@ Les devoirs, comptes rendus de devoir et remédiations ne sont pas des entrées 
 refusée avec un message explicite (le programme ne définit aucune structure).
 La classe « 3e » / « 3eme » est normalisée en « 3ème » à l'import. `GET /api/admin/classes-3e` (en-tête
 `x-admin-key`, lecture seule) compte, par collection, les documents dont la classe commence par 3.
+
+## Service d'aperçu : import des catalogues au démarrage
+
+Sur un service d'essai (base MongoDB **distincte** de la production), définir
+`IMPORT_CATALOGUES_AU_DEMARRAGE=1` (valeur exacte) ainsi que `ADMIN_SEED_KEY` : au démarrage, les fichiers
+`lecons_officielles_*.json`, `competences_dpfc_*.json` et `competences_par_activite_*.json` du dépôt sont importés
+dans la base de `MONGODB_URI` par les routes d'import existantes (upserts, rien n'est supprimé). Sans la variable,
+aucun effet. Ne jamais la définir en production : elle réécrirait les catalogues de la base avec ceux du dépôt.

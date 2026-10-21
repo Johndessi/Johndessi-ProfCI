@@ -14371,8 +14371,56 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
 
 app.get('*', (_, res) => res.sendFile('index.html', { root: 'public' }));
 
+// Import optionnel des catalogues du dépôt au démarrage -- ENVIRONNEMENT D'ESSAI
+// UNIQUEMENT (service d'aperçu avec sa propre base). Sans la variable
+// IMPORT_CATALOGUES_AU_DEMARRAGE=1 (valeur exacte), rien ne se passe : c'est le
+// cas de la production. Avec elle, les fichiers lecons_officielles_*.json,
+// competences_dpfc_*.json et competences_par_activite_*.json du dépôt sont
+// envoyés aux routes d'import existantes (mêmes validations, mêmes upserts) vers
+// la base de MONGODB_URI. Réutilise ADMIN_SEED_KEY ; sans elle, rien n'est importé.
+// Ne lit aucun autre fichier : ni fiches de bibliothèque, ni progressions.
+const IMPORTS_CATALOGUES_AU_DEMARRAGE = [
+  { motif: /^lecons_officielles_.*\.json$/, route: '/api/admin/lecons-officielles/seed' },
+  { motif: /^competences_dpfc_.*\.json$/, route: '/api/admin/competences/seed' },
+  { motif: /^competences_par_activite_.*\.json$/, route: '/api/admin/competences-par-activite/seed' }
+];
+async function importerCataloguesAuDemarrage(port) {
+  if (!process.env.ADMIN_SEED_KEY) {
+    console.warn('⚠️  IMPORT_CATALOGUES_AU_DEMARRAGE=1 mais ADMIN_SEED_KEY est absente : aucun catalogue importé.');
+    return;
+  }
+  for (let i = 0; i < 120 && mongoose.connection.readyState !== 1; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (mongoose.connection.readyState !== 1) {
+    console.error('❌ Import des catalogues abandonné : MongoDB non connecté après 60 s.');
+    return;
+  }
+  console.log(`📥 Import des catalogues du dépôt dans la base « ${mongoose.connection.name} » (IMPORT_CATALOGUES_AU_DEMARRAGE=1)...`);
+  const fichiers = fs.readdirSync(__dirname).sort();
+  for (const { motif, route } of IMPORTS_CATALOGUES_AU_DEMARRAGE) {
+    for (const nom of fichiers.filter((f) => motif.test(f))) {
+      try {
+        const reponse = await fetch(`http://127.0.0.1:${port}${route}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-admin-key': process.env.ADMIN_SEED_KEY },
+          body: fs.readFileSync(path.join(__dirname, nom), 'utf8')
+        });
+        const resultat = await reponse.json().catch(() => ({}));
+        console.log(`   ${reponse.ok ? '✅' : '❌'} ${nom} -> ${route} : ${reponse.ok ? `${resultat.upserted} importé(s), ${resultat.ignores} ignoré(s)` : (resultat.error || reponse.status)}`);
+      } catch (e) {
+        console.error(`   ❌ ${nom} : ${e.message}`);
+      }
+    }
+  }
+  console.log('📥 Import des catalogues terminé.');
+}
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🎓 Prof CI démarré sur le port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🎓 Prof CI démarré sur le port ${PORT}`);
+  if (process.env.IMPORT_CATALOGUES_AU_DEMARRAGE === '1') importerCataloguesAuDemarrage(PORT);
+});
 
 // Lot 14 : exporte les fonctions pures (aucun effet sur `node server.js` en
 // production, qui ignore module.exports -- utilisé UNIQUEMENT par les
