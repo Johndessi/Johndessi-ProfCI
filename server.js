@@ -1101,7 +1101,20 @@ const LeconOfficielleDPFCSchema = new mongoose.Schema({
     // { catégorie: [mots vérifiés] }, injecté tel quel dans le prompt comme
     // vocabulaire exclusif -- jamais un remplacement du contenu grammatical
     // du reste de la fiche, uniquement un cadrage des exemples lexicaux.
-    vocabulaireReference : mongoose.Schema.Types.Mixed
+    vocabulaireReference : mongoose.Schema.Types.Mixed,
+    // Catalogue 3e issu de la matrice (progression annuelle) -- absents des
+    // autres niveaux tant que leur matrice n'est pas intégrée.
+    // typeSupport : ce que la séance exige de l'enseignant ('texte_obligatoire',
+    //   'texte_a_resumer_obligatoire', 'situation_apprentissage_avec_sujet',
+    //   'aucun_requis_corpus_catalogue', 'theme_ou_situation', 'theme_impose').
+    // typeTexte : famille de texte quand elle est univoque (sinon vide).
+    // themeIntegre : '' | 'liste_10_themes' (menu) | identifiant d'un thème imposé.
+    // progression : occurrences de la séance dans la progression annuelle
+    //   (trimestre, semaine, seanceProgression 'S.n', variantes étayer/réfuter...).
+    typeSupport  : String,
+    typeTexte    : String,
+    themeIntegre : String,
+    progression  : [mongoose.Schema.Types.Mixed]
   }],
   createdAt   : { type: Date, default: Date.now }
 });
@@ -1174,6 +1187,96 @@ function normaliserTexte(str) {
 function regexExactInsensible(str) {
   const echappe = String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp('^' + echappe + '$', 'i');
+}
+
+// Catalogue : seule la 3e (matrice intégrée) est normalisée -- « 3e », « 3eme »
+// et « 3ème » désignent la même classe, la forme du catalogue étant « 3ème ».
+// Les autres niveaux sont laissés tels quels.
+function normaliserClasseCatalogue(classe) {
+  const c = String(classe || '').trim();
+  return /^3(?:e|eme|ème)$/i.test(c) ? '3ème' : c;
+}
+
+// Rang d'enseignement d'une séance = plus petit numéro 'S.n' de ses
+// occurrences dans la progression annuelle. Le menu Séance est trié par ce
+// rang SEULEMENT si toutes les séances de la leçon en ont un (échelle
+// homogène) ; sinon l'ordre du catalogue (numéro) est conservé. Les
+// identifiants (numeroSeance) ne changent jamais : ex. Grammaire 3e L5, S3
+// « groupe adverbial » s'enseigne avant S2 « comparatif et superlatif ».
+function rangProgressionSeance(s) {
+  const prog = Array.isArray(s && s.progression) ? s.progression : [];
+  const nums = prog
+    .map((p) => /^S\.(\d+)/.exec(String((p && p.seanceProgression) || '')))
+    .filter(Boolean)
+    .map((m) => parseInt(m[1], 10));
+  return nums.length ? Math.min(...nums) : null;
+}
+function trierSeancesParProgression(seances) {
+  const liste = Array.from(seances || []);
+  const rangs = liste.map(rangProgressionSeance);
+  if (!liste.length || rangs.some((r) => r === null)) return liste;
+  return liste
+    .map((s, i) => ({ s, r: rangs[i] }))
+    .sort((a, b) => a.r - b.r || a.s.numeroSeance - b.s.numeroSeance)
+    .map((x) => x.s);
+}
+
+// Menu « thème des contenus intégrés » (guide d'exécution 3e, p.63) : liste
+// lue dans catalogue/themes_integres_<niveau>.json (3e uniquement pour l'instant).
+const CACHE_THEMES_INTEGRES = new Map();
+function chargerThemesIntegres(classe) {
+  if (normaliserClasseCatalogue(classe) !== '3ème') return null;
+  if (!CACHE_THEMES_INTEGRES.has('3e')) {
+    let liste = null;
+    try { liste = JSON.parse(fs.readFileSync(path.join(__dirname, 'catalogue', 'themes_integres_3e.json'), 'utf8')); } catch (e) { liste = null; }
+    CACHE_THEMES_INTEGRES.set('3e', liste);
+  }
+  return CACHE_THEMES_INTEGRES.get('3e');
+}
+function libelleThemeIntegre(classe, idTheme) {
+  const liste = chargerThemesIntegres(classe);
+  const trouve = liste && liste.themes.find((t) => t.id === idTheme);
+  return trouve ? trouve.libelle : null;
+}
+
+// L'enseignant peut demander à ProfCI de rédiger lui-même le texte support
+// (bouton explicite, « à vérifier ») uniquement pour les textes NON littéraires.
+const TYPES_TEXTE_PROFCI_AUTORISES = ['texte argumentatif', 'article de journal'];
+function profCIPeutRedigerLeTexte(texteCible) {
+  const ref = trouverReferentielTypeTexte(texteCible);
+  return !!ref && TYPES_TEXTE_PROFCI_AUTORISES.includes(ref.typeTexte);
+}
+const MENTION_TEXTE_PROFCI = 'Texte support rédigé par ProfCI — à vérifier avant utilisation en classe.';
+function injecterMentionTexteGenereParProfCI(contenuHTML) {
+  if (!contenuHTML || contenuHTML.includes(MENTION_TEXTE_PROFCI)) return contenuHTML;
+  const $ = cheerio.load(contenuHTML);
+  const mention = `<p data-mention-profci="1" style="margin:6px 0;font-weight:bold"><em>${MENTION_TEXTE_PROFCI}</em></p>`;
+  const $situation = $('p').filter((_, p) => /^Situation d'apprentissage\s*:/i.test($(p).text().trim())).first();
+  if ($situation.length) {
+    $situation.after(mention);
+  } else {
+    const $racine = $('.fiche-cours').first();
+    if (!$racine.length) return mention + contenuHTML;
+    $racine.prepend(mention);
+  }
+  return $.html($('body').length ? $('body') : $.root());
+}
+
+// Devoirs, comptes rendus de devoir et remédiations : le programme ne définit
+// aucune structure -> refus explicite (jamais une leçon ordinaire qui y
+// ressemblerait). Ne vise que ces libellés : « compte rendu de lecture » ou
+// « compte rendu de réunion » restent de vraies leçons.
+const MESSAGE_REFUS_DEVOIR = "Les devoirs (rédaction, orthographe) ne sont pas générés par ProfCI : le programme ne définit aucune structure pour ce type de séance. Aucune fiche n'a été créée.";
+const MESSAGE_REFUS_COMPTE_RENDU = "Les comptes rendus de devoir et les séances de remédiation ne sont pas générés par ProfCI : le programme ne définit aucune structure pour ce type de séance. Aucune fiche n'a été créée.";
+function detecterDevoirOuCompteRendu(texte) {
+  const t = normaliserTexte(texte).replace(/[’`]/g, "'");
+  if (/\bcomptes?[ -]?rendus?\s+(du|de|des|d')\s*(l'|la |le |les )?\s*(devoirs?|evaluations?)\b/.test(t)
+    || /\bcr\s+(de\s+)?(redaction|orthographe)\b/.test(t)
+    || /\bremediations?\b/.test(t)) return MESSAGE_REFUS_COMPTE_RENDU;
+  if (/\bdevoirs?\s+(de|d')\s*(la\s+)?(redaction|orthographe)\b/.test(t)
+    || /\bdevoirs?\s+n\s*[°o]?\s*\d/.test(t)
+    || /\bevaluation\s+d'\s*orthographe\b/.test(t)) return MESSAGE_REFUS_DEVOIR;
+  return null;
 }
 
 // numeroSequenceOeuvre (04/10, signalement enseignant) : pour l'Étude de
@@ -1387,13 +1490,20 @@ async function listerLeconsOfficielles({ discipline, classe, activite }) {
       // LeconOfficielleDPFCSchema.genreOeuvre. Absent (undefined) pour toute
       // autre activité/le collège, sans impact sur leur usage existant.
       genreOeuvre: l.genreOeuvre || undefined,
-      seances: (l.seances || [])
+      seances: trierSeancesParProgression(l.seances || [])
         .filter((s) => normaliserTexte(s.activite) === activiteNorm)
         .flatMap((s) => {
           const base = {
             _id: s._id, numeroSeance: s.numeroSeance, choixLibre: !!s.choixLibre, choixLibreLabel: s.choixLibreLabel || '',
             // cf. LeconOfficielleDPFCSchema.seances.typeSeanceOeuvre (second cycle uniquement).
-            typeSeanceOeuvre: s.typeSeanceOeuvre || undefined
+            typeSeanceOeuvre: s.typeSeanceOeuvre || undefined,
+            // Catalogue 3e (matrice) : exigence de la séance, menu de thèmes, et
+            // possibilité de faire rédiger le texte par ProfCI (textes non littéraires).
+            typeSupport: s.typeSupport || undefined,
+            themeIntegre: s.themeIntegre || undefined,
+            texteProfCIAutorise: s.typeSupport === 'texte_obligatoire'
+              ? profCIPeutRedigerLeTexte(`${l.titreLecon} ${s.intitule}`)
+              : undefined
           };
           if (s.optionsChoix && s.optionsChoix.length) {
             return s.optionsChoix.map((option) => ({
@@ -7898,7 +8008,7 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
 
     for (const item of items) {
       const discipline = (item && item.discipline || '').toString().trim();
-      const classe = (item && item.classe || '').toString().trim();
+      const classe = normaliserClasseCatalogue((item && item.classe || '').toString().trim());
       const activiteLecon = (item && item.activite || '').toString().trim();
       const numeroLecon = item && item.numeroLecon != null ? parseInt(item.numeroLecon, 10) : NaN;
       const titreLecon = (item && item.titreLecon || '').toString().trim();
@@ -7925,7 +8035,12 @@ app.post('/api/admin/lecons-officielles/seed', verifierCleAdmin, async (req, res
           vocabulaireReference: (s.vocabulaireReference && typeof s.vocabulaireReference === 'object') ? s.vocabulaireReference : undefined,
           // Étude de l'œuvre intégrale, second cycle uniquement (13/09) --
           // cf. LeconOfficielleDPFCSchema.seances.typeSeanceOeuvre.
-          typeSeanceOeuvre: (s.typeSeanceOeuvre || '').toString().trim() || undefined
+          typeSeanceOeuvre: (s.typeSeanceOeuvre || '').toString().trim() || undefined,
+          // Catalogue 3e (matrice) -- absents des autres niveaux.
+          typeSupport: (s.typeSupport || '').toString().trim() || undefined,
+          typeTexte: (s.typeTexte || '').toString().trim() || undefined,
+          themeIntegre: (s.themeIntegre || '').toString().trim() || undefined,
+          progression: Array.isArray(s.progression) ? s.progression.filter((o) => o && typeof o === 'object') : []
         });
       }
       if (seancesInvalides) { ignores++; continue; }
@@ -8096,6 +8211,14 @@ app.get('/api/lecons-officielles/liste', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Menu « thème des contenus intégrés » (3e uniquement pour l'instant).
+app.get('/api/themes-integres', (req, res) => {
+  const classe = (req.query.classe || '').toString();
+  const liste = chargerThemesIntegres(classe);
+  if (!liste) return res.status(404).json({ error: 'Aucune liste de thèmes pour cette classe.' });
+  res.json({ listeId: liste.listeId, themes: liste.themes });
 });
 
 app.get('/api/progressions', async (req, res) => {
@@ -11610,6 +11733,9 @@ ${tableDeroulement}
       theme = '', planCours = '', approche = 'APC',
       leconOfficielleId = '', seanceOfficielleId = '', optionChoisie = '', optionLibre = '',
       activite = '', seanceIntitule = '', modeEvaluationResume = 'nouveau',
+      // Catalogue 3e (matrice) : thème choisi dans le menu des 10 thèmes, et
+      // demande explicite « Faire rédiger un texte par ProfCI (à vérifier) ».
+      themeIntegreChoisi = '', texteGenereParProfCI = false,
       // Étude de l'œuvre intégrale (01/09) -- Mode 2 exclusif, aucun ID
       // catalogue : sousModule distingue cette activité de "Lecture"
       // classique (même valeur d'Activité affichée, cf. ACTIVITE_OEUVRE_INTEGRALE).
@@ -12019,6 +12145,8 @@ ${tableDeroulement}
     // section "texteSupport" plus bas) -- utilisé aussi pour retrouver le
     // référentiel du type de texte demandé (conformité structurelle exigée).
     let modeAutoLM = false;
+    // Vrai seulement si l'enseignant a demandé à ProfCI de rédiger le texte (bouton explicite).
+    let texteGenereParProfCIEffectif = false;
     let referentielTypeTexteLM = null;
     // Numérotation de lignes du texte support pour Lecture méthodique (27/09,
     // cf. construireLignesNumerotees) -- calculée dès que le texte support et
@@ -12363,6 +12491,33 @@ ${tableDeroulement}
         texteSupport = leconOfficiellePourReferentiel.seance.texteSupportOfficiel;
       }
 
+      // Catalogue 3e (matrice) -- refus des devoirs / comptes rendus / remédiations
+      // (aucune structure dans le programme) puis blocage selon le typeSupport de
+      // la séance sélectionnée. Sans typeSupport (autres niveaux), rien ne change.
+      {
+        const refusDevoirCR = detecterDevoirOuCompteRendu([
+          lecon || '', theme || '', seanceIntitule || '',
+          leconOfficiellePourReferentiel ? leconOfficiellePourReferentiel.seance.intitule : ''
+        ].join(' '));
+        if (refusDevoirCR) {
+          return envoyerBlocageSSE(res, refusDevoirCR, heartbeat);
+        }
+        const typeSupportSeance = leconOfficiellePourReferentiel ? (leconOfficiellePourReferentiel.seance.typeSupport || '') : '';
+        if (typeSupportSeance === 'texte_obligatoire' && !texteSupport) {
+          const peutRediger = profCIPeutRedigerLeTexte(texteCibleReferentiel);
+          if (String(texteGenereParProfCI) === 'true' && peutRediger) {
+            texteGenereParProfCIEffectif = true;
+          } else {
+            return envoyerBlocageSSE(res, peutRediger
+              ? "Cette séance exige un texte support : collez le texte ou importez un fichier, ou cliquez sur « Faire rédiger un texte par ProfCI (à vérifier) »."
+              : "Cette séance exige un texte support : collez le texte ou importez un fichier. La rédaction automatique n'est pas proposée pour ce type de texte.", heartbeat);
+          }
+        }
+        if (typeSupportSeance === 'texte_a_resumer_obligatoire' && !texteSupport) {
+          return envoyerBlocageSSE(res, "Cette séance exige le texte à résumer : collez-le ou importez un fichier.", heartbeat);
+        }
+      }
+
       if (estLM) {
         // Mode "plan fourni par l'enseignant" : quand l'enseignant a rédigé
         // lui-même le contenu pédagogique (hypothèse/axes/analyses), on ne
@@ -12571,6 +12726,16 @@ ${tableDeroulement}
           if (optionLibreTexte) {
             const libelleChoixLibre = (seanceDoc.choixLibreLabel || '').toString().trim() || 'précision complémentaire';
             systemPrompt += `\n\nOPTION LIBRE CHOISIE PAR L'ENSEIGNANT (${libelleChoixLibre}) : "${optionLibreTexte}"\n\nReprends EXACTEMENT ce texte, sans reformulation.`;
+          }
+          // Catalogue 3e : thème des contenus intégrés. 'liste_10_themes' -> thème
+          // choisi par l'enseignant dans le menu (validé contre la liste, jamais
+          // pris tel quel) ; identifiant précis -> thème imposé par le programme.
+          if (seanceDoc.themeIntegre) {
+            const idTheme = seanceDoc.themeIntegre === 'liste_10_themes' ? String(themeIntegreChoisi || '').trim() : seanceDoc.themeIntegre;
+            const libelleTheme = idTheme ? libelleThemeIntegre(classe, idTheme) : null;
+            if (libelleTheme) {
+              systemPrompt += `\n\nTHÈME DES CONTENUS INTÉGRÉS : « ${libelleTheme} » (${seanceDoc.themeIntegre === 'liste_10_themes' ? "choisi par l'enseignant dans la liste officielle des 10 thèmes" : 'thème imposé par le programme'}).\n\nLa Situation d'apprentissage, le support et les exemples de cette séance doivent se rapporter à ce thème. N'invente aucun autre thème et ne modifie pas son libellé.`;
+            }
           }
 
           const seanceNumIndicatif = parseInt(seance, 10);
@@ -13798,6 +13963,9 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
         lignesNumerotees: lignesNumereesLM,
         dejaNumerote: dejaNumeroteLM
       });
+      if (texteGenereParProfCIEffectif) {
+        contenuHTML = injecterMentionTexteGenereParProfCI(contenuHTML);
+      }
       // Filet structurel Exploitation de texte, ANCRÉ ICI et seulement ici
       // (16/09, déplacé depuis plus haut dans la route -- cf. commentaire à
       // l'emplacement d'origine pour la cause racine) : ce filet a besoin du
@@ -14057,6 +14225,34 @@ app.put('/api/admin/fiche/:id', verifierCleAdmin, async (req, res) => {
 // ne renvoie qu'une projection restreinte pour l'UI enseignant, insuffisante
 // pour vérifier qu'un champ interne comme vocabulaireReference a bien été
 // persisté après un seed.
+// Lecture seule (aucune écriture) : combien de documents portent « 3e », « 3eme »,
+// « 3ème » (ou une autre forme commençant par 3) dans le champ classe, collection
+// par collection -- pour mesurer l'écart avant toute normalisation en base.
+app.get('/api/admin/classes-3e', verifierCleAdmin, async (req, res) => {
+  try {
+    const collections = {
+      leconsOfficielles: LeconOfficielleDPFC, competencesDPFC: CompetenceDPFC,
+      competencesParActivite: CompetenceParActivite, progressions: ProgressionLecon, fiches: Fiche
+    };
+    const resultat = {};
+    for (const [nom, modele] of Object.entries(collections)) {
+      const groupes = await modele.aggregate([
+        { $match: { classe: { $regex: '^3', $options: 'i' } } },
+        { $group: { _id: '$classe', n: { $sum: 1 } } },
+        { $sort: { _id: 1 } }
+      ]);
+      resultat[nom] = {
+        formes: groupes.map((g) => ({ classe: g._id, n: g.n })),
+        total: groupes.reduce((a, g) => a + g.n, 0),
+        aNormaliser: groupes.filter((g) => g._id !== '3ème' && normaliserClasseCatalogue(g._id) === '3ème').reduce((a, g) => a + g.n, 0)
+      };
+    }
+    res.json({ success: true, lectureSeule: true, resultat });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/admin/lecons-officielles/brut', verifierCleAdmin, async (req, res) => {
   try {
     const { discipline, classe, activite, numeroLecon } = req.query;
@@ -14175,8 +14371,56 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
 
 app.get('*', (_, res) => res.sendFile('index.html', { root: 'public' }));
 
+// Import optionnel des catalogues du dépôt au démarrage -- ENVIRONNEMENT D'ESSAI
+// UNIQUEMENT (service d'aperçu avec sa propre base). Sans la variable
+// IMPORT_CATALOGUES_AU_DEMARRAGE=1 (valeur exacte), rien ne se passe : c'est le
+// cas de la production. Avec elle, les fichiers lecons_officielles_*.json,
+// competences_dpfc_*.json et competences_par_activite_*.json du dépôt sont
+// envoyés aux routes d'import existantes (mêmes validations, mêmes upserts) vers
+// la base de MONGODB_URI. Réutilise ADMIN_SEED_KEY ; sans elle, rien n'est importé.
+// Ne lit aucun autre fichier : ni fiches de bibliothèque, ni progressions.
+const IMPORTS_CATALOGUES_AU_DEMARRAGE = [
+  { motif: /^lecons_officielles_.*\.json$/, route: '/api/admin/lecons-officielles/seed' },
+  { motif: /^competences_dpfc_.*\.json$/, route: '/api/admin/competences/seed' },
+  { motif: /^competences_par_activite_.*\.json$/, route: '/api/admin/competences-par-activite/seed' }
+];
+async function importerCataloguesAuDemarrage(port) {
+  if (!process.env.ADMIN_SEED_KEY) {
+    console.warn('⚠️  IMPORT_CATALOGUES_AU_DEMARRAGE=1 mais ADMIN_SEED_KEY est absente : aucun catalogue importé.');
+    return;
+  }
+  for (let i = 0; i < 120 && mongoose.connection.readyState !== 1; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (mongoose.connection.readyState !== 1) {
+    console.error('❌ Import des catalogues abandonné : MongoDB non connecté après 60 s.');
+    return;
+  }
+  console.log(`📥 Import des catalogues du dépôt dans la base « ${mongoose.connection.name} » (IMPORT_CATALOGUES_AU_DEMARRAGE=1)...`);
+  const fichiers = fs.readdirSync(__dirname).sort();
+  for (const { motif, route } of IMPORTS_CATALOGUES_AU_DEMARRAGE) {
+    for (const nom of fichiers.filter((f) => motif.test(f))) {
+      try {
+        const reponse = await fetch(`http://127.0.0.1:${port}${route}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-admin-key': process.env.ADMIN_SEED_KEY },
+          body: fs.readFileSync(path.join(__dirname, nom), 'utf8')
+        });
+        const resultat = await reponse.json().catch(() => ({}));
+        console.log(`   ${reponse.ok ? '✅' : '❌'} ${nom} -> ${route} : ${reponse.ok ? `${resultat.upserted} importé(s), ${resultat.ignores} ignoré(s)` : (resultat.error || reponse.status)}`);
+      } catch (e) {
+        console.error(`   ❌ ${nom} : ${e.message}`);
+      }
+    }
+  }
+  console.log('📥 Import des catalogues terminé.');
+}
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🎓 Prof CI démarré sur le port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🎓 Prof CI démarré sur le port ${PORT}`);
+  if (process.env.IMPORT_CATALOGUES_AU_DEMARRAGE === '1') importerCataloguesAuDemarrage(PORT);
+});
 
 // Lot 14 : exporte les fonctions pures (aucun effet sur `node server.js` en
 // production, qui ignore module.exports -- utilisé UNIQUEMENT par les
@@ -14189,5 +14433,7 @@ module.exports = {
   simplifierTracesPourModeleLot14, construireTableauVerificationLot14,
   appliquerMiseEnFormeCompacteModeleLot14, genererDocxDepuisHtml, genererPdfDepuisHtml,
   normaliserTexte, estReferenceDePassageLot14b, verifierGuillemetsLot14b, detecterLibelleRecopieLot14b,
-  extraireTextePassageLot14b, minusculeArticleInitialLot14b, preremplirCiblesLot14b
+  extraireTextePassageLot14b, minusculeArticleInitialLot14b, preremplirCiblesLot14b,
+  normaliserClasseCatalogue, trierSeancesParProgression, detecterDevoirOuCompteRendu,
+  profCIPeutRedigerLeTexte, injecterMentionTexteGenereParProfCI, libelleThemeIntegre, listerLeconsOfficielles
 };

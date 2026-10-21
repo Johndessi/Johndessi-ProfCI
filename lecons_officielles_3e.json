@@ -1,0 +1,980 @@
+[
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Grammaire",
+    "numeroLecon": 1,
+    "titreLecon": "L'expression des circonstances dans la phrase simple et dans la phrase complexe",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la cause, de la conséquence et du but dans la phrase simple",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la cause dans la phrase complexe",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la conséquence dans la phrase complexe",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "L'expression du but dans la phrase complexe",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "L'expression du temps et de la comparaison dans la phrase simple",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 6,
+        "activite": "Grammaire",
+        "intitule": "L'expression du temps dans la phrase complexe",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 7,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la comparaison dans la phrase complexe",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 8,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la condition et de l'opposition dans la phrase simple",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 9,
+        "activite": "Grammaire",
+        "intitule": "L'expression de la condition dans la phrase complexe",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 10,
+        "activite": "Grammaire",
+        "intitule": "L'expression de l'opposition dans la phrase complexe",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Grammaire",
+    "numeroLecon": 2,
+    "titreLecon": "La coordination",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les coordonnants",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Grammaire",
+    "numeroLecon": 3,
+    "titreLecon": "Le groupe nominal : la pronominalisation",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "La pronominalisation",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Grammaire",
+    "numeroLecon": 4,
+    "titreLecon": "Le verbe : l'infinitif et le participe",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Le mode infinitif",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les emplois de l'infinitif : verbe ou noyau d'une proposition",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Le participe passé",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Le participe présent",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Grammaire",
+    "numeroLecon": 5,
+    "titreLecon": "L'adverbe et le groupe adverbial",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "L'adverbe",
+        "progression": [
+          {
+            "seanceProgression": "S.1",
+            "intituleProgression": "L'adverbe"
+          }
+        ],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Le comparatif et le superlatif de l'adverbe",
+        "progression": [
+          {
+            "seanceProgression": "S.3",
+            "intituleProgression": "Le comparatif et le superlatif de l'adverbe"
+          }
+        ],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Le groupe adverbial",
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": "",
+        "progression": [
+          {
+            "seanceProgression": "S.2",
+            "intituleProgression": "Le groupe adverbial"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Grammaire",
+    "numeroLecon": 6,
+    "titreLecon": "La communication",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les types de communication",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les marques de l'oral et de l'écrit",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Les registres de langue",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Les modalités du discours 1",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "Les modalités du discours 2",
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": "",
+        "progression": []
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Orthographe",
+    "numeroLecon": 1,
+    "titreLecon": "Orthographe lexicale",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "La formation de l'adjectif verbal et du participe présent de certains verbes : « adhérent/adhérant, convaincant/convainquant... »",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Orthographe",
+        "intitule": "Les homophones non homographes : « quoique/quoi que ; quelque/quel que... »",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Orthographe",
+        "intitule": "Les paronymes : « éminent/imminent ; éruption/irruption... »",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Orthographe",
+    "numeroLecon": 2,
+    "titreLecon": "Orthographe grammaticale",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "L'accord de « même, tout, tel »",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Orthographe",
+        "intitule": "L'accord de l'adjectif qualificatif : cas du masculin dans une énumération",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Orthographe",
+        "intitule": "L'accord des participes passés employés avec « avoir » et précédés de « en »",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Orthographe",
+        "intitule": "Les différents cas d'accord des verbes pronominaux",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Expression orale",
+    "numeroLecon": 1,
+    "titreLecon": "Le dialogue oral",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Expression orale",
+        "intitule": "Le dialogue oral en rapport avec un thème des contenus intégrés",
+        "progression": [],
+        "typeSupport": "theme_ou_situation",
+        "typeTexte": null,
+        "themeIntegre": "liste_10_themes"
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Expression orale",
+    "numeroLecon": 2,
+    "titreLecon": "L'exposé oral",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Expression orale",
+        "intitule": "La technique de l'exposé oral. Thème : Orientation et entrepreneuriat : des exemples d'entrepreneurs inspirants",
+        "progression": [],
+        "typeSupport": "theme_impose",
+        "typeTexte": null,
+        "themeIntegre": "orientation_entrepreneuriat"
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Expression orale",
+    "numeroLecon": 3,
+    "titreLecon": "Le débat",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Expression orale",
+        "intitule": "Participation à un débat / animation d'un débat sur un des contenus intégrés",
+        "progression": [],
+        "typeSupport": "theme_ou_situation",
+        "typeTexte": null,
+        "themeIntegre": "liste_10_themes"
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 1,
+    "titreLecon": "Le texte argumentatif",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif",
+        "progression": [
+          {
+            "trimestre": "T1",
+            "semaine": 1,
+            "seanceProgression": "S.1",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T1",
+            "semaine": 3,
+            "seanceProgression": "S.3",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T1",
+            "semaine": 4,
+            "seanceProgression": "S.4",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T1",
+            "semaine": 5,
+            "seanceProgression": "S.5",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T1",
+            "semaine": 6,
+            "seanceProgression": "S.6",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T1",
+            "semaine": 7,
+            "seanceProgression": "S.7",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T1",
+            "semaine": 9,
+            "seanceProgression": "S.9",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T1",
+            "semaine": 11,
+            "seanceProgression": "S.11",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T2",
+            "semaine": 12,
+            "seanceProgression": "S.13",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T2",
+            "semaine": 13,
+            "seanceProgression": "S.14",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T2",
+            "semaine": 16,
+            "seanceProgression": "S.17",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T2",
+            "semaine": 17,
+            "seanceProgression": "S.18",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T2",
+            "semaine": 18,
+            "seanceProgression": "S.19",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T2",
+            "semaine": 19,
+            "seanceProgression": "S.20",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T2",
+            "semaine": 20,
+            "seanceProgression": "S.21",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T2",
+            "semaine": 21,
+            "seanceProgression": "S.22",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T2",
+            "semaine": 22,
+            "seanceProgression": "S.23",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "themeIntegre": "",
+        "typeTexte": null
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif en rapport avec un thème des contenus intégrés",
+        "progression": [
+          {
+            "trimestre": "T1",
+            "semaine": 2,
+            "seanceProgression": "S.2",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) en rapport avec un thème des contenus intégrés + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "liste_10_themes",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T1",
+            "semaine": 8,
+            "seanceProgression": "S.8",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (?) en rapport avec un thème des contenus intégrés + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": null,
+            "themeIntegre": "liste_10_themes",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte; Type (1)/(2) non indiqué dans la progression : à vérifier"
+          },
+          {
+            "trimestre": "T1",
+            "semaine": 10,
+            "seanceProgression": "S.10",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (?) en rapport avec un thème des contenus intégrés + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": null,
+            "themeIntegre": "liste_10_themes",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte; Type (1)/(2) non indiqué dans la progression : à vérifier"
+          },
+          {
+            "trimestre": "T2",
+            "semaine": 14,
+            "seanceProgression": "S.15",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) en rapport avec un thème des contenus intégrés + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "liste_10_themes",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          },
+          {
+            "trimestre": "T2",
+            "semaine": 15,
+            "seanceProgression": "S.16",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) en rapport avec un thème des contenus intégrés + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "liste_10_themes",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "themeIntegre": "liste_10_themes",
+        "typeTexte": null
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 2,
+    "titreLecon": "L'article de journal",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un article de journal sur un fait dont on a été témoin",
+        "progression": [
+          {
+            "trimestre": "T3",
+            "semaine": 23,
+            "seanceProgression": "S.1",
+            "intituleProgression": "Lecture méthodique d'un article de journal (fait divers temoin) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "article_journal_temoin",
+            "themeIntegre": "",
+            "remarque": "Extrait de journal avec surtitre, titre, chapeau, corps (guide); alterner témoin/rapporté"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "article_journal_temoin",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un article de journal sur un fait dont on a été témoin",
+        "progression": [
+          {
+            "trimestre": "T3",
+            "semaine": 24,
+            "seanceProgression": "S.2",
+            "intituleProgression": "Lecture méthodique d'un article de journal (fait divers temoin) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "article_journal_temoin",
+            "themeIntegre": "",
+            "remarque": "Extrait de journal avec surtitre, titre, chapeau, corps (guide); alterner témoin/rapporté"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "article_journal_temoin",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un article de journal portant sur un fait rapporté",
+        "progression": [
+          {
+            "trimestre": "T3",
+            "semaine": 25,
+            "seanceProgression": "S.3",
+            "intituleProgression": "Lecture méthodique d'un article de journal (fait divers rapporte) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "article_journal_rapporte",
+            "themeIntegre": "",
+            "remarque": "Extrait de journal avec surtitre, titre, chapeau, corps (guide); alterner témoin/rapporté"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "article_journal_rapporte",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un article de journal portant sur un fait rapporté (contenu Life skills)",
+        "progression": [
+          {
+            "trimestre": "T3",
+            "semaine": 26,
+            "seanceProgression": "S.4",
+            "intituleProgression": "Lecture méthodique d'un article de journal (fait divers rapporte) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "article_journal_rapporte",
+            "themeIntegre": "life_skills_vih_sida",
+            "remarque": "Extrait de journal avec surtitre, titre, chapeau, corps (guide); alterner témoin/rapporté"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "article_journal_rapporte",
+        "themeIntegre": "life_skills_vih_sida"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un article de journal portant sur un fait dont on a été témoin",
+        "progression": [
+          {
+            "trimestre": "T3",
+            "semaine": 27,
+            "seanceProgression": "S.5",
+            "intituleProgression": "Lecture méthodique d'un article de journal (fait divers temoin) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "article_journal_temoin",
+            "themeIntegre": "",
+            "remarque": "Extrait de journal avec surtitre, titre, chapeau, corps (guide); alterner témoin/rapporté"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "article_journal_temoin",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 6,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un article de journal portant sur un fait rapporté",
+        "progression": [
+          {
+            "trimestre": "T3",
+            "semaine": 28,
+            "seanceProgression": "S.6",
+            "intituleProgression": "Lecture méthodique d'un article de journal (fait divers rapporte) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "article_journal_rapporte",
+            "themeIntegre": "",
+            "remarque": "Extrait de journal avec surtitre, titre, chapeau, corps (guide); alterner témoin/rapporté"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "article_journal_rapporte",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 7,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un article de journal portant sur un fait rapporté (à partir d'un thème des contenus intégrés)",
+        "progression": [
+          {
+            "trimestre": "T3",
+            "semaine": 29,
+            "seanceProgression": "S.7",
+            "intituleProgression": "Lecture méthodique d'un article de journal (fait divers rapporte) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "article_journal_rapporte",
+            "themeIntegre": "liste_10_themes",
+            "remarque": "Extrait de journal avec surtitre, titre, chapeau, corps (guide); alterner témoin/rapporté"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "article_journal_rapporte",
+        "themeIntegre": "liste_10_themes"
+      },
+      {
+        "numeroSeance": 8,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un article de journal sur un fait rapporté/dont on a été témoin",
+        "progression": [
+          {
+            "trimestre": "T3",
+            "semaine": 30,
+            "seanceProgression": "S.8",
+            "intituleProgression": "Lecture méthodique d'un article de journal (fait divers rapporte ou temoin) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "article_journal_rapporte_ou_temoin",
+            "themeIntegre": "",
+            "remarque": "Extrait de journal avec surtitre, titre, chapeau, corps (guide); alterner témoin/rapporté"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "article_journal_rapporte_ou_temoin",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 9,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un article de journal portant sur un fait rapporté/dont on a été témoin",
+        "progression": [],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "article_journal_rapporte_ou_temoin",
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 1,
+    "titreLecon": "Le texte argumentatif",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un texte argumentatif pour étayer un point de vue",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un texte argumentatif pour étayer un point de vue en rapport avec un thème des contenus intégrés",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": "liste_10_themes"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un texte argumentatif pour réfuter un point de vue",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "argumentatif_refuter",
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 2,
+    "titreLecon": "Le résumé du texte argumentatif",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un résumé du texte argumentatif (T1)",
+        "texteSupportOfficiel": "Beaucoup de personnes ne cessent de vanter les vertus du sport. Or, il nous faut reconnaître que la pratique du sport fait souvent courir à l'adolescent des dangers et des risques divers. On notera d'abord l'éventualité du surmenage. En effet, poussés par la volonté de performance et la virilité, beaucoup d'adolescents abusent de leurs forces ; outre les dommages qui en résultent pour leur santé, cette fatigue inutile a des retombées sur le travail intellectuel dont elle ralentit le rythme, surtout lorsqu'il s'agit d'émotifs ou de nerveux.\n\nC'est aussi sur le plan psychologique que des dangers surviennent. Ces adolescents, qui ne pensent qu'au sport, en font une véritable passion ; dans les journaux, ils ne lisent que les rubriques sportives. Ils ne parlent que de résultats sportifs. Ils cherchent à s'identifier aux champions à la mode, de la vie desquels ils connaissent même les épisodes les plus insignifiants. Ils se détournent de tous les problèmes importants et sérieux ; ils vivent en rêve et les stades sont leur univers. En conséquence, leurs résultats scolaires sont nuls car leur attention n'arrive pas à demeurer sur ce qu'on traite en classe.\n\nEnfin, sur le plan moral, il faut noter que « l'esprit sportif » cache parfois une attitude égoïste et il développe la vanité et même la haine contre l'adversaire. Il peut aboutir au mépris du faible, créant ainsi une société où la force du muscle est plus précieuse que celle de l'esprit.",
+        "progression": [],
+        "typeSupport": "texte_a_resumer_obligatoire",
+        "typeTexte": "resume_argumentatif",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un résumé du texte argumentatif (T2) en rapport avec un thème des contenus intégrés",
+        "texteSupportOfficiel": "L'autoroute électronique ne cesse de faire de nouveaux adeptes. Chaque jour, des milliers de personnes s'inscrivent sur Google, Twitter, MSN, Gmail, Facebook… Aussi, cette voie gagne en popularité. Une réticence nous parait excessive et totalement injustifiée.\n\nD'abord, l'internet est un instrument de recherches remarquable d'une très grande performance. En effet, en quelques minutes seulement, l'utilisateur tout en étant chez lui accède à des banques de données parmi les plus riches qui soient, des encyclopédies en passant des dictionnaires les plus variés. L'internet nous ouvre un champ très vastes d'informations et de formation. La possibilité nous est offerte, avec les fichiers PDF par exemple, de consulter des livres et de les télécharger car il existe également des e-kiosques.\n\nEnsuite, la toile est un outil de communication d'une rare efficacité. Grace au courrier électronique, le monde est devenu un petit village. Ainsi des personnes se trouvant dans des endroits diamétralement opposés du globe peuvent communiquer rapidement et facilement.\n\nCependant, certains utilisateurs notamment les jeunes abusent des plaisirs que procure la navigation sur internet. Ils y consacrent un peu plus de temps que le souhaiteraient leurs parents, négligeant ainsi d'autres obligations ou activités. Il est difficile, voire impossible de contrôler et de surveiller la pratique d'internet chez les jeunes. Car ils sont cités parmi les premiers activistes de la cybercriminalité.\n\nEn somme, l'inforoute constitue un merveilleux outil d'information et de communication pourvu que les jeunes l'utilisent avec modération en profitant des bienfaits qu'il est censé procurer.",
+        "progression": [],
+        "typeSupport": "texte_a_resumer_obligatoire",
+        "typeTexte": "resume_argumentatif",
+        "themeIntegre": "liste_10_themes"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un résumé du texte argumentatif (T3)",
+        "texteSupportOfficiel": "La finalité de l'apprentissage scolaire est d'acquérir des savoirs. Cependant, il s'agit surtout, de permettre une insertion réussie de l'individu dans son environnement social et économique immédiat. Ensuite, il est important que cela exige de lui des qualités humaines et des aptitudes à vivre en société.\n\nA travers des structures de la vie collective comme les clubs et associations, l'animation extrascolaire, les coopératives, les sports, le théâtre et la musique, l'école entreprend de développer la personnalité de l'être humain dans toutes ses dimensions. Ces activités constituent d'excellents moments d'échanges et d'auto-formation. Elles contribuent aussi à développer puissamment la personnalité de l'enfant. En définitive, il n'y a pas de cloison étanche entre les aspects intellectuels et les aspects pratiques et humains de la formation, mais plutôt une complémentarité.\n\nC'est pourquoi l'élève qui veut réussir ne devra pas dédaigner ces activités en se réfugiant uniquement dans ses livres et cahiers. Il participera pleinement à ces activités d'éveil qui favorisent la réalisation et l'épanouissement de la personnalité. L'apprentissage interactif de la vie en groupe, la prise de parole en public, le sens de l'initiative, le sens de la responsabilité et l'aptitude à obéir et à commander.\n\nDans les lycées et universités, les élèves et étudiants devraient être familiarisés à la vie associative à travers la pratique des activités scolaires, culturelles, coopératives et sportives sous la supervision des adultes. Ces activités participent activement et pleinement à la formation et à la maturation des élèves et étudiants. En ce sens qu'elles contribuent à développer chez eux les qualités et vertus attendues d'un citoyen autonome, responsable et au service de son milieu.",
+        "progression": [],
+        "typeSupport": "texte_a_resumer_obligatoire",
+        "typeTexte": "resume_argumentatif",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un résumé du texte argumentatif (T4) en rapport avec un thème des contenus intégrés",
+        "texteSupportOfficiel": "La publicité est dangereuse. Elle est pleine de supercherie habilement camouflées et sa force de persuasion est si grande que ses effets sont mal perçus du public, même quand il en est victime. Il convient de la décrire comme elle le mérite.\n\nD'abord, elle incite aveuglément à l'achat. A cause d'un slogan astucieux ou d'une affiche habile, le consommateur est amené à faire un achat qu'il n'avait pas prévu. Souvent, cet achat dépasse ses moyens et l'oblige à s'endetter.\n\nEn outre, la publicité exagère quand elle loue les qualités d'un article. A force de superlatifs, de mise en scène ingénieuse, de témoignages artificiels, elle finit par convaincre le consommateur qu'un article est de grande qualité. L'achat de cet article entraine souvent la déception. Le consommateur est trompé. La publicité l'a insidieusement conditionné pour mieux le duper.\n\nCette publicité est de plus encombrante. Les émissions radiophoniques sont continuellement interrompues par la diffusion de pages publicitaires. Les hebdomadaires de presse écrite comptent autant de pages publicitaires que d'articles et de reportages. A la longue, cette présence encombrante de la publicité agace ; et on ne peut s'y soustraire puisqu'elle est partout.\n\nEnfin, la publicité est souvent impudique quand elle n'est pas immorale. Les murs des villes sont couverts d'affiches d'un goût douteux et de nombreuses publicités valorisent excessivement le profit, le confort et la facilité.\n\nJe pense donc qu'il y a lieu de dénoncer vigoureusement les supercheries de la publicité. La meilleure façon d'y parvenir est encore d'éclairer le consommateur sur les qualités et les défauts réels d'un article.",
+        "progression": [],
+        "typeSupport": "texte_a_resumer_obligatoire",
+        "typeTexte": "resume_argumentatif",
+        "themeIntegre": "liste_10_themes"
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "3ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 3,
+    "titreLecon": "L'article de journal",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un article de journal sur un fait dont on a été témoin",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "article_journal_temoin",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un article de journal sur un fait divers rapporté",
+        "progression": [
+          {
+            "seanceProgression": "S.2",
+            "intituleProgression": "Rédiger un article de journal sur un fait divers rapporté"
+          }
+        ],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "article_journal_rapporte",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un article de journal sur un fait dont on a été témoin ou sur un fait divers rapporté",
+        "progression": [
+          {
+            "seanceProgression": "S.3",
+            "intituleProgression": "Rédiger un article de journal (témoin / fait divers rapporté)"
+          }
+        ],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "article_journal_temoin_ou_rapporte",
+        "themeIntegre": ""
+      }
+    ]
+  }
+]
