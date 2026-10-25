@@ -1189,12 +1189,13 @@ function regexExactInsensible(str) {
   return new RegExp('^' + echappe + '$', 'i');
 }
 
-// Catalogue : seule la 3e (matrice intégrée) est normalisée -- « 3e », « 3eme »
-// et « 3ème » désignent la même classe, la forme du catalogue étant « 3ème ».
-// Les autres niveaux sont laissés tels quels.
+// Catalogue : seules la 3e et la 4e (matrices intégrées) sont normalisées --
+// « 3e », « 3eme » et « 3ème » désignent la même classe, la forme du catalogue
+// étant « 3ème » (idem « 4ème »). Les autres niveaux sont laissés tels quels.
 function normaliserClasseCatalogue(classe) {
   const c = String(classe || '').trim();
-  return /^3(?:e|eme|ème)$/i.test(c) ? '3ème' : c;
+  const m = c.match(/^([34])(?:e|eme|ème)$/i);
+  return m ? `${m[1]}ème` : c;
 }
 
 // Rang d'enseignement d'une séance = plus petit numéro 'S.n' de ses
@@ -1222,10 +1223,11 @@ function trierSeancesParProgression(seances) {
 }
 
 // Menu « thème des contenus intégrés » (guide d'exécution 3e, p.63) : liste
-// lue dans catalogue/themes_integres_<niveau>.json (3e uniquement pour l'instant).
+// lue dans catalogue/themes_integres_3e.json. La matrice 4ème désigne la même
+// « liste_10_themes » : la liste 3e sert aussi à la 4ème (à confirmer par l'enseignant).
 const CACHE_THEMES_INTEGRES = new Map();
 function chargerThemesIntegres(classe) {
-  if (normaliserClasseCatalogue(classe) !== '3ème') return null;
+  if (!['3ème', '4ème'].includes(normaliserClasseCatalogue(classe))) return null;
   if (!CACHE_THEMES_INTEGRES.has('3e')) {
     let liste = null;
     try { liste = JSON.parse(fs.readFileSync(path.join(__dirname, 'catalogue', 'themes_integres_3e.json'), 'utf8')); } catch (e) { liste = null; }
@@ -1241,10 +1243,16 @@ function libelleThemeIntegre(classe, idTheme) {
 
 // L'enseignant peut demander à ProfCI de rédiger lui-même le texte support
 // (bouton explicite, « à vérifier ») uniquement pour les textes NON littéraires.
-const TYPES_TEXTE_PROFCI_AUTORISES = ['texte argumentatif', 'article de journal'];
-function profCIPeutRedigerLeTexte(texteCible) {
+// Liste par classe (confirmée par l'enseignant) ; une classe absente = aucun bouton.
+const TYPES_TEXTE_PROFCI_AUTORISES = {
+  '3ème': ['texte argumentatif', 'article de journal'],
+  '4ème': ['texte explicatif', 'dialogue argumentatif']
+};
+function profCIPeutRedigerLeTexte(texteCible, classe) {
+  const autorises = TYPES_TEXTE_PROFCI_AUTORISES[normaliserClasseCatalogue(classe)];
+  if (!autorises) return false;
   const ref = trouverReferentielTypeTexte(texteCible);
-  return !!ref && TYPES_TEXTE_PROFCI_AUTORISES.includes(ref.typeTexte);
+  return !!ref && autorises.includes(ref.typeTexte);
 }
 const MENTION_TEXTE_PROFCI = 'Texte support rédigé par ProfCI — à vérifier avant utilisation en classe.';
 function injecterMentionTexteGenereParProfCI(contenuHTML) {
@@ -1502,7 +1510,7 @@ async function listerLeconsOfficielles({ discipline, classe, activite }) {
             typeSupport: s.typeSupport || undefined,
             themeIntegre: s.themeIntegre || undefined,
             texteProfCIAutorise: s.typeSupport === 'texte_obligatoire'
-              ? profCIPeutRedigerLeTexte(`${l.titreLecon} ${s.intitule}`)
+              ? profCIPeutRedigerLeTexte(`${l.titreLecon} ${s.intitule}`, classe)
               : undefined
           };
           if (s.optionsChoix && s.optionsChoix.length) {
@@ -12504,7 +12512,7 @@ ${tableDeroulement}
         }
         const typeSupportSeance = leconOfficiellePourReferentiel ? (leconOfficiellePourReferentiel.seance.typeSupport || '') : '';
         if (typeSupportSeance === 'texte_obligatoire' && !texteSupport) {
-          const peutRediger = profCIPeutRedigerLeTexte(texteCibleReferentiel);
+          const peutRediger = profCIPeutRedigerLeTexte(texteCibleReferentiel, classe);
           if (String(texteGenereParProfCI) === 'true' && peutRediger) {
             texteGenereParProfCIEffectif = true;
           } else {
