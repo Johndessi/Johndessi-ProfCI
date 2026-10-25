@@ -298,7 +298,15 @@
         "progression": [],
         "typeSupport": "aucun_requis_corpus_catalogue",
         "typeTexte": null,
-        "themeIntegre": ""
+        "themeIntegre": "",
+        "vocabulaireReference": {
+          "adjectif verbal / participe présent": [
+            "adhérent",
+            "adhérant",
+            "convaincant",
+            "convainquant"
+          ]
+        }
       },
       {
         "numeroSeance": 2,
@@ -307,7 +315,15 @@
         "progression": [],
         "typeSupport": "aucun_requis_corpus_catalogue",
         "typeTexte": null,
-        "themeIntegre": ""
+        "themeIntegre": "",
+        "vocabulaireReference": {
+          "homophones non homographes": [
+            "quoique",
+            "quoi que",
+            "quelque",
+            "quel que"
+          ]
+        }
       },
       {
         "numeroSeance": 3,
@@ -316,7 +332,15 @@
         "progression": [],
         "typeSupport": "aucun_requis_corpus_catalogue",
         "typeTexte": null,
-        "themeIntegre": ""
+        "themeIntegre": "",
+        "vocabulaireReference": {
+          "paronymes": [
+            "éminent",
+            "imminent",
+            "éruption",
+            "irruption"
+          ]
+        }
       }
     ]
   },
@@ -429,7 +453,7 @@
       {
         "numeroSeance": 1,
         "activite": "Lecture méthodique",
-        "intitule": "Lecture méthodique d'un texte argumentatif",
+        "intitule": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
         "progression": [
           {
             "trimestre": "T1",
@@ -440,176 +464,16 @@
             "typeTexte": "argumentatif_etayer",
             "themeIntegre": "",
             "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T1",
-            "semaine": 3,
-            "seanceProgression": "S.3",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_etayer",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T1",
-            "semaine": 4,
-            "seanceProgression": "S.4",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_etayer",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T1",
-            "semaine": 5,
-            "seanceProgression": "S.5",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_etayer",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T1",
-            "semaine": 6,
-            "seanceProgression": "S.6",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_refuter",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T1",
-            "semaine": 7,
-            "seanceProgression": "S.7",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_refuter",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T1",
-            "semaine": 9,
-            "seanceProgression": "S.9",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_refuter",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T1",
-            "semaine": 11,
-            "seanceProgression": "S.11",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_refuter",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T2",
-            "semaine": 12,
-            "seanceProgression": "S.13",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_etayer",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T2",
-            "semaine": 13,
-            "seanceProgression": "S.14",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_etayer",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T2",
-            "semaine": 16,
-            "seanceProgression": "S.17",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_refuter",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T2",
-            "semaine": 17,
-            "seanceProgression": "S.18",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_refuter",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T2",
-            "semaine": 18,
-            "seanceProgression": "S.19",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_refuter",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T2",
-            "semaine": 19,
-            "seanceProgression": "S.20",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_etayer",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T2",
-            "semaine": 20,
-            "seanceProgression": "S.21",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_etayer",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T2",
-            "semaine": 21,
-            "seanceProgression": "S.22",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_refuter",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
-          {
-            "trimestre": "T2",
-            "semaine": 22,
-            "seanceProgression": "S.23",
-            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
-            "duree": "1h",
-            "typeTexte": "argumentatif_refuter",
-            "themeIntegre": "",
-            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
           }
         ],
         "typeSupport": "texte_obligatoire",
-        "themeIntegre": "",
-        "typeTexte": null
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": ""
       },
       {
         "numeroSeance": 2,
         "activite": "Lecture méthodique",
-        "intitule": "Lecture méthodique d'un texte argumentatif en rapport avec un thème des contenus intégrés",
+        "intitule": "Lecture méthodique d'un texte argumentatif (1) en rapport avec un thème des contenus intégrés + Exploitation de texte",
         "progression": [
           {
             "trimestre": "T1",
@@ -620,7 +484,117 @@
             "typeTexte": "argumentatif_etayer",
             "themeIntegre": "liste_10_themes",
             "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": "liste_10_themes"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T1",
+            "semaine": 3,
+            "seanceProgression": "S.3",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T1",
+            "semaine": 4,
+            "seanceProgression": "S.4",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T1",
+            "semaine": 5,
+            "seanceProgression": "S.5",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 6,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T1",
+            "semaine": 6,
+            "seanceProgression": "S.6",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_refuter",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 7,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T1",
+            "semaine": 7,
+            "seanceProgression": "S.7",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_refuter",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 8,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif en rapport avec un thème des contenus intégrés + Exploitation de texte",
+        "progression": [
           {
             "trimestre": "T1",
             "semaine": 8,
@@ -630,7 +604,37 @@
             "typeTexte": null,
             "themeIntegre": "liste_10_themes",
             "remarque": "La LM et l'exploitation de texte portent sur le même texte; Type (1)/(2) non indiqué dans la progression : à vérifier"
-          },
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": null,
+        "themeIntegre": "liste_10_themes"
+      },
+      {
+        "numeroSeance": 9,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T1",
+            "semaine": 9,
+            "seanceProgression": "S.9",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_refuter",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 10,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif en rapport avec un thème des contenus intégrés + Exploitation de texte",
+        "progression": [
           {
             "trimestre": "T1",
             "semaine": 10,
@@ -640,7 +644,77 @@
             "typeTexte": null,
             "themeIntegre": "liste_10_themes",
             "remarque": "La LM et l'exploitation de texte portent sur le même texte; Type (1)/(2) non indiqué dans la progression : à vérifier"
-          },
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": null,
+        "themeIntegre": "liste_10_themes"
+      },
+      {
+        "numeroSeance": 11,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T1",
+            "semaine": 11,
+            "seanceProgression": "S.11",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_refuter",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 13,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T2",
+            "semaine": 12,
+            "seanceProgression": "S.13",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 14,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T2",
+            "semaine": 13,
+            "seanceProgression": "S.14",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 15,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (1) en rapport avec un thème des contenus intégrés + Exploitation de texte",
+        "progression": [
           {
             "trimestre": "T2",
             "semaine": 14,
@@ -650,7 +724,17 @@
             "typeTexte": "argumentatif_etayer",
             "themeIntegre": "liste_10_themes",
             "remarque": "La LM et l'exploitation de texte portent sur le même texte"
-          },
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": "liste_10_themes"
+      },
+      {
+        "numeroSeance": 16,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (1) en rapport avec un thème des contenus intégrés + Exploitation de texte",
+        "progression": [
           {
             "trimestre": "T2",
             "semaine": 15,
@@ -663,8 +747,148 @@
           }
         ],
         "typeSupport": "texte_obligatoire",
-        "themeIntegre": "liste_10_themes",
-        "typeTexte": null
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": "liste_10_themes"
+      },
+      {
+        "numeroSeance": 17,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T2",
+            "semaine": 16,
+            "seanceProgression": "S.17",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_refuter",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 18,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T2",
+            "semaine": 17,
+            "seanceProgression": "S.18",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_refuter",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 19,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T2",
+            "semaine": 18,
+            "seanceProgression": "S.19",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_refuter",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 20,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T2",
+            "semaine": 19,
+            "seanceProgression": "S.20",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 21,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T2",
+            "semaine": 20,
+            "seanceProgression": "S.21",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (1) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_etayer",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_etayer",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 22,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T2",
+            "semaine": 21,
+            "seanceProgression": "S.22",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_refuter",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 23,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+        "progression": [
+          {
+            "trimestre": "T2",
+            "semaine": 22,
+            "seanceProgression": "S.23",
+            "intituleProgression": "Lecture méthodique d'un texte argumentatif (2) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "argumentatif_refuter",
+            "themeIntegre": "",
+            "remarque": "La LM et l'exploitation de texte portent sur le même texte"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "argumentatif_refuter",
+        "themeIntegre": ""
       }
     ]
   },
