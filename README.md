@@ -15,7 +15,8 @@ les autres catalogues (importé par `POST /api/admin/lecons-officielles/seed`), 
 - `typeSupport` : ce que la séance exige de l'enseignant. `texte_obligatoire` (lecture méthodique) :
   génération refusée sans texte collé/importé, sauf bouton « Faire rédiger un texte par ProfCI (à vérifier) »
   (réservé, selon la classe, aux textes non littéraires : 3ème = texte argumentatif et article de journal ; 4ème = texte explicatif
-  et dialogue argumentatif ; 5ème = description d'un lieu animé seulement (ni portrait ni poème) ; mention « à vérifier » dans la fiche) ;
+  et dialogue argumentatif ; 5ème = description d'un lieu animé seulement (ni portrait ni poème) ;
+  6ème = lettre personnelle et description (objet familier, lieu non animé), jamais le récit ; mention « à vérifier » dans la fiche) ;
   `texte_a_resumer_obligatoire` (résumés : texte officiel du catalogue ou texte fourni) ; les autres valeurs
   ne bloquent pas.
 - `typeTexte` : famille de texte quand elle est univoque (sinon vide ; le détail étayer/réfuter est dans `progression`).
@@ -46,6 +47,20 @@ et `lecons_officielles_5e_4e_3e.json` (supprimés). Même format que la 3ème/4�
 La séance « Le compte rendu de lecture » porte `typeSupport` = `oeuvre_lue_titre_auteur_obligatoires` : le formulaire demande le
 titre et l'auteur de l'œuvre lue (pas de texte à coller) et la fiche suit la structure du Programme éducatif 5ème (pp. 16 et
 41-42) ; sans titre ni auteur, la génération est refusée avant tout appel au modèle.
+
+## Catalogue 6e (matrice de progression)
+
+`lecons_officielles_6e.json` regroupe toute la 6ème et remplace `lecons_officielles_6e_grammaire_orthographe_oral.json` et
+`lecons_officielles_6e_lecture_exploitation_expression_ecrite.json` (supprimés). Mêmes champs que les autres niveaux ; liste des
+10 thèmes = celle de la 3ème. Restent volontairement inchangés, en attente de vérification dans le PDF de la progression :
+Orthographe lexicale (toute la leçon), Orthographe grammaticale S3 et Lecture méthodique « La description » S4.
+
+## Contrôle des valeurs de classe en base (lecture seule)
+
+`GET /api/admin/classes-catalogue?niveaux=4,5,6` (en-tête `x-admin-key`, aucune écriture) compte, pour les leçons officielles
+et les autres collections, les documents par valeur du champ `classe` (« 4e », « 4ème »...), et liste pour les leçons
+officielles les clés d'import (discipline, classe normalisée, activité, numéro de leçon) portées par plusieurs documents :
+ce qu'un ré-import dupliquerait. Sans paramètre : niveaux 3 à 6. `GET /api/admin/classes-3e` ne couvre que la 3ème.
 
 ## Service d'aperçu : import des catalogues au démarrage
 

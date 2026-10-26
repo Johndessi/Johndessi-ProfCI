@@ -1189,12 +1189,12 @@ function regexExactInsensible(str) {
   return new RegExp('^' + echappe + '$', 'i');
 }
 
-// Catalogue : seules la 3e, la 4e et la 5e (matrices intégrées) sont normalisées --
+// Catalogue : les classes du collège (matrices intégrées) sont normalisées --
 // « 3e », « 3eme » et « 3ème » désignent la même classe, la forme du catalogue
-// étant « 3ème » (idem 4ème, 5ème). Les autres niveaux sont laissés tels quels.
+// étant « 3ème » (idem 4ème, 5ème, 6ème). Les autres niveaux sont laissés tels quels.
 function normaliserClasseCatalogue(classe) {
   const c = String(classe || '').trim();
-  const m = c.match(/^([345])(?:e|eme|ème)$/i);
+  const m = c.match(/^([3-6])(?:e|eme|ème)$/i);
   return m ? `${m[1]}ème` : c;
 }
 
@@ -1223,11 +1223,11 @@ function trierSeancesParProgression(seances) {
 }
 
 // Menu « thème des contenus intégrés » (guide d'exécution 3e, p.63) : liste
-// lue dans catalogue/themes_integres_3e.json. Les matrices 4ème et 5ème désignent la même
-// « liste_10_themes » : la liste 3e sert aussi à la 4ème (confirmé par l'enseignant) et à la 5ème (à confirmer).
+// lue dans catalogue/themes_integres_3e.json. Les matrices 4ème, 5ème et 6ème désignent la même
+// « liste_10_themes » : la liste 3e sert aussi aux trois autres classes (confirmé par l'enseignant).
 const CACHE_THEMES_INTEGRES = new Map();
 function chargerThemesIntegres(classe) {
-  if (!['3ème', '4ème', '5ème'].includes(normaliserClasseCatalogue(classe))) return null;
+  if (!['3ème', '4ème', '5ème', '6ème'].includes(normaliserClasseCatalogue(classe))) return null;
   if (!CACHE_THEMES_INTEGRES.has('3e')) {
     let liste = null;
     try { liste = JSON.parse(fs.readFileSync(path.join(__dirname, 'catalogue', 'themes_integres_3e.json'), 'utf8')); } catch (e) { liste = null; }
@@ -1249,7 +1249,9 @@ function libelleThemeIntegre(classe, idTheme) {
 const TYPES_TEXTE_PROFCI_AUTORISES = {
   '3ème': [{ type: 'texte argumentatif' }, { type: 'article de journal' }],
   '4ème': [{ type: 'texte explicatif' }, { type: 'dialogue argumentatif' }],
-  '5ème': [{ type: 'texte descriptif (objet)', contient: 'lieu anime' }]
+  '5ème': [{ type: 'texte descriptif (objet)', contient: 'lieu anime' }],
+  // 6ème : lettre personnelle, description d'un objet familier ou d'un lieu non animé ; jamais le récit.
+  '6ème': [{ type: 'lettre personnelle' }, { type: 'texte descriptif (objet)' }]
 };
 function profCIPeutRedigerLeTexte(texteCible, classe) {
   const autorises = TYPES_TEXTE_PROFCI_AUTORISES[normaliserClasseCatalogue(classe)];
@@ -14332,6 +14334,62 @@ app.get('/api/admin/classes-3e', verifierCleAdmin, async (req, res) => {
   }
 });
 
+// Lecture seule (aucune écriture) : pour les classes du collège demandées (par défaut 3 à 6),
+// combien de documents de chaque collection portent chaque VALEUR du champ classe (« 4e »,
+// « 4ème »...), et, pour les leçons officielles, quelles clés d'import (discipline, classe
+// normalisée, activité, numéro de leçon) sont portées par plusieurs documents -- ce qu'un
+// ré-import créerait en doublon ou laisserait orphelin. Exemple : ?niveaux=4,5,6
+function analyserClassesCatalogue(documents, niveaux) {
+  const parForme = new Map();
+  const parCle = new Map();
+  for (const d of documents) {
+    parForme.set(d.classe, (parForme.get(d.classe) || 0) + 1);
+    const classeNorm = normaliserClasseCatalogue(d.classe);
+    const cle = [d.discipline, classeNorm, d.activite, d.numeroLecon].join('|');
+    if (!parCle.has(cle)) parCle.set(cle, []);
+    parCle.get(cle).push(d);
+  }
+  const formes = Array.from(parForme, ([classe, n]) => ({ classe, n })).sort((a, b) => a.classe.localeCompare(b.classe));
+  const conflits = [];
+  for (const [cle, docs] of parCle) {
+    if (docs.length < 2) continue;
+    const [discipline, classe, activite, numeroLecon] = cle.split('|');
+    conflits.push({
+      discipline, classe, activite, numeroLecon: Number(numeroLecon),
+      documents: docs.map((d) => ({ _id: String(d._id), classe: d.classe, titreLecon: d.titreLecon, nbSeances: (d.seances || []).length }))
+    });
+  }
+  return {
+    niveaux,
+    formes,
+    total: documents.length,
+    aNormaliser: documents.filter((d) => d.classe !== normaliserClasseCatalogue(d.classe)).length,
+    conflits
+  };
+}
+
+app.get('/api/admin/classes-catalogue', verifierCleAdmin, async (req, res) => {
+  try {
+    const niveaux = String(req.query.niveaux || '3,4,5,6').split(',').map((n) => n.trim()).filter((n) => /^[3-6]$/.test(n));
+    if (!niveaux.length) return res.status(400).json({ error: 'niveaux : chiffres de 3 à 6 séparés par des virgules' });
+    const filtre = { classe: { $regex: `^(${niveaux.join('|')})`, $options: 'i' } };
+    const leconsOfficielles = await LeconOfficielleDPFC.find(filtre).select('discipline classe activite numeroLecon titreLecon seances').lean();
+    const resultat = { leconsOfficielles: analyserClassesCatalogue(leconsOfficielles, niveaux) };
+    const autres = { competencesDPFC: CompetenceDPFC, competencesParActivite: CompetenceParActivite, progressions: ProgressionLecon, fiches: Fiche };
+    for (const [nom, modele] of Object.entries(autres)) {
+      const groupes = await modele.aggregate([
+        { $match: filtre },
+        { $group: { _id: '$classe', n: { $sum: 1 } } },
+        { $sort: { _id: 1 } }
+      ]);
+      resultat[nom] = { formes: groupes.map((g) => ({ classe: g._id, n: g.n })), total: groupes.reduce((a, g) => a + g.n, 0) };
+    }
+    res.json({ success: true, lectureSeule: true, resultat });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/admin/lecons-officielles/brut', verifierCleAdmin, async (req, res) => {
   try {
     const { discipline, classe, activite, numeroLecon } = req.query;
@@ -14513,6 +14571,6 @@ module.exports = {
   appliquerMiseEnFormeCompacteModeleLot14, genererDocxDepuisHtml, genererPdfDepuisHtml,
   normaliserTexte, estReferenceDePassageLot14b, verifierGuillemetsLot14b, detecterLibelleRecopieLot14b,
   extraireTextePassageLot14b, minusculeArticleInitialLot14b, preremplirCiblesLot14b,
-  normaliserClasseCatalogue, trierSeancesParProgression, detecterDevoirOuCompteRendu,
+  normaliserClasseCatalogue, analyserClassesCatalogue, trierSeancesParProgression, detecterDevoirOuCompteRendu,
   profCIPeutRedigerLeTexte, injecterMentionTexteGenereParProfCI, libelleThemeIntegre, listerLeconsOfficielles
 };
