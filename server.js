@@ -14057,6 +14057,68 @@ app.put('/api/admin/fiche/:id', verifierCleAdmin, async (req, res) => {
 // ne renvoie qu'une projection restreinte pour l'UI enseignant, insuffisante
 // pour vérifier qu'un champ interne comme vocabulaireReference a bien été
 // persisté après un seed.
+// Contrôle admin en LECTURE SEULE (aucune écriture) avant un ré-import des catalogues du
+// collège : pour les classes demandées (par défaut 3 à 6), combien de documents de chaque
+// collection portent chaque VALEUR du champ classe (« 4e », « 4ème »...), et, pour les
+// leçons officielles, quelles clés d'import (discipline, classe normalisée, activité, numéro
+// de leçon) sont portées par plusieurs documents -- ce qu'un ré-import dupliquerait ou
+// laisserait orphelin. Exemple : GET /api/admin/classes-catalogue?niveaux=4,5,6
+function normaliserClasseCollegeControle(classe) {
+  const c = String(classe || '').trim();
+  const m = c.match(/^([3-6])(?:e|eme|ème)$/i);
+  return m ? `${m[1]}ème` : c;
+}
+
+function analyserClassesCatalogue(documents, niveaux) {
+  const parForme = new Map();
+  const parCle = new Map();
+  for (const d of documents) {
+    parForme.set(d.classe, (parForme.get(d.classe) || 0) + 1);
+    const cle = [d.discipline, normaliserClasseCollegeControle(d.classe), d.activite, d.numeroLecon].join('|');
+    if (!parCle.has(cle)) parCle.set(cle, []);
+    parCle.get(cle).push(d);
+  }
+  const formes = Array.from(parForme, ([classe, n]) => ({ classe, n })).sort((a, b) => String(a.classe).localeCompare(String(b.classe)));
+  const conflits = [];
+  for (const [cle, docs] of parCle) {
+    if (docs.length < 2) continue;
+    const [discipline, classe, activite, numeroLecon] = cle.split('|');
+    conflits.push({
+      discipline, classe, activite, numeroLecon: Number(numeroLecon),
+      documents: docs.map((d) => ({ _id: String(d._id), classe: d.classe, titreLecon: d.titreLecon, nbSeances: (d.seances || []).length }))
+    });
+  }
+  return {
+    niveaux,
+    formes,
+    total: documents.length,
+    aNormaliser: documents.filter((d) => d.classe !== normaliserClasseCollegeControle(d.classe)).length,
+    conflits
+  };
+}
+
+app.get('/api/admin/classes-catalogue', verifierCleAdmin, async (req, res) => {
+  try {
+    const niveaux = String(req.query.niveaux || '3,4,5,6').split(',').map((n) => n.trim()).filter((n) => /^[3-6]$/.test(n));
+    if (!niveaux.length) return res.status(400).json({ error: 'niveaux : chiffres de 3 à 6 séparés par des virgules' });
+    const filtre = { classe: { $regex: `^(${niveaux.join('|')})`, $options: 'i' } };
+    const leconsOfficielles = await LeconOfficielleDPFC.find(filtre).select('discipline classe activite numeroLecon titreLecon seances').lean();
+    const resultat = { leconsOfficielles: analyserClassesCatalogue(leconsOfficielles, niveaux) };
+    const autres = { competencesDPFC: CompetenceDPFC, competencesParActivite: CompetenceParActivite, progressions: ProgressionLecon, fiches: Fiche };
+    for (const [nom, modele] of Object.entries(autres)) {
+      const groupes = await modele.aggregate([
+        { $match: filtre },
+        { $group: { _id: '$classe', n: { $sum: 1 } } },
+        { $sort: { _id: 1 } }
+      ]);
+      resultat[nom] = { formes: groupes.map((g) => ({ classe: g._id, n: g.n })), total: groupes.reduce((acc, g) => acc + g.n, 0) };
+    }
+    res.json({ success: true, lectureSeule: true, resultat });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/admin/lecons-officielles/brut', verifierCleAdmin, async (req, res) => {
   try {
     const { discipline, classe, activite, numeroLecon } = req.query;
@@ -14189,5 +14251,6 @@ module.exports = {
   simplifierTracesPourModeleLot14, construireTableauVerificationLot14,
   appliquerMiseEnFormeCompacteModeleLot14, genererDocxDepuisHtml, genererPdfDepuisHtml,
   normaliserTexte, estReferenceDePassageLot14b, verifierGuillemetsLot14b, detecterLibelleRecopieLot14b,
-  extraireTextePassageLot14b, minusculeArticleInitialLot14b, preremplirCiblesLot14b
+  extraireTextePassageLot14b, minusculeArticleInitialLot14b, preremplirCiblesLot14b,
+  analyserClassesCatalogue
 };
