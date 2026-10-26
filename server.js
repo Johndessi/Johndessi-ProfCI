@@ -1189,12 +1189,12 @@ function regexExactInsensible(str) {
   return new RegExp('^' + echappe + '$', 'i');
 }
 
-// Catalogue : seules la 3e et la 4e (matrices intégrées) sont normalisées --
+// Catalogue : seules la 3e, la 4e et la 5e (matrices intégrées) sont normalisées --
 // « 3e », « 3eme » et « 3ème » désignent la même classe, la forme du catalogue
-// étant « 3ème » (idem « 4ème »). Les autres niveaux sont laissés tels quels.
+// étant « 3ème » (idem 4ème, 5ème). Les autres niveaux sont laissés tels quels.
 function normaliserClasseCatalogue(classe) {
   const c = String(classe || '').trim();
-  const m = c.match(/^([34])(?:e|eme|ème)$/i);
+  const m = c.match(/^([345])(?:e|eme|ème)$/i);
   return m ? `${m[1]}ème` : c;
 }
 
@@ -1223,11 +1223,11 @@ function trierSeancesParProgression(seances) {
 }
 
 // Menu « thème des contenus intégrés » (guide d'exécution 3e, p.63) : liste
-// lue dans catalogue/themes_integres_3e.json. La matrice 4ème désigne la même
-// « liste_10_themes » : la liste 3e sert aussi à la 4ème (à confirmer par l'enseignant).
+// lue dans catalogue/themes_integres_3e.json. Les matrices 4ème et 5ème désignent la même
+// « liste_10_themes » : la liste 3e sert aussi à la 4ème (confirmé par l'enseignant) et à la 5ème (à confirmer).
 const CACHE_THEMES_INTEGRES = new Map();
 function chargerThemesIntegres(classe) {
-  if (!['3ème', '4ème'].includes(normaliserClasseCatalogue(classe))) return null;
+  if (!['3ème', '4ème', '5ème'].includes(normaliserClasseCatalogue(classe))) return null;
   if (!CACHE_THEMES_INTEGRES.has('3e')) {
     let liste = null;
     try { liste = JSON.parse(fs.readFileSync(path.join(__dirname, 'catalogue', 'themes_integres_3e.json'), 'utf8')); } catch (e) { liste = null; }
@@ -1244,15 +1244,20 @@ function libelleThemeIntegre(classe, idTheme) {
 // L'enseignant peut demander à ProfCI de rédiger lui-même le texte support
 // (bouton explicite, « à vérifier ») uniquement pour les textes NON littéraires.
 // Liste par classe (confirmée par l'enseignant) ; une classe absente = aucun bouton.
+// Une entrée peut ajouter `contient` : le texte visé doit aussi contenir ce libellé
+// (5ème : « texte descriptif » seulement pour le lieu animé).
 const TYPES_TEXTE_PROFCI_AUTORISES = {
-  '3ème': ['texte argumentatif', 'article de journal'],
-  '4ème': ['texte explicatif', 'dialogue argumentatif']
+  '3ème': [{ type: 'texte argumentatif' }, { type: 'article de journal' }],
+  '4ème': [{ type: 'texte explicatif' }, { type: 'dialogue argumentatif' }],
+  '5ème': [{ type: 'texte descriptif (objet)', contient: 'lieu anime' }]
 };
 function profCIPeutRedigerLeTexte(texteCible, classe) {
   const autorises = TYPES_TEXTE_PROFCI_AUTORISES[normaliserClasseCatalogue(classe)];
   if (!autorises) return false;
   const ref = trouverReferentielTypeTexte(texteCible);
-  return !!ref && autorises.includes(ref.typeTexte);
+  if (!ref) return false;
+  const cible = normaliserTexte(texteCible);
+  return autorises.some((a) => a.type === ref.typeTexte && (!a.contient || cible.includes(a.contient)));
 }
 const MENTION_TEXTE_PROFCI = 'Texte support rédigé par ProfCI — à vérifier avant utilisation en classe.';
 function injecterMentionTexteGenereParProfCI(contenuHTML) {
@@ -4972,6 +4977,60 @@ DÉVELOPPEMENT — utilise OBLIGATOIREMENT les moments suivants, chacun dans sa 
    V. RÉDACTION COLLECTIVE — élaboration collective, à l'oral puis à l'écrit, d'un texte modèle à partir du plan Introduction/Développement/Conclusion ci-dessus.
 
 ÉVALUATION (ligne distincte du tableau DÉROULEMENT) : propose une SITUATION NOUVELLE, non traitée en classe (sujet différent de celui exploité en développement), demandant à l'élève de rédiger SEUL un texte du même genre en réinvestissant la définition, la structure et les outils de la langue vus plus haut.`;
+}
+
+// Compte rendu de lecture (5ème) : contenus IMPOSÉS par le Programme éducatif
+// 5ème (pp. 16 et 41-42), transmis par l'enseignant -- rien n'y est ajouté. Le
+// support exigé est l'œuvre lue (titre et auteur saisis par l'enseignant), pas
+// un texte à coller. Reprend le squelette Expression écrite (construireInstructionsExpressionEcriture)
+// avec ces contenus ; le type n'est volontairement pas dans REFERENTIEL_TYPES_TEXTE
+// (il n'est pas un texte support de lecture méthodique).
+const REFERENTIEL_COMPTE_RENDU_LECTURE = {
+  typeTexte: 'compte rendu de lecture',
+  caracteristiques: [
+    { categorie: 'champ_lexical', axe: 2, libelle: 'Le champ lexical', description: 'champ lexical lié aux thèmes de l\'œuvre' },
+    { categorie: 'temps_verbaux', axe: 1, libelle: 'Les temps verbaux', description: 'temps verbaux (présent, imparfait…)' },
+    { categorie: 'phrase_declarative', axe: 1, libelle: 'La phrase déclarative', description: 'phrase déclarative' },
+    { categorie: 'types_phrases', axe: 1, libelle: 'Les types de phrases', description: 'types de phrases' },
+    { categorie: 'connecteurs_logiques', axe: 2, libelle: 'Les connecteurs logiques', description: 'connecteurs logiques' },
+    { categorie: 'registre_standard', axe: 2, libelle: 'Le registre standard', description: 'registre standard' }
+  ]
+};
+
+function estCompteRenduDeLecture(texte) {
+  return /\bcomptes?[ -]?rendus?\s+(de|d')\s*(la\s+|l')?\s*lecture\b/.test(normaliserTexte(texte).replace(/[’`]/g, "'"));
+}
+
+function construireInstructionsCompteRenduLecture({ titreOeuvre, auteurOeuvre }) {
+  const titre = (titreOeuvre || '').toString().trim();
+  const auteur = (auteurOeuvre || '').toString().trim();
+  return construireInstructionsExpressionEcriture(REFERENTIEL_COMPTE_RENDU_LECTURE) + `
+
+COMPTE RENDU DE LECTURE (5ème) — CONTENUS IMPOSÉS PAR LE PROGRAMME ÉDUCATIF 5ème (pp. 16 et 41-42). N'AJOUTE RIEN qui ne figure pas ci-dessous : ces contenus REMPLACENT, pour CETTE fiche, tout ce que le squelette Expression écrite ci-dessus laisse à ton appréciation (habiletés, situation, définition, structure, outils de la langue). Les autres consignes du squelette (ordre des tableaux, moments I à V, évaluation, mise en forme) restent valables.
+
+SÉANCE : séance unique de 2 h — Rédiger un compte rendu de lecture de l'œuvre intégrale.
+
+SUPPORT EXIGÉ : l'œuvre lue, « ${titre} », ${auteur} (titre et auteur saisis par l'enseignant). Il n'y a PAS de texte à coller : n'utilise AUCUN marqueur {{TEXTE_SUPPORT}}, ne recopie aucun extrait de l'œuvre et ne rédige pas de « texte modèle » (les consignes de texte modèle ≤ 250 mots du squelette ne s'appliquent pas ici). Dans le tableau Supports didactiques / Bibliographie, indique cette œuvre (titre et auteur) dans les deux colonnes.
+
+SITUATION D'APPRENTISSAGE — reprends-la TELLE QUELLE, sans la modifier ni l'enrichir : « Le collège organise une journée socioculturelle ; les meilleurs comptes rendus de lecture seront lus et publiés dans le journal. »
+
+TABLEAU HABILETÉS ET CONTENUS — exactement ces habiletés (colonne 1) avec ces contenus (colonne 2) :
+- Connaître : la technique d'un compte rendu écrit de lecture
+- Exploiter : l'œuvre lue
+- Utiliser : le lexique approprié, les outils grammaticaux, le registre standard
+- Construire : des phrases correctes
+- Appliquer : les caractéristiques d'un compte rendu de lecture
+
+STRUCTURE DU COMPTE RENDU (moment II « Structure/caractéristiques » et moments IV et V) — dans cet ordre, sans rien ajouter :
+1. Présenter l'auteur et l'œuvre : nom de l'auteur, titre, date et année de parution, genre.
+2. Définition du compte rendu.
+3. Thème principal, thèmes et sous-thèmes, personnages principaux et secondaires, espace, temps.
+4. Sélection des idées pertinentes et organisation cohérente.
+5. Jugement personnel (esthétique, didactique, littéraire, ludique).
+
+OUTILS DE LA LANGUE (moment III) — uniquement : champ lexical lié aux thèmes ; temps verbaux (présent, imparfait…) ; phrase déclarative ; types de phrases ; connecteurs logiques ; registre standard.
+
+RÈGLE ANTI-INVENTION : pour tout fait sur l'œuvre (date et année de parution, genre, thème principal, thèmes et sous-thèmes, personnages, espace, temps), n'écris que ce que tu sais avec certitude de CETTE œuvre « ${titre} » de ${auteur} ; sinon écris « à compléter par l'enseignant ». Aucune invention, aucun résumé d'intrigue approximatif, aucune citation.`;
 }
 
 // Exploitation de texte (DPFC), pour 6e/5e/4e/3e : vocabulaire + grammaire
@@ -12155,6 +12214,7 @@ ${tableDeroulement}
     let modeAutoLM = false;
     // Vrai seulement si l'enseignant a demandé à ProfCI de rédiger le texte (bouton explicite).
     let texteGenereParProfCIEffectif = false;
+    let modeCompteRenduLecture = false;   // 5ème : cf. construireInstructionsCompteRenduLecture
     let referentielTypeTexteLM = null;
     // Numérotation de lignes du texte support pour Lecture méthodique (27/09,
     // cf. construireLignesNumerotees) -- calculée dès que le texte support et
@@ -12581,6 +12641,15 @@ ${tableDeroulement}
         systemPrompt += resultatResume.instructions;
         modeResume = true;
         modeEvaluationResumeEffectif = resultatResume.modeEvaluation;
+      } else if (estEE && estCompteRenduDeLecture(texteCibleReferentiel)) {
+        // Compte rendu de lecture (5ème) : génération autorisée avec la structure
+        // du programme, à condition que l'œuvre lue (titre et auteur) soit saisie.
+        if (!(titreOeuvre || '').toString().trim() || !(auteurOeuvre || '').toString().trim()) {
+          return envoyerBlocageSSE(res, "Cette séance exige l'œuvre lue : saisissez le titre et l'auteur de l'œuvre (pas de texte à coller).", heartbeat);
+        }
+        systemPrompt += construireInstructionsCompteRenduLecture({ titreOeuvre, auteurOeuvre });
+        modeCompteRenduLecture = true;
+        texteSupport = '';   // le support est l'œuvre lue, jamais un texte collé
       } else if (estEE) {
         // Même principe de blocage (07/08) que pour Lecture méthodique : la
         // section "Caractéristiques du texte"/outils de la langue ne doit
@@ -12939,6 +13008,8 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
           : `Ce texte support fait environ ${motsTexteSupport} mots : trop long pour être dupliqué sur la même page. N'ajoute PAS de second exemplaire — utilise UNIQUEMENT le marqueur {{TEXTE_SUPPORT}}, une seule fois, sans {{TEXTE_SUPPORT_COPIE}}.`;
       }
       userMessage += `\n\nVoici le texte support fourni par l'enseignant. Construis le déroulement pédagogique (moments didactiques, questions de compréhension, schéma argumentatif ou axes de lecture selon la discipline) à partir de ce texte. NE RECOPIE PAS le texte dans ta réponse — utilise le marqueur exact {{TEXTE_SUPPORT}} UNE SEULE FOIS, à l'endroit où le texte doit apparaître dans le HTML (jamais une deuxième fois ailleurs dans le document, par exemple jamais entre deux tableaux d'analyse). ${instructionMiseEnPage}\n\nTEXTE SUPPORT (à lire, ne pas recopier) :\n${texteSupport}`;
+    } else if (modeCompteRenduLecture) {
+      userMessage += `\n\nLe support de cette séance est l'œuvre lue (« ${titreOeuvre} », ${auteurOeuvre}), pas un texte : ne rédige aucun texte modèle et n'utilise aucun marqueur {{TEXTE_SUPPORT}}.`;
     } else if (modeResume) {
       // Rien à ajouter ici : construireInstructionsResume (déjà intégré au
       // systemPrompt) couvre intégralement le cas "aucun texte support"

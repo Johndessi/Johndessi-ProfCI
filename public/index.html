@@ -302,6 +302,15 @@ textarea { resize: vertical; min-height: 90px; }
         </select>
       </div>
 
+      <div class="form-group" id="oeuvreLueGroup" style="display:none;margin-bottom:14px">
+        <label>Œuvre lue (titre et auteur) *</label>
+        <input id="oeuvreLueTitre" type="text" placeholder="Titre de l'œuvre lue"/>
+        <input id="oeuvreLueAuteur" type="text" placeholder="Auteur" style="margin-top:8px"/>
+        <p style="font-size:12px;color:#8a4b00;margin-top:8px">
+          Le support de cette séance est l'œuvre lue : saisissez son titre et son auteur (pas de texte à coller).
+        </p>
+      </div>
+
       <div class="form-group" style="margin-bottom:14px">
         <label>Plan de cours (optionnel) — adapté à votre plan</label>
         <textarea id="planCours" placeholder="Collez votre plan ici si vous en avez un.&#10;Ex:&#10;I- Définition&#10;II- Les temps simples : présent, imparfait...&#10;III- Les temps composés&#10;IV- Exercices d'application"></textarea>
@@ -324,7 +333,7 @@ textarea { resize: vertical; min-height: 90px; }
             onclick="basculerTexteProfCI()">✍️ Faire rédiger un texte par ProfCI (à vérifier)</button>
           <span id="texteProfCIEtat" style="font-size:12px;margin-left:8px;color:var(--gris2)"></span>
           <p style="font-size:11px;color:var(--gris2);margin-top:4px">
-            Réservé aux textes non littéraires (argumentatif, article de journal). Le texte est rédigé par le modèle,
+            Réservé aux textes non littéraires. Le texte est rédigé par le modèle,
             sans source : une mention « à vérifier » figure dans la fiche.
           </p>
         </div>
@@ -1236,6 +1245,9 @@ function choisirSeanceCatalogue() {
     document.getElementById('catalogueOptionLibreGroup').style.display = 'block';
   }
   if (seanceTrouvee.themeIntegre === 'liste_10_themes') afficherMenuThemesIntegres();
+  if (seanceTrouvee.typeSupport === 'oeuvre_lue_titre_auteur_obligatoires') {
+    document.getElementById('oeuvreLueGroup').style.display = 'block';
+  }
   if (seanceTrouvee.typeSupport === 'texte_obligatoire') {
     document.getElementById('texteObligatoireNote').style.display = 'block';
     if (seanceTrouvee.texteProfCIAutorise) document.getElementById('texteProfCIGroup').style.display = 'block';
@@ -1256,6 +1268,9 @@ function masquerOptionCatalogue() {
   document.getElementById('catalogueTheme').value = '';
   document.getElementById('texteObligatoireNote').style.display = 'none';
   document.getElementById('texteProfCIGroup').style.display = 'none';
+  document.getElementById('oeuvreLueGroup').style.display = 'none';
+  document.getElementById('oeuvreLueTitre').value = '';
+  document.getElementById('oeuvreLueAuteur').value = '';
   texteProfCIDemande = false;
   mettreAJourEtatTexteProfCI();
 }
@@ -1953,6 +1968,8 @@ async function genererFiche() {
   let optionLibre = '';
   let themeIntegreChoisi = '';
   let texteGenereParProfCI = false;
+  let titreOeuvreLue = '';
+  let auteurOeuvreLue = '';
 
   if (catalogueActif) {
     leconOfficielleId = document.getElementById('catalogueLecon').value;
@@ -1969,6 +1986,11 @@ async function genererFiche() {
     }
     if (seanceTrouvee.themeIntegre === 'liste_10_themes') {
       themeIntegreChoisi = document.getElementById('catalogueTheme').value;
+    }
+    if (seanceTrouvee.typeSupport === 'oeuvre_lue_titre_auteur_obligatoires') {
+      titreOeuvreLue = document.getElementById('oeuvreLueTitre').value.trim();
+      auteurOeuvreLue = document.getElementById('oeuvreLueAuteur').value.trim();
+      if (!titreOeuvreLue || !auteurOeuvreLue) { toast("❗ Cette séance exige l'œuvre lue : saisissez le titre et l'auteur"); return; }
     }
     if (seanceTrouvee.typeSupport === 'texte_obligatoire') {
       const aTexte = document.getElementById('texteSupport').value.trim()
@@ -2009,6 +2031,7 @@ async function genererFiche() {
         leconOfficielleId, seanceOfficielleId, optionChoisie, optionLibre,
         themeIntegreChoisi, texteGenereParProfCI
       };
+      if (titreOeuvreLue) { champs.titreOeuvre = titreOeuvreLue; champs.auteurOeuvre = auteurOeuvreLue; }
       const fichierSupport = document.getElementById('texteSupportFichier').files[0];
 
       let response;

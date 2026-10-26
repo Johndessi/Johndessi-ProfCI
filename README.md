@@ -9,13 +9,13 @@ exemple complet et valide (séance 1, 2nde/Français/Étude de l'œuvre intégra
 ## Catalogue 3e (matrice de progression)
 
 `lecons_officielles_3e.json` remplace les entrées 3e des anciens fichiers de leçons
-(`lecons_officielles_5e_4e_3e.json` ne contient plus que la 5e). Même format que
+(`lecons_officielles_5e_4e_3e.json` a disparu : la 4e et la 5e ont leur propre fichier). Même format que
 les autres catalogues (importé par `POST /api/admin/lecons-officielles/seed`), avec, par séance :
 
 - `typeSupport` : ce que la séance exige de l'enseignant. `texte_obligatoire` (lecture méthodique) :
   génération refusée sans texte collé/importé, sauf bouton « Faire rédiger un texte par ProfCI (à vérifier) »
   (réservé, selon la classe, aux textes non littéraires : 3ème = texte argumentatif et article de journal ; 4ème = texte explicatif
-  et dialogue argumentatif ; mention « à vérifier » dans la fiche) ;
+  et dialogue argumentatif ; 5ème = description d'un lieu animé seulement (ni portrait ni poème) ; mention « à vérifier » dans la fiche) ;
   `texte_a_resumer_obligatoire` (résumés : texte officiel du catalogue ou texte fourni) ; les autres valeurs
   ne bloquent pas.
 - `typeTexte` : famille de texte quand elle est univoque (sinon vide ; le détail étayer/réfuter est dans `progression`).
@@ -38,6 +38,14 @@ Expression écrite) et remplace `lecons_officielles_4e_grammaire_orthographe_ora
 celle de la 3ème (`catalogue/themes_integres_3e.json`), à confirmer. Les devoirs, comptes rendus de devoir et
 évaluations d'orthographe/orales de la matrice ne sont pas des entrées du catalogue. L'œuvre intégrale n'est pas concernée
 (parcours fixe de 11 séances).
+
+## Catalogue 5e (matrice de progression)
+
+`lecons_officielles_5e.json` regroupe toute la 5ème et remplace `lecons_officielles_5e_grammaire_orthographe_oral.json`
+et `lecons_officielles_5e_4e_3e.json` (supprimés). Même format que la 3ème/4ème ; la liste « liste_10_themes » est celle de la 3ème.
+La séance « Le compte rendu de lecture » porte `typeSupport` = `oeuvre_lue_titre_auteur_obligatoires` : le formulaire demande le
+titre et l'auteur de l'œuvre lue (pas de texte à coller) et la fiche suit la structure du Programme éducatif 5ème (pp. 16 et
+41-42) ; sans titre ni auteur, la génération est refusée avant tout appel au modèle.
 
 ## Service d'aperçu : import des catalogues au démarrage
 
