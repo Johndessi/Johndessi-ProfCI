@@ -198,20 +198,8 @@
       {
         "numeroSeance": 6,
         "activite": "Grammaire",
-        "intitule": "Les verbes du 3e groupe (les plus fréquents)",
+        "intitule": "Les verbes du 3e groupe (les plus fréquents). Exemples : devoir, pouvoir, savoir, faire, vouloir, lire, écrire, dire...",
         "progression": [],
-        "vocabulaireReference": {
-          "verbes du 3e groupe": [
-            "devoir",
-            "pouvoir",
-            "savoir",
-            "faire",
-            "vouloir",
-            "lire",
-            "écrire",
-            "dire"
-          ]
-        },
         "typeSupport": "aucun_requis_corpus_catalogue",
         "typeTexte": null,
         "themeIntegre": ""
