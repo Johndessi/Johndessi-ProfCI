@@ -23,7 +23,7 @@ les autres catalogues (importé par `POST /api/admin/lecons-officielles/seed`), 
   route `GET /api/themes-integres?classe=3ème`) ou identifiant d'un thème imposé.
 - `progression` : occurrences de la séance dans la progression annuelle (trimestre, semaine, `S.n`, intitulé,
   variantes). Quand toutes les séances d'une leçon en ont une, le menu Séance est trié par `S.n`
-  (ex. Grammaire L5 : S1, S3, S2) ; les numéros `numeroSeance` ne changent jamais.
+  (sans effet quand les numéros suivent déjà la progression, comme Grammaire 3e L5 : 1 adverbe, 2 groupe adverbial, 3 comparatif).
 
 Les devoirs, comptes rendus de devoir et remédiations ne sont pas des entrées du catalogue : la génération est
 refusée avec un message explicite (le programme ne définit aucune structure).

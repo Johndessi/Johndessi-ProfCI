@@ -203,20 +203,6 @@
       {
         "numeroSeance": 2,
         "activite": "Grammaire",
-        "intitule": "Le comparatif et le superlatif de l'adverbe",
-        "progression": [
-          {
-            "seanceProgression": "S.3",
-            "intituleProgression": "Le comparatif et le superlatif de l'adverbe"
-          }
-        ],
-        "typeSupport": "aucun_requis_corpus_catalogue",
-        "typeTexte": null,
-        "themeIntegre": ""
-      },
-      {
-        "numeroSeance": 3,
-        "activite": "Grammaire",
         "intitule": "Le groupe adverbial",
         "typeSupport": "aucun_requis_corpus_catalogue",
         "typeTexte": null,
@@ -227,6 +213,20 @@
             "intituleProgression": "Le groupe adverbial"
           }
         ]
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Le comparatif et le superlatif de l'adverbe",
+        "progression": [
+          {
+            "seanceProgression": "S.3",
+            "intituleProgression": "Le comparatif et le superlatif de l'adverbe"
+          }
+        ],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
       }
     ]
   },
