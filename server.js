@@ -14334,22 +14334,28 @@ app.get('/api/admin/classes-3e', verifierCleAdmin, async (req, res) => {
   }
 });
 
-// Lecture seule (aucune écriture) : pour les classes du collège demandées (par défaut 3 à 6),
-// combien de documents de chaque collection portent chaque VALEUR du champ classe (« 4e »,
-// « 4ème »...), et, pour les leçons officielles, quelles clés d'import (discipline, classe
-// normalisée, activité, numéro de leçon) sont portées par plusieurs documents -- ce qu'un
-// ré-import créerait en doublon ou laisserait orphelin. Exemple : ?niveaux=4,5,6
+// Contrôle admin en LECTURE SEULE (aucune écriture) avant un ré-import des catalogues du
+// collège : pour les classes demandées (par défaut 3 à 6), combien de documents de chaque
+// collection portent chaque VALEUR du champ classe (« 4e », « 4ème »...), et, pour les
+// leçons officielles, quelles clés d'import (discipline, classe normalisée, activité, numéro
+// de leçon) sont portées par plusieurs documents -- ce qu'un ré-import dupliquerait ou
+// laisserait orphelin. Exemple : GET /api/admin/classes-catalogue?niveaux=4,5,6
+function normaliserClasseCollegeControle(classe) {
+  const c = String(classe || '').trim();
+  const m = c.match(/^([3-6])(?:e|eme|ème)$/i);
+  return m ? `${m[1]}ème` : c;
+}
+
 function analyserClassesCatalogue(documents, niveaux) {
   const parForme = new Map();
   const parCle = new Map();
   for (const d of documents) {
     parForme.set(d.classe, (parForme.get(d.classe) || 0) + 1);
-    const classeNorm = normaliserClasseCatalogue(d.classe);
-    const cle = [d.discipline, classeNorm, d.activite, d.numeroLecon].join('|');
+    const cle = [d.discipline, normaliserClasseCollegeControle(d.classe), d.activite, d.numeroLecon].join('|');
     if (!parCle.has(cle)) parCle.set(cle, []);
     parCle.get(cle).push(d);
   }
-  const formes = Array.from(parForme, ([classe, n]) => ({ classe, n })).sort((a, b) => a.classe.localeCompare(b.classe));
+  const formes = Array.from(parForme, ([classe, n]) => ({ classe, n })).sort((a, b) => String(a.classe).localeCompare(String(b.classe)));
   const conflits = [];
   for (const [cle, docs] of parCle) {
     if (docs.length < 2) continue;
@@ -14363,7 +14369,7 @@ function analyserClassesCatalogue(documents, niveaux) {
     niveaux,
     formes,
     total: documents.length,
-    aNormaliser: documents.filter((d) => d.classe !== normaliserClasseCatalogue(d.classe)).length,
+    aNormaliser: documents.filter((d) => d.classe !== normaliserClasseCollegeControle(d.classe)).length,
     conflits
   };
 }
@@ -14382,7 +14388,7 @@ app.get('/api/admin/classes-catalogue', verifierCleAdmin, async (req, res) => {
         { $group: { _id: '$classe', n: { $sum: 1 } } },
         { $sort: { _id: 1 } }
       ]);
-      resultat[nom] = { formes: groupes.map((g) => ({ classe: g._id, n: g.n })), total: groupes.reduce((a, g) => a + g.n, 0) };
+      resultat[nom] = { formes: groupes.map((g) => ({ classe: g._id, n: g.n })), total: groupes.reduce((acc, g) => acc + g.n, 0) };
     }
     res.json({ success: true, lectureSeule: true, resultat });
   } catch (e) {
