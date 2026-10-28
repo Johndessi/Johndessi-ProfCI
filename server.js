@@ -14625,6 +14625,7 @@ module.exports = {
   appliquerMiseEnFormeCompacteModeleLot14, genererDocxDepuisHtml, genererPdfDepuisHtml,
   normaliserTexte, estReferenceDePassageLot14b, verifierGuillemetsLot14b, detecterLibelleRecopieLot14b,
   extraireTextePassageLot14b, minusculeArticleInitialLot14b, preremplirCiblesLot14b,
+  trouverLeconOfficielleDPFC, trouverLeconEtSeanceParId,
   normaliserClasseCatalogue, analyserClassesCatalogue, formaterLeconPourExport, trierSeancesParProgression, detecterDevoirOuCompteRendu,
   profCIPeutRedigerLeTexte, injecterMentionTexteGenereParProfCI, libelleThemeIntegre, listerLeconsOfficielles
 };

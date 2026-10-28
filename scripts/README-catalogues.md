@@ -31,7 +31,7 @@ Déroulement :
    **Conservez ce fichier.**
 3. **Pour chaque niveau**, dans l'ordre 3ème, 4ème, 5ème, 6ème : confirmation (tapez `oui`), import, affichage de
    `upserted` et `ignores` (attendus : 16 / 14 / 15 / 15 et 0), nouveau contrôle des classes, comparaison du contenu en
-   base avec le fichier (séances attendues : 74 / 74 / 58 / 59), puis **arrêt et nouvelle confirmation** avant le
+   base avec le fichier (séances attendues : 74 / 74 / 58 / 58), puis **arrêt et nouvelle confirmation** avant le
    niveau suivant. Tout écart arrête le script (code de sortie 3) sans passer au niveau suivant.
 
 Pour reprendre après un arrêt (nouvelle sauvegarde, à côté de la première) : `--niveaux 5,6`.
@@ -54,6 +54,18 @@ fichier n'est pas signalée (l'import ne l'efface pas). `ordre` et `genreOeuvre`
 l'import (signalés en « note »). Un service déjà importé (aperçu) apparaît donc entièrement « identique ».
 `--niveaux 4` limite la comparaison à un niveau. `--rapport simulation.txt` enregistre en plus le rapport dans un fichier
 (il refuse d'écraser un fichier existant ; la clé n'y figure jamais) : pratique sous cmd, qui ne sait pas dupliquer la sortie.
+
+## Contrôle de la recherche de leçon (hors ligne)
+
+```bat
+node scripts\controle-recherche-catalogue.js
+```
+
+Pour chaque leçon et chaque séance de `lecons_officielles_3e/4e/5e/6e.json`, appelle les mêmes fonctions que
+`/api/generer-fiche` (aucun réseau, aucune base, aucun appel Anthropic) et liste ce qui n'est pas retrouvé :
+`[ID]` menus du formulaire (doit être 100 % ; code de sortie 1 sinon), `[SEANCE]` saisie libre de l'intitulé,
+`[TITRE]` saisie libre du titre de la leçon, `[HOMONYMES]` séances confondues entre elles. `--classes 6ème` limite
+à une classe, `--fichiers <dossier>` vérifie un autre dossier de fichiers.
 
 ## Retour arrière
 

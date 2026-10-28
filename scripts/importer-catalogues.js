@@ -26,7 +26,7 @@ const NIVEAUX = {
   3: { fichier: 'lecons_officielles_3e.json', classe: '3ème', lecons: 16, seances: 74 },
   4: { fichier: 'lecons_officielles_4e.json', classe: '4ème', lecons: 14, seances: 74 },
   5: { fichier: 'lecons_officielles_5e.json', classe: '5ème', lecons: 15, seances: 58 },
-  6: { fichier: 'lecons_officielles_6e.json', classe: '6ème', lecons: 15, seances: 59 }
+  6: { fichier: 'lecons_officielles_6e.json', classe: '6ème', lecons: 15, seances: 58 }
 };
 
 function usage() {
