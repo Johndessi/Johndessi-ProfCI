@@ -31,11 +31,12 @@ const NIVEAUX = {
 
 function usage() {
   return [
-    'Usage : node scripts/importer-catalogues.js <url-du-serveur> [--simuler] [--niveaux 3,4,5,6] [--dossier-sauvegarde <dossier>]',
+    'Usage : node scripts/importer-catalogues.js <url-du-serveur> [--simuler [--rapport <fichier>]] [--niveaux 3,4,5,6] [--dossier-sauvegarde <dossier>]',
     '',
     '  <url-du-serveur>       obligatoire, ex. https://exemple.onrender.com (jamais de valeur par défaut)',
     '  --simuler              mode à blanc : exporte la base en lecture seule et affiche ce que l\'import changerait,',
     '                         avec les valeurs de la base absentes de main (corrections manuelles). N\'écrit RIEN (ni base, ni fichier).',
+    '  --rapport <fichier>    avec --simuler seulement : enregistre aussi le rapport dans ce fichier (jamais la clé). Refuse d\'écraser un fichier.',
     '  --niveaux              niveaux à importer, dans l\'ordre (défaut : 3,4,5,6). Pour reprendre après un arrêt : --niveaux 5,6',
     '  --dossier-sauvegarde   où enregistrer l\'export de sauvegarde (défaut : dossier courant)',
     '',
@@ -44,16 +45,18 @@ function usage() {
 }
 
 function lireArguments(argv) {
-  const r = { url: null, niveaux: [3, 4, 5, 6], dossier: process.cwd(), simuler: false };
+  const r = { url: null, niveaux: [3, 4, 5, 6], dossier: process.cwd(), simuler: false, rapport: null };
   const pos = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--niveaux') r.niveaux = String(argv[++i] || '').split(',').map((n) => Number(n.trim()));
     else if (argv[i] === '--dossier-sauvegarde') r.dossier = path.resolve(String(argv[++i] || ''));
     else if (argv[i] === '--simuler') r.simuler = true;
+    else if (argv[i] === '--rapport') r.rapport = path.resolve(String(argv[++i] || ''));
     else if (argv[i] === '--help' || argv[i] === '-h') { console.log(usage()); process.exit(0); }
     else pos.push(argv[i]);
   }
   r.url = pos[0];
+  if (r.rapport && !r.simuler) throw new ErreurScript('--rapport ne s\'utilise qu\'avec --simuler.');
   if (!r.url) throw new ErreurScript(`URL du serveur manquante.\n\n${usage()}`);
   if (!r.niveaux.length || r.niveaux.some((n, i) => !NIVEAUX[n] || (i > 0 && n <= r.niveaux[i - 1]))) {
     throw new ErreurScript('--niveaux : valeurs parmi 3,4,5,6, en ordre croissant.');
@@ -71,6 +74,7 @@ async function main() {
   const args = lireArguments(process.argv.slice(2));
   const origine = validerUrl(args.url);
   console.log(`Serveur cible : ${origine}`);
+  if (args.rapport && fs.existsSync(args.rapport)) throw new ErreurScript(`Le fichier de rapport existe déjà (il ne sera pas écrasé) : ${args.rapport}`);
   if (!fs.existsSync(args.dossier)) throw new ErreurScript(`Dossier de sauvegarde introuvable : ${args.dossier}`);
   for (const n of args.niveaux) {
     if (!fs.existsSync(path.join(RACINE, NIVEAUX[n].fichier))) throw new ErreurScript(`Fichier introuvable : ${NIVEAUX[n].fichier} (lancez le script depuis un dépôt à jour, branche de la PR #84).`);
@@ -80,30 +84,36 @@ async function main() {
   const client = creerClient(origine, cle);
 
   if (args.simuler) {
-    console.log('\nMODE À BLANC (--simuler) : seules des routes en lecture seule sont appelées ; rien n\'est écrit, ni en base ni sur ce poste.');
+    const rapport = [];
+    const sortie = (l = '') => { console.log(l); rapport.push(l); };
+    sortie('\nMODE À BLANC (--simuler) : seules des routes en lecture seule sont appelées ; rien n\'est écrit, ni en base ni sur ce poste.');
     const analyseSim = await controlerClasses(client, [3, 4, 5, 6]);
-    console.log(`\n[1/2] Contrôle des classes : ${resumerClasses(analyseSim)}`);
+    sortie(`\n[1/2] Contrôle des classes : ${resumerClasses(analyseSim)}`);
     if (analyseSim.aNormaliser > 0 || analyseSim.conflits.length > 0) {
-      console.log('   ⚠ L\'import réel S\'ARRÊTERAIT ici (classe à normaliser ou conflit) :');
-      for (const l of detaillerConflits(analyseSim)) console.log(l);
-    } else console.log('   OK : l\'import réel passerait ce contrôle.');
-    console.log('\n[2/2] Export de la base (lecture seule) et comparaison avec les fichiers...');
+      sortie('   ⚠ L\'import réel S\'ARRÊTERAIT ici (classe à normaliser ou conflit) :');
+      for (const l of detaillerConflits(analyseSim)) sortie(l);
+    } else sortie('   OK : l\'import réel passerait ce contrôle.');
+    sortie('\n[2/2] Export de la base (lecture seule) et comparaison avec les fichiers...');
     const expSim = await client.get('/api/admin/lecons-officielles/export');
     if (!expSim.ok || !expSim.json || !Array.isArray(expSim.json.lecons)) throw new ErreurScript(`Export inattendu (HTTP ${expSim.statut}).`);
-    console.log(`   Base : ${expSim.json.nbDocuments} leçons, ${expSim.json.nbSeances} séances (tous niveaux).`);
+    sortie(`   Base : ${expSim.json.nbDocuments} leçons, ${expSim.json.nbSeances} séances (tous niveaux).`);
     const { lignes, resume } = simuler({
       exportProd: expSim.json.lecons,
       niveaux: args.niveaux.map((n) => ({ numero: n, ...NIVEAUX[n] })),
       racine: RACINE,
       dossierMain: path.join(__dirname, 'catalogue-avant-pr84')
     });
-    for (const l of lignes) console.log(l);
-    console.log('\n=== RÉSUMÉ (aucune écriture effectuée) ===');
-    console.log(`   identiques au fichier : ${resume.identiques} ; modifiées par l'import : ${resume.modifiees} ; créées : ${resume.creees} ; en production hors fichier (non touchées) : ${resume.horsFichier} ; clés en doublon : ${resume.doublons}`);
+    for (const l of lignes) sortie(l);
+    sortie('\n=== RÉSUMÉ (aucune écriture effectuée) ===');
+    sortie(`   identiques au fichier : ${resume.identiques} ; modifiées par l'import : ${resume.modifiees} ; créées : ${resume.creees} ; en production hors fichier (non touchées) : ${resume.horsFichier} ; clés en doublon : ${resume.doublons}`);
     if (resume.avecCorrectionManuelle.length) {
-      console.log(`   ⚠ ${resume.avecCorrectionManuelle.length} leçon(s) contiennent des valeurs absentes de main que l'import écraserait :`);
-      for (const l of resume.avecCorrectionManuelle) console.log(`      - ${l}`);
-    } else console.log('   Aucune valeur de production absente de main que l\'import écraserait.');
+      sortie(`   ⚠ ${resume.avecCorrectionManuelle.length} leçon(s) contiennent des valeurs absentes de main que l'import écraserait :`);
+      for (const l of resume.avecCorrectionManuelle) sortie(`      - ${l}`);
+    } else sortie('   Aucune valeur de production absente de main que l\'import écraserait.');
+    if (args.rapport) {
+      fs.writeFileSync(args.rapport, rapport.join('\n') + '\n', { encoding: 'utf8', flag: 'wx' });
+      console.log(`\nRapport enregistré : ${args.rapport}`);
+    }
     return;
   }
 

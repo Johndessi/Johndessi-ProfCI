@@ -52,7 +52,8 @@ fichiers de `main` du 28/10/2026 (`scripts/catalogue-avant-pr84/`) et que l'impo
 correction manuelle d'un intitulé, vocabulaire ajouté, séance ajoutée à la main... Une valeur déjà identique au nouveau
 fichier n'est pas signalée (l'import ne l'efface pas). `ordre` et `genreOeuvre` absents du fichier sont conservés par
 l'import (signalés en « note »). Un service déjà importé (aperçu) apparaît donc entièrement « identique ».
-`--niveaux 4` limite la comparaison à un niveau.
+`--niveaux 4` limite la comparaison à un niveau. `--rapport simulation.txt` enregistre en plus le rapport dans un fichier
+(il refuse d'écraser un fichier existant ; la clé n'y figure jamais) : pratique sous cmd, qui ne sait pas dupliquer la sortie.
 
 ## Retour arrière
 
