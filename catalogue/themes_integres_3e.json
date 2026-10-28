@@ -1,0 +1,46 @@
+{
+  "listeId": "liste_10_themes",
+  "source": "Guide d'exécution 3e, p.63 (communiqué par l'enseignant)",
+  "themes": [
+    {
+      "id": "education_environnement_developpement_durable",
+      "libelle": "Éducation à l'Environnement et au Développement Durable"
+    },
+    {
+      "id": "life_skills_vih_sida",
+      "libelle": "Life skills VIH-sida"
+    },
+    {
+      "id": "sante_bien_etre",
+      "libelle": "Santé et bien-être"
+    },
+    {
+      "id": "orientation_entrepreneuriat",
+      "libelle": "Orientation et entrepreneuriat"
+    },
+    {
+      "id": "identite_culturelle_nation",
+      "libelle": "Identité culturelle et Nation"
+    },
+    {
+      "id": "droits_humains_paix_sociale",
+      "libelle": "Droits humains et paix sociale"
+    },
+    {
+      "id": "civisme_fiscal",
+      "libelle": "Civisme fiscal"
+    },
+    {
+      "id": "education_paix_tolerance",
+      "libelle": "Éducation relative à la paix et à la tolérance"
+    },
+    {
+      "id": "ereah_bv",
+      "libelle": "EREAH-BV"
+    },
+    {
+      "id": "droit_international_humanitaire",
+      "libelle": "Droit international humanitaire / Éducation au Droit humanitaire"
+    }
+  ]
+}

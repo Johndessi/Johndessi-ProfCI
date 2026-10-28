@@ -1,0 +1,813 @@
+[
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 1,
+    "titreLecon": "La phrase",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "La phrase et ses constituants",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les types de phrases : déclaratif et interrogatif",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Les types de phrases : impératif et exclamatif",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Les formes de phrases : affirmative et négative",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "Les formes de phrases : la phrase emphatique",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 6,
+        "activite": "Grammaire",
+        "intitule": "La forme active et la forme passive",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 2,
+    "titreLecon": "Le groupe nominal",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les constituants du groupe nominal",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les expansions du nom",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Les déterminants du nom (adjectifs démonstratifs et possessifs)",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Les degrés de comparaison de l'adjectif qualificatif (comparatif)",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "Les degrés de comparaison de l'adjectif qualificatif (superlatif relatif, superlatif absolu)",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 3,
+    "titreLecon": "Le discours direct et le discours indirect",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les marques du discours : le discours direct",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les marques du discours : le discours indirect",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 4,
+    "titreLecon": "Le verbe : formes et emplois",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "La morphologie des verbes du 1er et du 2e groupe",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Le présent de l'indicatif : valeurs et emplois",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Le futur simple de l'indicatif : formation, valeurs et emplois",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Étude du couple imparfait / passé composé",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "Étude du couple imparfait / passé simple",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 6,
+        "activite": "Grammaire",
+        "intitule": "Étude de quelques auxiliaires d'aspect",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 5,
+    "titreLecon": "Le groupe verbal",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Le groupe verbal avec les verbes d'action",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Le groupe verbal avec l'auxiliaire être et ses substituts",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Le groupe verbal avec l'auxiliaire être et ses substituts (suite)",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 6,
+    "titreLecon": "Les adverbes",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les adverbes de lieu",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les adverbes de temps",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Orthographe",
+    "numeroLecon": 1,
+    "titreLecon": "Orthographe lexicale",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "Les accents, l'apostrophe et l'élision",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Orthographe",
+        "intitule": "Les homophones : ce / se / ceux ; s'est / ses / c'est / ces",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Orthographe",
+        "intitule": "Le doublement des consonnes dans les adverbes en « ment »",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Orthographe",
+        "intitule": "Les homophones si / s'y ; ni / n'y ; la / là",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Orthographe",
+    "numeroLecon": 2,
+    "titreLecon": "Orthographe grammaticale",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "L'accord du verbe précédé des pronoms le / la / les / l'",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Orthographe",
+        "intitule": "L'orthographe de « leur » (pronom personnel) et « leur » (adjectif possessif)",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Expression orale",
+    "numeroLecon": 1,
+    "titreLecon": "Le dialogue oral",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Expression orale",
+        "intitule": "Demander une information",
+        "progression": [
+          {
+            "seanceProgression": "S.1",
+            "intituleProgression": "Demander une information",
+            "duree": "1h",
+            "typeTexte": "",
+            "themeIntegre": "",
+            "remarque": "Catalogue : « Obtenir une information »"
+          }
+        ],
+        "typeSupport": "theme_ou_situation",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Expression orale",
+        "intitule": "Donner une information",
+        "progression": [
+          {
+            "seanceProgression": "S.4",
+            "intituleProgression": "Donner une information",
+            "duree": "1h",
+            "typeTexte": "",
+            "themeIntegre": "",
+            "remarque": "Catalogue : ajoute « (Covid-19) »"
+          }
+        ],
+        "typeSupport": "theme_ou_situation",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Expression orale",
+        "intitule": "Expliquer une situation",
+        "progression": [
+          {
+            "seanceProgression": "S.7",
+            "intituleProgression": "Expliquer une situation",
+            "duree": "1h",
+            "typeTexte": "",
+            "themeIntegre": ""
+          }
+        ],
+        "typeSupport": "theme_ou_situation",
+        "typeTexte": null,
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 1,
+    "titreLecon": "La lettre personnelle",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'une lettre personnelle adressée à une personne familière + Exploitation de texte",
+        "progression": [
+          {
+            "seanceProgression": "S.1",
+            "intituleProgression": "Lecture méthodique d'une lettre personnelle adressée à une personne familière + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "lettre_personnelle_familiere",
+            "themeIntegre": ""
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "lettre_personnelle_familiere",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'une lettre personnelle adressée à une personne non familière + Exploitation de texte",
+        "progression": [
+          {
+            "seanceProgression": "S.2",
+            "intituleProgression": "Lecture méthodique d'une lettre personnelle adressée à une personne non familière + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "lettre_personnelle_non_familiere",
+            "themeIntegre": ""
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "lettre_personnelle_non_familiere",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'une lettre adressée à une personne familière / non familière + Exploitation de texte",
+        "progression": [
+          {
+            "seanceProgression": "S.3",
+            "intituleProgression": "Lecture méthodique d'une lettre adressée à une personne familière / non familière + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "lettre_personnelle",
+            "themeIntegre": ""
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "lettre_personnelle",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'une lettre personnelle en rapport avec un thème des contenus intégrés + Exploitation de texte",
+        "progression": [
+          {
+            "seanceProgression": "S.4",
+            "intituleProgression": "Lecture méthodique d'une lettre personnelle en rapport avec un thème des contenus intégrés + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "lettre_personnelle",
+            "themeIntegre": "liste_10_themes"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "lettre_personnelle",
+        "themeIntegre": "liste_10_themes"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'une lettre adressée à une personne familière / non familière + Exploitation de texte",
+        "progression": [
+          {
+            "seanceProgression": "S.5",
+            "intituleProgression": "Lecture méthodique d'une lettre adressée à une personne familière / non familière + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "lettre_personnelle",
+            "themeIntegre": "",
+            "remarque": "Catalogue : « autre support au choix » : écart"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "lettre_personnelle",
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 2,
+    "titreLecon": "La description",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte descriptif d'un objet familier + Exploitation de texte",
+        "progression": [
+          {
+            "semaine": 11,
+            "seanceProgression": "S.1",
+            "intituleProgression": "Lecture méthodique d'un texte descriptif d'un objet familier + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "descriptif_objet_familier",
+            "themeIntegre": ""
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "descriptif_objet_familier",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte descriptif d'un lieu non animé + Exploitation de texte",
+        "progression": [
+          {
+            "semaine": 13,
+            "seanceProgression": "S.2",
+            "intituleProgression": "Lecture méthodique d'un texte descriptif d'un lieu non animé + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "descriptif_lieu_non_anime",
+            "themeIntegre": ""
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "descriptif_lieu_non_anime",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé + Exploitation de texte",
+        "progression": [
+          {
+            "semaine": 15,
+            "seanceProgression": "S.3",
+            "intituleProgression": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "descriptif",
+            "themeIntegre": ""
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "descriptif",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé + Exploitation de texte",
+        "progression": [
+          {
+            "semaine": 17,
+            "seanceProgression": "S.4",
+            "intituleProgression": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "descriptif",
+            "themeIntegre": "",
+            "remarque": "Numérotée S.5 dans le PDF des progressions (numérotation fautive : il n'y a pas de S.4)"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "descriptif",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé (texte support en rapport avec un thème des contenus intégrés) + Exploitation de texte",
+        "progression": [
+          {
+            "semaine": 19,
+            "seanceProgression": "S.5",
+            "intituleProgression": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé (texte support en rapport avec un thème des contenus intégrés) + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "descriptif",
+            "themeIntegre": "liste_10_themes",
+            "remarque": "Numérotée S.6 dans le PDF des progressions (numérotation fautive : il n'y a pas de S.4)"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "descriptif",
+        "themeIntegre": "liste_10_themes"
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Lecture méthodique",
+    "numeroLecon": 3,
+    "titreLecon": "Le récit",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un récit simple et complet + Exploitation de texte",
+        "progression": [
+          {
+            "seanceProgression": "S.1",
+            "intituleProgression": "Lecture méthodique d'un récit simple et complet + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "recit_simple",
+            "themeIntegre": ""
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "recit_simple",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un récit simple et complet + Exploitation de texte",
+        "progression": [
+          {
+            "seanceProgression": "S.2",
+            "intituleProgression": "Lecture méthodique d'un récit simple et complet + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "recit_simple",
+            "themeIntegre": ""
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "recit_simple",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un récit complexe et complet + Exploitation de texte",
+        "progression": [
+          {
+            "seanceProgression": "S.3",
+            "intituleProgression": "Lecture méthodique d'un récit complexe et complet + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "recit_complexe",
+            "themeIntegre": ""
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "recit_complexe",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un récit simple et complet (renforcement) en rapport avec un thème des contenus intégrés + Exploitation de texte",
+        "progression": [
+          {
+            "seanceProgression": "S.4",
+            "intituleProgression": "Lecture méthodique d'un récit simple et complet (renforcement) en rapport avec un thème des contenus intégrés + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "recit_simple",
+            "themeIntegre": "liste_10_themes"
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "recit_simple",
+        "themeIntegre": "liste_10_themes"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Lecture méthodique",
+        "intitule": "Lecture méthodique d'un récit simple et complet / complexe et complet + Exploitation de texte",
+        "progression": [
+          {
+            "seanceProgression": "S.5",
+            "intituleProgression": "Lecture méthodique d'un récit simple et complet / complexe et complet + Exploitation de texte",
+            "duree": "1h",
+            "typeTexte": "recit",
+            "themeIntegre": ""
+          }
+        ],
+        "typeSupport": "texte_obligatoire",
+        "typeTexte": "recit",
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 1,
+    "titreLecon": "La lettre personnelle",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger une lettre personnelle adressée à une personne familière",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "lettre_personnelle",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger une lettre personnelle adressée à une personne non familière",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "lettre_personnelle",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger une lettre personnelle adressée à une personne familière / non familière en rapport avec un thème des contenus intégrés",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "lettre_personnelle",
+        "themeIntegre": "liste_10_themes"
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 2,
+    "titreLecon": "La description",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger une description simple d'un objet familier",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "descriptif_objet_familier",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger une description simple d'un lieu non animé",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "descriptif_lieu_non_anime",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger la description d'un objet familier / d'un lieu non animé (renforcement)",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "descriptif",
+        "themeIntegre": ""
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Expression écrite",
+    "numeroLecon": 3,
+    "titreLecon": "Le récit",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un récit simple et complet",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "recit_simple",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un récit simple et complet avec un thème des contenus intégrés",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "recit_simple",
+        "themeIntegre": "liste_10_themes"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un récit complexe et complet",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "recit_complexe",
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Expression écrite",
+        "intitule": "Rédiger un récit complexe et complet en rapport avec un thème des contenus intégrés",
+        "progression": [],
+        "typeSupport": "situation_apprentissage_avec_sujet",
+        "typeTexte": "recit_complexe",
+        "themeIntegre": "liste_10_themes"
+      }
+    ]
+  }
+]
