@@ -52,8 +52,9 @@ titre et l'auteur de l'œuvre lue (pas de texte à coller) et la fiche suit la s
 
 `lecons_officielles_6e.json` regroupe toute la 6ème et remplace `lecons_officielles_6e_grammaire_orthographe_oral.json` et
 `lecons_officielles_6e_lecture_exploitation_expression_ecrite.json` (supprimés). Mêmes champs que les autres niveaux ; liste des
-10 thèmes = celle de la 3ème. Restent volontairement inchangés, en attente de vérification dans le PDF de la progression :
-Orthographe lexicale (toute la leçon), Orthographe grammaticale S3 et Lecture méthodique « La description » S4.
+10 thèmes = celle de la 3ème. Corrigés d'après le PDF des progressions (06/10/2026, pp. 2 à 4) : Lecture méthodique « La
+description » = 5 séances (numérotées 1 à 5 ; le PDF saute S.4) et Orthographe lexicale = 4 séances. Reste volontairement
+inchangé, en attente de vérification dans le PDF : Orthographe grammaticale S3.
 
 ## Contrôle des valeurs de classe en base (lecture seule)
 

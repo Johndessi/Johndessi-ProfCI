@@ -279,17 +279,38 @@
       {
         "numeroSeance": 1,
         "activite": "Orthographe",
-        "intitule": "Accents/apostrophe/élision"
+        "intitule": "Les accents, l'apostrophe et l'élision",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
       },
       {
         "numeroSeance": 2,
         "activite": "Orthographe",
-        "intitule": "Homophones ce-se-ceux, si-s'y, ni-n'y, la-là, quel-quelle-qu'elle, s'est-ses-c'est-ces"
+        "intitule": "Les homophones : ce / se / ceux ; s'est / ses / c'est / ces",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
       },
       {
         "numeroSeance": 3,
         "activite": "Orthographe",
-        "intitule": "Doublement du \"m\" dans les adverbes en \"ment\""
+        "intitule": "Le doublement des consonnes dans les adverbes en « ment »",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Orthographe",
+        "intitule": "Les homophones si / s'y ; ni / n'y ; la / là",
+        "progression": [],
+        "typeSupport": "aucun_requis_corpus_catalogue",
+        "typeTexte": null,
+        "themeIntegre": ""
       }
     ]
   },
@@ -495,6 +516,7 @@
         "intitule": "Lecture méthodique d'un texte descriptif d'un objet familier + Exploitation de texte",
         "progression": [
           {
+            "semaine": 11,
             "seanceProgression": "S.1",
             "intituleProgression": "Lecture méthodique d'un texte descriptif d'un objet familier + Exploitation de texte",
             "duree": "1h",
@@ -512,6 +534,7 @@
         "intitule": "Lecture méthodique d'un texte descriptif d'un lieu non animé + Exploitation de texte",
         "progression": [
           {
+            "semaine": 13,
             "seanceProgression": "S.2",
             "intituleProgression": "Lecture méthodique d'un texte descriptif d'un lieu non animé + Exploitation de texte",
             "duree": "1h",
@@ -529,6 +552,7 @@
         "intitule": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé + Exploitation de texte",
         "progression": [
           {
+            "semaine": 15,
             "seanceProgression": "S.3",
             "intituleProgression": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé + Exploitation de texte",
             "duree": "1h",
@@ -543,21 +567,16 @@
       {
         "numeroSeance": 4,
         "activite": "Lecture méthodique",
-        "intitule": "Lecture méthodique d'un texte descriptif en rapport avec un thème des contenus intégrés",
-        "progression": [],
-        "typeSupport": "texte_obligatoire"
-      },
-      {
-        "numeroSeance": 5,
-        "activite": "Lecture méthodique",
         "intitule": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé + Exploitation de texte",
         "progression": [
           {
-            "seanceProgression": "S.5",
+            "semaine": 17,
+            "seanceProgression": "S.4",
             "intituleProgression": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé + Exploitation de texte",
             "duree": "1h",
             "typeTexte": "descriptif",
-            "themeIntegre": ""
+            "themeIntegre": "",
+            "remarque": "Numérotée S.5 dans le PDF des progressions (numérotation fautive : il n'y a pas de S.4)"
           }
         ],
         "typeSupport": "texte_obligatoire",
@@ -565,16 +584,18 @@
         "themeIntegre": ""
       },
       {
-        "numeroSeance": 6,
+        "numeroSeance": 5,
         "activite": "Lecture méthodique",
         "intitule": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé (texte support en rapport avec un thème des contenus intégrés) + Exploitation de texte",
         "progression": [
           {
-            "seanceProgression": "S.6",
+            "semaine": 19,
+            "seanceProgression": "S.5",
             "intituleProgression": "Lecture méthodique d'un texte descriptif d'un objet familier / d'un lieu non animé (texte support en rapport avec un thème des contenus intégrés) + Exploitation de texte",
             "duree": "1h",
             "typeTexte": "descriptif",
-            "themeIntegre": "liste_10_themes"
+            "themeIntegre": "liste_10_themes",
+            "remarque": "Numérotée S.6 dans le PDF des progressions (numérotation fautive : il n'y a pas de S.4)"
           }
         ],
         "typeSupport": "texte_obligatoire",
