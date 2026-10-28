@@ -1,0 +1,249 @@
+[
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Grammaire",
+    "numeroLecon": 1,
+    "titreLecon": "Le groupe nominal",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les différentes expansions du groupe nominal"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Le déterminant zéro"
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Grammaire",
+    "numeroLecon": 2,
+    "titreLecon": "La pronominalisation",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms personnels sujets"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms personnels compléments"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms démonstratifs et les pronoms possessifs"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms interrogatifs"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "Les pronoms indéfinis"
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Grammaire",
+    "numeroLecon": 3,
+    "titreLecon": "Le verbe : formes et emplois",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "La morphologie des verbes du 3ème groupe"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "Les modalités verbales de l'indicatif"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "Les emplois de « avoir » et « être » comme auxiliaires ou verbes autonomes"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Les emplois des auxiliaires « avoir » et « être » avec un participe passé"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "Les emplois de « avoir » et « être » comme éléments de locutions verbales"
+      },
+      {
+        "numeroSeance": 6,
+        "activite": "Grammaire",
+        "intitule": "Les semi-auxiliaires"
+      },
+      {
+        "numeroSeance": 7,
+        "activite": "Grammaire",
+        "intitule": "Le mode conditionnel"
+      },
+      {
+        "numeroSeance": 8,
+        "activite": "Grammaire",
+        "intitule": "Le mode subjonctif"
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Grammaire",
+    "numeroLecon": 4,
+    "titreLecon": "Étude de quelques propositions subordonnées",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée relative : la fonction de la subordonnée relative"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée relative : les fonctions du pronom relatif"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Grammaire",
+        "intitule": "La subordonnée complétive"
+      },
+      {
+        "numeroSeance": 4,
+        "activite": "Grammaire",
+        "intitule": "Les fonctions et les modes de la subordonnée complétive introduite par « que »"
+      },
+      {
+        "numeroSeance": 5,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée circonstancielle de cause"
+      },
+      {
+        "numeroSeance": 6,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée circonstancielle de conséquence"
+      },
+      {
+        "numeroSeance": 7,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée circonstancielle de concession / opposition"
+      },
+      {
+        "numeroSeance": 8,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée circonstancielle de temps"
+      },
+      {
+        "numeroSeance": 9,
+        "activite": "Grammaire",
+        "intitule": "La proposition subordonnée circonstancielle de but"
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Orthographe",
+    "numeroLecon": 1,
+    "titreLecon": "Orthographe lexicale",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "Formation des mots par composition / par dérivation simple"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Orthographe",
+        "intitule": "Les consonnes finales muettes",
+        "vocabulaireReference": {
+          "t muet": ["respect", "doigt", "appétit", "fruit", "bruit", "esprit", "nuit", "salut", "circuit", "défaut", "exploit"],
+          "d muet": ["pied", "fonds", "hasard", "canard", "nid"],
+          "s muet": ["poids", "temps", "corps", "pas", "cas", "repas", "jus", "gros"],
+          "g muet": ["rang", "sang", "étang", "poing"],
+          "p muet": ["beaucoup", "coup", "loup", "sirop"],
+          "x muet": ["deux", "jeux", "veux", "peux", "beaux", "cheveux"]
+        }
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Orthographe",
+        "intitule": "Les consonnes doublées",
+        "vocabulaireReference": {
+          "ll": ["belle", "celle", "celle-ci", "collection", "excellent", "fille", "intelligent", "intelligence", "installation", "mille", "nouvelle", "pelle", "ruelle", "tellement", "villa"],
+          "ss": ["classe", "dossier", "fossé", "intéressant", "lisse", "masse", "message", "nécessaire", "passé", "possédé", "possible", "ressembler", "tasse"],
+          "tt": ["attacher", "attaquer", "attention", "attentif", "attentat", "batterie", "lettre", "littéraire", "lutte", "pittoresque"],
+          "pp": ["appel", "apparence", "appartenance", "appliquer", "apport", "appétit", "frappé", "happé", "nappé", "rappel"],
+          "mm": ["ammoniaque", "commerce", "commencer", "communauté", "grammaire", "homme", "pomme", "sommeil", "sommet"],
+          "nn": ["année", "annonce", "bannière", "donnée", "mannequin", "panne", "personne", "renne", "sonnerie"],
+          "rr": ["arrangé", "barrage", "barrique", "carreau", "carrière", "terrain", "terrasse"],
+          "ff": ["affaire", "affecter", "affiche", "affluent", "affront", "biffé", "chiffre", "coffre", "diffère", "effort", "étoffe", "graffiti", "offre", "raffinement", "souffert", "taffetas"],
+          "cc": ["accent", "accepter", "accès", "accident", "acclamation", "acclimatation", "accolade", "accommodement", "accompagnement", "accord", "accordéon", "accoste", "accouchement", "accoudoir", "accoutrement", "accoutumance", "accréditation", "accroc", "accrochage", "accroissement", "accroît", "accroupir", "accueil", "acculturation", "accumulation", "accusation"]
+        }
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Orthographe",
+    "numeroLecon": 2,
+    "titreLecon": "Orthographe grammaticale",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Orthographe",
+        "intitule": "L'accord du verbe avec le sujet dont le déterminant est « beaucoup, assez, peu »"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Orthographe",
+        "intitule": "Les homophones grammaticaux : quand / quant / qu'en"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Orthographe",
+        "intitule": "Les homophones grammaticaux : plutôt / plus tôt / aussitôt / aussi tôt"
+      }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "4ème",
+    "activite": "Expression orale",
+    "numeroLecon": 1,
+    "titreLecon": "Le débat",
+    "seances": [
+      {
+        "numeroSeance": 1,
+        "activite": "Expression orale",
+        "intitule": "Participer à un débat. Thème : Économie d'énergie : la gestion des appareils électro-ménagers"
+      },
+      {
+        "numeroSeance": 2,
+        "activite": "Expression orale",
+        "intitule": "Animer un débat sur un thème des contenus intégrés. Thème : La sécurité dans un état démocratique (CADEG)"
+      },
+      {
+        "numeroSeance": 3,
+        "activite": "Expression orale",
+        "intitule": "Animer un débat sur un thème des contenus intégrés (révision). Thème : Internet et technologie : utilisation de l'internet, des réseaux sociaux et de l'intelligence artificielle (IA)"
+      }
+    ]
+  }
+]

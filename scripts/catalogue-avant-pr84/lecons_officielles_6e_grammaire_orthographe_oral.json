@@ -1,0 +1,116 @@
+[
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 1,
+    "titreLecon": "La phrase",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "La phrase et ses constituants" },
+      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Types déclaratif et interrogatif" },
+      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Types impératif et exclamatif" },
+      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "Formes affirmative et négative" },
+      { "numeroSeance": 5, "activite": "Grammaire", "intitule": "La phrase emphatique" },
+      { "numeroSeance": 6, "activite": "Grammaire", "intitule": "Forme active et forme passive" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 2,
+    "titreLecon": "Le groupe nominal",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "Constituants du GN" },
+      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Expansions du nom" },
+      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Déterminants démonstratifs et possessifs" },
+      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "Comparatifs" },
+      { "numeroSeance": 5, "activite": "Grammaire", "intitule": "Superlatifs" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 3,
+    "titreLecon": "Les modalités du discours",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "Marques du discours direct" },
+      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Marques du discours indirect" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 4,
+    "titreLecon": "Le verbe : formes et emplois",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "Morphologie 1er/2e groupe" },
+      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Présent de l'indicatif" },
+      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Futur simple" },
+      { "numeroSeance": 4, "activite": "Grammaire", "intitule": "Couple imparfait-passé composé" },
+      { "numeroSeance": 5, "activite": "Grammaire", "intitule": "Couple imparfait-passé simple" },
+      { "numeroSeance": 6, "activite": "Grammaire", "intitule": "Auxiliaires d'aspect" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 5,
+    "titreLecon": "Le groupe verbal",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "Verbes d'action" },
+      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Groupe verbal avec être et ses substituts" },
+      { "numeroSeance": 3, "activite": "Grammaire", "intitule": "Groupe verbal avec être et ses substituts" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Grammaire",
+    "numeroLecon": 6,
+    "titreLecon": "Les adverbes",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Grammaire", "intitule": "Adverbes de lieu" },
+      { "numeroSeance": 2, "activite": "Grammaire", "intitule": "Adverbes de temps" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Orthographe",
+    "numeroLecon": 1,
+    "titreLecon": "Orthographe lexicale",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Orthographe", "intitule": "Accents/apostrophe/élision" },
+      { "numeroSeance": 2, "activite": "Orthographe", "intitule": "Homophones ce-se-ceux, si-s'y, ni-n'y, la-là, quel-quelle-qu'elle, s'est-ses-c'est-ces" },
+      { "numeroSeance": 3, "activite": "Orthographe", "intitule": "Doublement du \"m\" dans les adverbes en \"ment\"" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Orthographe",
+    "numeroLecon": 2,
+    "titreLecon": "Orthographe grammaticale",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Orthographe", "intitule": "Accord du verbe précédé de le/la/les/l'" },
+      { "numeroSeance": 2, "activite": "Orthographe", "intitule": "Orthographe de \"leur\" (pronom/adjectif)" },
+      { "numeroSeance": 3, "activite": "Orthographe", "intitule": "Accord du participe passé avec avoir ou être" }
+    ]
+  },
+  {
+    "discipline": "Français",
+    "classe": "6ème",
+    "activite": "Expression orale",
+    "numeroLecon": 1,
+    "titreLecon": "Le dialogue oral",
+    "seances": [
+      { "numeroSeance": 1, "activite": "Expression orale", "intitule": "Obtenir une information" },
+      { "numeroSeance": 2, "activite": "Expression orale", "intitule": "Donner une information (Covid-19)" },
+      { "numeroSeance": 3, "activite": "Expression orale", "intitule": "Expliquer une situation" }
+    ]
+  }
+]

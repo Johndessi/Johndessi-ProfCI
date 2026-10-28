@@ -62,6 +62,12 @@ et les autres collections, les documents par valeur du champ `classe` (« 4e »,
 officielles les clés d'import (discipline, classe normalisée, activité, numéro de leçon) portées par plusieurs documents :
 ce qu'un ré-import dupliquerait. Sans paramètre : niveaux 3 à 6. `GET /api/admin/classes-3e` ne couvre que la 3ème.
 
+## Entrée en production
+
+Voir `scripts/README-catalogues.md` : `scripts/importer-catalogues.js` (contrôle des classes, sauvegarde, import un niveau à la
+fois avec confirmation) et `scripts/retour-arriere-catalogues.js`. `GET /api/admin/lecons-officielles/export` (clé admin,
+lecture seule) exporte la collection des leçons officielles dans un format ré-importable par la route d'import.
+
 ## Service d'aperçu : import des catalogues au démarrage
 
 Sur un service d'essai (base MongoDB **distincte** de la production), définir

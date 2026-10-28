@@ -14396,6 +14396,54 @@ app.get('/api/admin/classes-catalogue', verifierCleAdmin, async (req, res) => {
   }
 });
 
+// Sauvegarde admin en LECTURE SEULE : exporte toute la collection des leçons officielles
+// (ou seulement les classes demandées, ?niveaux=3,4,5,6) au format accepté par la route
+// d'import (POST /api/admin/lecons-officielles/seed) -- un export est donc ré-importable tel
+// quel pour restaurer l'état d'avant un import. Aucune écriture. `_idOrigine` n'est qu'un
+// repère (ignoré par l'import).
+function formaterLeconPourExport(doc) {
+  const sortie = {
+    _idOrigine: String(doc._id),
+    discipline: doc.discipline, classe: doc.classe, activite: doc.activite,
+    numeroLecon: doc.numeroLecon, titreLecon: doc.titreLecon
+  };
+  if (doc.ordre !== undefined && doc.ordre !== null) sortie.ordre = doc.ordre;
+  if (doc.genreOeuvre) sortie.genreOeuvre = doc.genreOeuvre;
+  sortie.seances = (doc.seances || []).map((s) => {
+    const o = { numeroSeance: s.numeroSeance, intitule: s.intitule, activite: s.activite };
+    for (const cle of ['optionsChoix', 'choixLibre', 'choixLibreLabel', 'texteSupportOfficiel', 'vocabulaireReference',
+      'typeSeanceOeuvre', 'typeSupport', 'typeTexte', 'themeIntegre', 'progression']) {
+      if (s[cle] !== undefined && s[cle] !== null) o[cle] = s[cle];
+    }
+    return o;
+  });
+  return sortie;
+}
+
+app.get('/api/admin/lecons-officielles/export', verifierCleAdmin, async (req, res) => {
+  try {
+    let filtre = {};
+    if (req.query.niveaux) {
+      const niveaux = String(req.query.niveaux).split(',').map((n) => n.trim()).filter((n) => /^[2-6]$/.test(n));
+      if (!niveaux.length) return res.status(400).json({ error: 'niveaux : chiffres de 2 à 6 séparés par des virgules' });
+      filtre = { classe: { $regex: `^(${niveaux.join('|')})`, $options: 'i' } };
+    }
+    const docs = await LeconOfficielleDPFC.find(filtre).lean();
+    docs.sort((a, b) => String(a.classe).localeCompare(String(b.classe)) || String(a.activite).localeCompare(String(b.activite)) || (a.numeroLecon - b.numeroLecon));
+    const maintenant = new Date();
+    res.setHeader('Content-Disposition', `attachment; filename="lecons-officielles-${maintenant.toISOString().slice(0, 10)}.json"`);
+    res.json({
+      format: 'lecons-officielles-v1',
+      exporteLe: maintenant.toISOString(),
+      nbDocuments: docs.length,
+      nbSeances: docs.reduce((acc, d) => acc + (d.seances || []).length, 0),
+      lecons: docs.map(formaterLeconPourExport)
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/admin/lecons-officielles/brut', verifierCleAdmin, async (req, res) => {
   try {
     const { discipline, classe, activite, numeroLecon } = req.query;
@@ -14577,6 +14625,6 @@ module.exports = {
   appliquerMiseEnFormeCompacteModeleLot14, genererDocxDepuisHtml, genererPdfDepuisHtml,
   normaliserTexte, estReferenceDePassageLot14b, verifierGuillemetsLot14b, detecterLibelleRecopieLot14b,
   extraireTextePassageLot14b, minusculeArticleInitialLot14b, preremplirCiblesLot14b,
-  normaliserClasseCatalogue, analyserClassesCatalogue, trierSeancesParProgression, detecterDevoirOuCompteRendu,
+  normaliserClasseCatalogue, analyserClassesCatalogue, formaterLeconPourExport, trierSeancesParProgression, detecterDevoirOuCompteRendu,
   profCIPeutRedigerLeTexte, injecterMentionTexteGenereParProfCI, libelleThemeIntegre, listerLeconsOfficielles
 };
