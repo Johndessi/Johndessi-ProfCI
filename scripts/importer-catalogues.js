@@ -7,6 +7,7 @@
 //      documents sont à normaliser (« 4e »...) ou si des clés d'import sont en conflit ;
 //   2. sauvegarde : export de toute la collection (GET .../lecons-officielles/export), enregistré
 //      sur ce poste ;
+//   (mode à blanc : --simuler = contrôle + export en lecture seule + comparaison, SANS aucune écriture)
 //   3. pour chaque niveau : import, affichage de upserted / ignores, nouveau contrôle des classes,
 //      comparaison du contenu en base au fichier, puis ARRÊT et confirmation avant le niveau suivant.
 //
@@ -17,6 +18,7 @@ const {
   ErreurScript, validerUrl, demander, lireSecret, creerClient, comparerCatalogues, nbSeances,
   resumerClasses, detaillerConflits, controlerClasses
 } = require('./lib/catalogue-admin');
+const { simuler } = require('./lib/simulation');
 
 const RACINE = path.resolve(__dirname, '..');
 // Attendus fixés par l'enseignant (leçons importées par niveau) et séances en base après import.
@@ -29,9 +31,11 @@ const NIVEAUX = {
 
 function usage() {
   return [
-    'Usage : node scripts/importer-catalogues.js <url-du-serveur> [--niveaux 3,4,5,6] [--dossier-sauvegarde <dossier>]',
+    'Usage : node scripts/importer-catalogues.js <url-du-serveur> [--simuler] [--niveaux 3,4,5,6] [--dossier-sauvegarde <dossier>]',
     '',
     '  <url-du-serveur>       obligatoire, ex. https://exemple.onrender.com (jamais de valeur par défaut)',
+    '  --simuler              mode à blanc : exporte la base en lecture seule et affiche ce que l\'import changerait,',
+    '                         avec les valeurs de la base absentes de main (corrections manuelles). N\'écrit RIEN (ni base, ni fichier).',
     '  --niveaux              niveaux à importer, dans l\'ordre (défaut : 3,4,5,6). Pour reprendre après un arrêt : --niveaux 5,6',
     '  --dossier-sauvegarde   où enregistrer l\'export de sauvegarde (défaut : dossier courant)',
     '',
@@ -40,11 +44,12 @@ function usage() {
 }
 
 function lireArguments(argv) {
-  const r = { url: null, niveaux: [3, 4, 5, 6], dossier: process.cwd() };
+  const r = { url: null, niveaux: [3, 4, 5, 6], dossier: process.cwd(), simuler: false };
   const pos = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--niveaux') r.niveaux = String(argv[++i] || '').split(',').map((n) => Number(n.trim()));
     else if (argv[i] === '--dossier-sauvegarde') r.dossier = path.resolve(String(argv[++i] || ''));
+    else if (argv[i] === '--simuler') r.simuler = true;
     else if (argv[i] === '--help' || argv[i] === '-h') { console.log(usage()); process.exit(0); }
     else pos.push(argv[i]);
   }
@@ -73,6 +78,34 @@ async function main() {
   const cle = await lireSecret('Clé admin (saisie masquée, rien ne s\'affiche) : ');
   if (!cle) throw new ErreurScript('Clé vide.');
   const client = creerClient(origine, cle);
+
+  if (args.simuler) {
+    console.log('\nMODE À BLANC (--simuler) : seules des routes en lecture seule sont appelées ; rien n\'est écrit, ni en base ni sur ce poste.');
+    const analyseSim = await controlerClasses(client, [3, 4, 5, 6]);
+    console.log(`\n[1/2] Contrôle des classes : ${resumerClasses(analyseSim)}`);
+    if (analyseSim.aNormaliser > 0 || analyseSim.conflits.length > 0) {
+      console.log('   ⚠ L\'import réel S\'ARRÊTERAIT ici (classe à normaliser ou conflit) :');
+      for (const l of detaillerConflits(analyseSim)) console.log(l);
+    } else console.log('   OK : l\'import réel passerait ce contrôle.');
+    console.log('\n[2/2] Export de la base (lecture seule) et comparaison avec les fichiers...');
+    const expSim = await client.get('/api/admin/lecons-officielles/export');
+    if (!expSim.ok || !expSim.json || !Array.isArray(expSim.json.lecons)) throw new ErreurScript(`Export inattendu (HTTP ${expSim.statut}).`);
+    console.log(`   Base : ${expSim.json.nbDocuments} leçons, ${expSim.json.nbSeances} séances (tous niveaux).`);
+    const { lignes, resume } = simuler({
+      exportProd: expSim.json.lecons,
+      niveaux: args.niveaux.map((n) => ({ numero: n, ...NIVEAUX[n] })),
+      racine: RACINE,
+      dossierMain: path.join(__dirname, 'catalogue-avant-pr84')
+    });
+    for (const l of lignes) console.log(l);
+    console.log('\n=== RÉSUMÉ (aucune écriture effectuée) ===');
+    console.log(`   identiques au fichier : ${resume.identiques} ; modifiées par l'import : ${resume.modifiees} ; créées : ${resume.creees} ; en production hors fichier (non touchées) : ${resume.horsFichier} ; clés en doublon : ${resume.doublons}`);
+    if (resume.avecCorrectionManuelle.length) {
+      console.log(`   ⚠ ${resume.avecCorrectionManuelle.length} leçon(s) contiennent des valeurs absentes de main que l'import écraserait :`);
+      for (const l of resume.avecCorrectionManuelle) console.log(`      - ${l}`);
+    } else console.log('   Aucune valeur de production absente de main que l\'import écraserait.');
+    return;
+  }
 
   // ----- Étape 1 : contrôle des classes (avant tout) -----
   console.log('\n[1/3] Contrôle des valeurs de classe en base (lecture seule)...');

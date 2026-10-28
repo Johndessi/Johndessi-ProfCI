@@ -36,6 +36,24 @@ Déroulement :
 
 Pour reprendre après un arrêt (nouvelle sauvegarde, à côté de la première) : `--niveaux 5,6`.
 
+## Mode à blanc : `--simuler` (à lancer en premier)
+
+```bat
+node scripts\importer-catalogues.js https://URL-DU-SERVEUR --simuler
+```
+
+Aucune écriture, ni en base ni sur le poste (aucun fichier créé, aucune confirmation demandée). Le script appelle
+`classes-catalogue` et `export` (lecture seule), puis compare chaque leçon du fichier de chaque niveau avec la base et
+affiche : `=` identique, `~` modifiée (titre, nombre de séances, intitulés modifiés, séances ajoutées/retirées, champs
+ajoutés/modifiés/retirés), `+` créée, `?` en base mais absente du fichier (non touchée), `!` clé en doublon.
+
+Surtout, il signale par `⚠ VALEURS DE PRODUCTION ABSENTES DE MAIN` toute valeur de la base qui n'est pas dans les
+fichiers de `main` du 28/10/2026 (`scripts/catalogue-avant-pr84/`) et que l'import supprimerait ou remplacerait :
+correction manuelle d'un intitulé, vocabulaire ajouté, séance ajoutée à la main... Une valeur déjà identique au nouveau
+fichier n'est pas signalée (l'import ne l'efface pas). `ordre` et `genreOeuvre` absents du fichier sont conservés par
+l'import (signalés en « note »). Un service déjà importé (aperçu) apparaît donc entièrement « identique ».
+`--niveaux 4` limite la comparaison à un niveau.
+
 ## Retour arrière
 
 ```powershell
