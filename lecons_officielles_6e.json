@@ -325,7 +325,16 @@
         "numeroSeance": 1,
         "activite": "Orthographe",
         "intitule": "L'accord du verbe précédé des pronoms le / la / les / l'",
-        "progression": [],
+        "progression": [
+          {
+            "semaine": 13,
+            "seanceProgression": "S.1",
+            "intituleProgression": "L'accord du verbe précédé des pronoms le / la / les / l'",
+            "duree": "1h",
+            "typeTexte": "",
+            "themeIntegre": ""
+          }
+        ],
         "typeSupport": "aucun_requis_corpus_catalogue",
         "typeTexte": null,
         "themeIntegre": ""
@@ -334,7 +343,16 @@
         "numeroSeance": 2,
         "activite": "Orthographe",
         "intitule": "L'orthographe de « leur » (pronom personnel) et « leur » (adjectif possessif)",
-        "progression": [],
+        "progression": [
+          {
+            "semaine": 23,
+            "seanceProgression": "S.2",
+            "intituleProgression": "L'orthographe de « leur » (pronom personnel) et « leur » (adjectif possessif)",
+            "duree": "1h",
+            "typeTexte": "",
+            "themeIntegre": ""
+          }
+        ],
         "typeSupport": "aucun_requis_corpus_catalogue",
         "typeTexte": null,
         "themeIntegre": ""
