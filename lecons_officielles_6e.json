@@ -678,11 +678,11 @@
       {
         "numeroSeance": 4,
         "activite": "Lecture méthodique",
-        "intitule": "Lecture méthodique d'un récit simple et complet (Renforcement) : texte support en rapport avec un thème des contenus intégrés",
+        "intitule": "Lecture méthodique d'un récit simple et complet (Renforcement) : texte support en rapport avec un thème des contenus intégrés + Exploitation de texte",
         "progression": [
           {
             "seanceProgression": "S.4",
-            "intituleProgression": "Lecture méthodique d'un récit simple et complet (renforcement) en rapport avec un thème des contenus intégrés + Exploitation de texte",
+            "intituleProgression": "Lecture méthodique d'un récit simple et complet (Renforcement) : texte support en rapport avec un thème des contenus intégrés + Exploitation de texte",
             "duree": "1h",
             "typeTexte": "recit_simple",
             "themeIntegre": "liste_10_themes"
