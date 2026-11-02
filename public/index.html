@@ -295,6 +295,22 @@ textarea { resize: vertical; min-height: 90px; }
         <input id="catalogueOptionTexte" type="text" placeholder="Précisez votre choix"/>
       </div>
 
+      <div class="form-group" id="catalogueThemeGroup" style="display:none;margin-bottom:14px">
+        <label>Thème des contenus intégrés</label>
+        <select id="catalogueTheme">
+          <option value="">-- Choisir un thème (liste des 10 thèmes) --</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="oeuvreLueGroup" style="display:none;margin-bottom:14px">
+        <label>Œuvre lue (titre et auteur) *</label>
+        <input id="oeuvreLueTitre" type="text" placeholder="Titre de l'œuvre lue"/>
+        <input id="oeuvreLueAuteur" type="text" placeholder="Auteur" style="margin-top:8px"/>
+        <p style="font-size:12px;color:#8a4b00;margin-top:8px">
+          Le support de cette séance est l'œuvre lue : saisissez son titre et son auteur (pas de texte à coller).
+        </p>
+      </div>
+
       <div class="form-group" style="margin-bottom:14px">
         <label>Plan de cours (optionnel) — adapté à votre plan</label>
         <textarea id="planCours" placeholder="Collez votre plan ici si vous en avez un.&#10;Ex:&#10;I- Définition&#10;II- Les temps simples : présent, imparfait...&#10;III- Les temps composés&#10;IV- Exercices d'application"></textarea>
@@ -309,6 +325,18 @@ textarea { resize: vertical; min-height: 90px; }
         <textarea id="texteSupport" style="min-height:120px"
           placeholder="Collez ici le texte support (jusqu'à environ 600 mots)..."></textarea>
         <input id="texteSupportFichier" type="file" accept=".pdf,.doc,.docx" style="margin-top:8px"/>
+        <p id="texteObligatoireNote" style="display:none;font-size:12px;color:#8a4b00;margin-top:8px">
+          Cette séance exige un texte support : collez-le ou importez un fichier.
+        </p>
+        <div id="texteProfCIGroup" style="display:none;margin-top:8px">
+          <button type="button" class="btn" id="btnTexteProfCI" style="background:#999;width:auto;padding:8px 14px"
+            onclick="basculerTexteProfCI()">✍️ Faire rédiger un texte par ProfCI (à vérifier)</button>
+          <span id="texteProfCIEtat" style="font-size:12px;margin-left:8px;color:var(--gris2)"></span>
+          <p style="font-size:11px;color:var(--gris2);margin-top:4px">
+            Réservé aux textes non littéraires. Le texte est rédigé par le modèle,
+            sans source : une mention « à vérifier » figure dans la fiche.
+          </p>
+        </div>
       </div>
 
       <div class="form-group" id="modeEvaluationResumeGroup" style="display:none;margin-bottom:14px">
@@ -1058,6 +1086,8 @@ function setNiveauModele(niveau, btn) {
 // existe pour la discipline/classe/activité sélectionnée ; sinon le champ libre
 // "Leçon / Thème" existant reste inchangé (fallback obligatoire).
 let catalogueLeconsDisponibles = [];
+let texteProfCIDemande = false;   // catalogue 3e : « Faire rédiger un texte par ProfCI »
+let themesIntegresCache = {};   // catalogue 3e : menu des 10 thèmes, par classe
 // catalogueActif reste le booléen EFFECTIF lu partout ailleurs dans ce
 // fichier (aucun autre appel à changer) -- calculé dans appliquerModeCatalogue()
 // à partir de 2 sources désormais distinctes : catalogueDisponible (résultat
@@ -1214,6 +1244,14 @@ function choisirSeanceCatalogue() {
       : 'Précisez votre choix';
     document.getElementById('catalogueOptionLibreGroup').style.display = 'block';
   }
+  if (seanceTrouvee.themeIntegre === 'liste_10_themes') afficherMenuThemesIntegres();
+  if (seanceTrouvee.typeSupport === 'oeuvre_lue_titre_auteur_obligatoires') {
+    document.getElementById('oeuvreLueGroup').style.display = 'block';
+  }
+  if (seanceTrouvee.typeSupport === 'texte_obligatoire') {
+    document.getElementById('texteObligatoireNote').style.display = 'block';
+    if (seanceTrouvee.texteProfCIAutorise) document.getElementById('texteProfCIGroup').style.display = 'block';
+  }
 }
 
 function trouverSeanceCatalogueSelectionnee() {
@@ -1226,6 +1264,50 @@ function trouverSeanceCatalogueSelectionnee() {
 function masquerOptionCatalogue() {
   document.getElementById('catalogueOptionLibreGroup').style.display = 'none';
   document.getElementById('catalogueOptionTexte').value = '';
+  document.getElementById('catalogueThemeGroup').style.display = 'none';
+  document.getElementById('catalogueTheme').value = '';
+  document.getElementById('texteObligatoireNote').style.display = 'none';
+  document.getElementById('texteProfCIGroup').style.display = 'none';
+  document.getElementById('oeuvreLueGroup').style.display = 'none';
+  document.getElementById('oeuvreLueTitre').value = '';
+  document.getElementById('oeuvreLueAuteur').value = '';
+  texteProfCIDemande = false;
+  mettreAJourEtatTexteProfCI();
+}
+
+// ----- Catalogue 3e (matrice) : menu des 10 thèmes + texte rédigé par ProfCI -----
+function mettreAJourEtatTexteProfCI() {
+  const btn = document.getElementById('btnTexteProfCI');
+  if (!btn) return;
+  btn.style.background = texteProfCIDemande ? '#009A44' : '#999';
+  document.getElementById('texteProfCIEtat').textContent = texteProfCIDemande
+    ? '✅ Activé : si aucun texte n\'est fourni, ProfCI en rédigera un.' : '';
+}
+
+function basculerTexteProfCI() {
+  texteProfCIDemande = !texteProfCIDemande;
+  mettreAJourEtatTexteProfCI();
+}
+
+async function afficherMenuThemesIntegres() {
+  const classe = document.getElementById('classe').value;
+  const select = document.getElementById('catalogueTheme');
+  if (!themesIntegresCache[classe]) {
+    try {
+      const res = await fetch(`/api/themes-integres?classe=${encodeURIComponent(classe)}`);
+      if (res.ok) themesIntegresCache[classe] = (await res.json()).themes;
+    } catch (e) {}
+  }
+  const themes = themesIntegresCache[classe];
+  if (!themes) return;
+  select.innerHTML = '<option value="">-- Choisir un thème (liste des 10 thèmes) --</option>';
+  themes.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.libelle;
+    select.appendChild(opt);
+  });
+  document.getElementById('catalogueThemeGroup').style.display = 'block';
 }
 
 // ===================== ÉTUDE DE L'ŒUVRE INTÉGRALE (01/09) =====================
@@ -1884,6 +1966,10 @@ async function genererFiche() {
   let seanceOfficielleId = '';
   let optionChoisie = '';
   let optionLibre = '';
+  let themeIntegreChoisi = '';
+  let texteGenereParProfCI = false;
+  let titreOeuvreLue = '';
+  let auteurOeuvreLue = '';
 
   if (catalogueActif) {
     leconOfficielleId = document.getElementById('catalogueLecon').value;
@@ -1897,6 +1983,24 @@ async function genererFiche() {
     if (seanceTrouvee.choixLibre) {
       optionLibre = document.getElementById('catalogueOptionTexte').value.trim();
       if (!optionLibre) { toast('❗ Précise le choix libre de la séance'); return; }
+    }
+    if (seanceTrouvee.themeIntegre === 'liste_10_themes') {
+      themeIntegreChoisi = document.getElementById('catalogueTheme').value;
+    }
+    if (seanceTrouvee.typeSupport === 'oeuvre_lue_titre_auteur_obligatoires') {
+      titreOeuvreLue = document.getElementById('oeuvreLueTitre').value.trim();
+      auteurOeuvreLue = document.getElementById('oeuvreLueAuteur').value.trim();
+      if (!titreOeuvreLue || !auteurOeuvreLue) { toast("❗ Cette séance exige l'œuvre lue : saisissez le titre et l'auteur"); return; }
+    }
+    if (seanceTrouvee.typeSupport === 'texte_obligatoire') {
+      const aTexte = document.getElementById('texteSupport').value.trim()
+        || document.getElementById('texteSupportFichier').files[0];
+      if (!aTexte && !(texteProfCIDemande && seanceTrouvee.texteProfCIAutorise)) {
+        toast('❗ Cette séance exige un texte support (collez-le, importez un fichier'
+          + (seanceTrouvee.texteProfCIAutorise ? ' ou demandez à ProfCI d\'en rédiger un)' : ')'));
+        return;
+      }
+      texteGenereParProfCI = !aTexte && texteProfCIDemande && !!seanceTrouvee.texteProfCIAutorise;
     }
     lecon = `Leçon ${leconTrouvee.numeroLecon} : ${leconTrouvee.titreLecon}`;
     seance = String(seanceTrouvee.numeroSeance);
@@ -1924,8 +2028,10 @@ async function genererFiche() {
         texteSupport: document.getElementById('texteSupport').value.trim(),
         seanceIntitule: document.getElementById('seanceIntitule').value.trim(),
         modeEvaluationResume: document.getElementById('modeEvaluationResume').value,
-        leconOfficielleId, seanceOfficielleId, optionChoisie, optionLibre
+        leconOfficielleId, seanceOfficielleId, optionChoisie, optionLibre,
+        themeIntegreChoisi, texteGenereParProfCI
       };
+      if (titreOeuvreLue) { champs.titreOeuvre = titreOeuvreLue; champs.auteurOeuvre = auteurOeuvreLue; }
       const fichierSupport = document.getElementById('texteSupportFichier').files[0];
 
       let response;
