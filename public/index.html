@@ -738,7 +738,12 @@ textarea { resize: vertical; min-height: 90px; }
         réutilisable pour votre classe suivante.
       </p>
       <p style="font-size:12px;color:var(--gris2);margin-bottom:14px">
-        2nde · Français · Étude de l'œuvre intégrale · Leçon 1 · Séance 4
+        2nde · Français · Étude de l'œuvre intégrale · Leçon 1 ·
+        <select id="msSeance" onchange="changerSeanceModeleSeance(this.value)" style="font-size:12px;padding:2px 4px">
+          <option value="4">Séance 4 : Lecture méthodique n°1</option>
+          <option value="6">Séance 6 : Lecture méthodique n°2</option>
+          <option value="9">Séance 9 : Lecture méthodique n°3</option>
+        </select>
       </p>
 
       <div class="form-row">
@@ -2158,7 +2163,8 @@ async function sauvegarderModele() {
 // placeholders : aucun appel à un modèle de génération, substitution + rendu déterministe côté
 // serveur (/api/modeles/:niveau/:discipline/:activite/:lecon/:seance pour la
 // liste des champs, /api/modeles/generer pour produire la fiche). Limité à
-// 2nde/Français/Étude de l'œuvre intégrale/Leçon 1/Séance 4 dans ce lot.
+// 2nde/Français/Étude de l'œuvre intégrale/Leçon 1, séances 4, 6 et 9
+// (lectures méthodiques, cf. le sélecteur #msSeance).
 // ===========================================================================
 let modeleSeanceChargeUneFois = false;
 let modeleSeanceChamps = [];
@@ -2177,6 +2183,27 @@ function cleBrouillonModeleSeance() {
 }
 
 function idChampModeleSeance(nom) { return 'ms_champ_' + nom; }
+
+// Changement de séance : le brouillon de la séance quittée est sauvegardé,
+// celui de la nouvelle séance rechargé (clé de brouillon par séance). Les
+// champs d'entête (classe, établissement...) restent tels quels quand la
+// nouvelle séance n'a pas encore de brouillon -- même classe, en général.
+async function changerSeanceModeleSeance(valeur) {
+  const seance = parseInt(valeur, 10);
+  if (!Number.isFinite(seance) || seance === MODELE_SEANCE_ENVELOPPE.seance) return;
+  if (modeleSeanceChamps.length) sauvegarderBrouillonModeleSeance();
+  MODELE_SEANCE_ENVELOPPE.seance = seance;
+  ['msErreurs', 'msAvertissements', 'msResultat', 'msCollerErreurs', 'msFormulaire'].forEach((id) => {
+    document.getElementById(id).style.display = 'none';
+  });
+  document.getElementById('msCollerTout').value = '';
+  document.getElementById('msBtnGenerer').disabled = true;
+  const chargement = document.getElementById('msChargement');
+  chargement.textContent = 'Chargement des champs du modèle...';
+  chargement.style.display = 'block';
+  modeleSeanceChamps = [];
+  await chargerChampsModeleSeance();
+}
 
 async function chargerChampsModeleSeance() {
   const e = MODELE_SEANCE_ENVELOPPE;
@@ -2409,7 +2436,7 @@ function exporterRemplissageModeleSeance() {
   try {
     const lien = document.createElement('a');
     lien.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(texte);
-    lien.download = 'remplissage-S4.txt';
+    lien.download = `remplissage-S${MODELE_SEANCE_ENVELOPPE.seance}.txt`;
     lien.click();
   } catch (e) { /* le téléchargement a échoué -- le texte reste affiché dans la zone, copiable à la main */ }
   toast('💾 Remplissage exporté');
