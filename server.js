@@ -10949,6 +10949,237 @@ function limiterGenerationParIp(req, res, next) {
 }
 
 // ===========================================================================
+// « GÉNÉRER TOUTE LA LEÇON » -- Grammaire / Orthographe, 6ème à 3ème
+// (aucun support requis : les séances qui exigent un texte ou un sujet sont
+// exclues, cf. lot-lecon.js). Le NAVIGATEUR enchaîne les séances une par une
+// via la route /api/generer-fiche INCHANGÉE (le rappel de séance exige que la
+// fiche k-1 soit enregistrée avant la fiche k). Ce bloc ne fait que :
+//   - créer un jeton de lot après vérification d'éligibilité (exemption du
+//     limiteur d'IP, bornée -- règles détaillées dans lot-lecon.js) ;
+//   - dire quelles séances de la leçon ont déjà une fiche (reprise) ;
+//   - livrer les fiches en un zip (un fichier par séance).
+// Aucun appel Anthropic dans ce bloc.
+// ===========================================================================
+const lotLecon = require('./lot-lecon');
+const gestionnaireLots = lotLecon.creerGestionnaireLots();
+
+function ipDeLaRequete(req) {
+  return req.ip || req.socket?.remoteAddress || 'inconnu';
+}
+
+// Remplace limiterGenerationParIp sur /api/generer-fiche : sans en-tête
+// X-Lot-Jeton, comportement STRICTEMENT identique à avant.
+function limiterGenerationParIpOuLot(req, res, next) {
+  const jeton = req.get('x-lot-jeton');
+  if (!jeton) return limiterGenerationParIp(req, res, next);
+
+  const corps = req.body || {};
+  if (req.is('multipart/form-data') || String(corps.texteSupport || '').trim() || String(corps.planCours || '').trim()) {
+    return envoyerBlocageSSE(res, 'Un lot ne génère que des séances sans support ni plan fourni.');
+  }
+  const verdict = gestionnaireLots.reserverSeance({
+    jeton, ip: ipDeLaRequete(req),
+    enseignantId: corps.enseignantId, leconId: corps.leconOfficielleId, seanceId: corps.seanceOfficielleId,
+    classe: corps.classe, activite: corps.activite
+  });
+  if (!verdict.ok) return envoyerBlocageSSE(res, verdict.message);
+
+  const seanceId = verdict.seance.seanceId;
+  let reussie = false;
+  const ecrireOrigine = res.write.bind(res);
+  res.write = function (chunk, ...reste) {
+    // Même marqueur que celui lu par le navigateur : fiche enregistrée.
+    if (!reussie && typeof chunk === 'string' && chunk.startsWith('data: {"done":true')) {
+      reussie = true;
+      gestionnaireLots.marquerFaite(jeton, seanceId);
+    }
+    return ecrireOrigine(chunk, ...reste);
+  };
+  res.on('close', () => { if (!reussie) gestionnaireLots.marquerEchec(jeton, seanceId); });
+  next();
+}
+
+function libelleLeconCatalogue(lecon) {
+  return `Leçon ${lecon.numeroLecon} : ${lecon.titreLecon}`;
+}
+
+app.post('/api/lot/demarrer', async (req, res) => {
+  try {
+    const { enseignantId, classe, activite, leconOfficielleId, seancesIds, niveau } = req.body || {};
+    if (!mongoose.isValidObjectId(leconOfficielleId) || !classe || !activite) {
+      return res.status(400).json({ error: 'classe, activité et leçon requises' });
+    }
+    const lecons = await listerLeconsOfficielles({ discipline: 'Français', classe, activite });
+    const lecon = lecons.find((l) => String(l._id) === String(leconOfficielleId));
+    if (!lecon) return res.status(404).json({ error: 'Leçon introuvable dans le catalogue (rechargez la page).' });
+
+    const eligibilite = lotLecon.verifierLeconEligible(lecon, { classe, activite, niveau: niveau || 'secondaire' });
+    if (!eligibilite.ok) return res.status(400).json({ error: eligibilite.message });
+
+    let seances = lecon.seances.slice().sort((a, b) => a.numeroSeance - b.numeroSeance);
+    if (Array.isArray(seancesIds)) {
+      const voulues = new Set(seancesIds.map(String));
+      const connues = new Set(seances.map((s) => String(s._id)));
+      if ([...voulues].some((id) => !connues.has(id))) return res.status(400).json({ error: 'Séance inconnue pour cette leçon (rechargez la page).' });
+      seances = seances.filter((s) => voulues.has(String(s._id)));
+    }
+    const lot = gestionnaireLots.creerLot({
+      ip: ipDeLaRequete(req), enseignantId, leconId: lecon._id, classe, activite,
+      seances: seances.map((s) => ({ seanceId: s._id, numero: s.numeroSeance, intitule: s.intitule }))
+    });
+    if (!lot.ok) return res.status(lot.code === 'lot_en_cours' ? 409 : 429).json({ error: lot.message });
+
+    res.json({
+      jeton: lot.jeton, expireA: lot.expireA, nbFiches: lot.nbFiches, lecon: libelleLeconCatalogue(lecon),
+      seances: seances.map((s) => ({ _id: s._id, numeroSeance: s.numeroSeance, intitule: s.intitule }))
+    });
+  } catch (e) {
+    console.error('❌ Lot -- démarrage :', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/lot/abandonner', (req, res) => {
+  const ok = gestionnaireLots.abandonner({ jeton: (req.body || {}).jeton, ip: ipDeLaRequete(req) });
+  res.json({ success: ok });
+});
+
+// Séances de la leçon qui ont déjà une fiche pour cet enseignant (reprise,
+// séances grisées). Même règle de correspondance que le rappel de séance.
+app.get('/api/lot/existantes', async (req, res) => {
+  try {
+    const { enseignantId, classe, activite, leconOfficielleId } = req.query;
+    if (!mongoose.isValidObjectId(leconOfficielleId) || !classe || !activite) {
+      return res.status(400).json({ error: 'classe, activité et leçon requises' });
+    }
+    const lecons = await listerLeconsOfficielles({ discipline: 'Français', classe, activite });
+    const lecon = lecons.find((l) => String(l._id) === String(leconOfficielleId));
+    if (!lecon) return res.status(404).json({ error: 'Leçon introuvable dans le catalogue.' });
+    const fiches = await trouverFichesPrecedentes({
+      enseignantId: (enseignantId || 'anonyme').toString().trim() || 'anonyme',
+      discipline: 'Français', classe, niveau: 'secondaire',
+      lecon: libelleLeconCatalogue(lecon), seance: 1000
+    });
+    const parSeance = new Map();
+    for (const f of fiches) {
+      const n = parseInt(f.seance, 10);
+      if (!parSeance.has(n)) parSeance.set(n, String(f._id)); // la plus récente d'abord
+    }
+    res.json([...parSeance.entries()].map(([numeroSeance, ficheId]) => ({ numeroSeance, ficheId })));
+  } catch (e) {
+    console.error('❌ Lot -- fiches existantes :', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Contenu HTML d'une fiche enregistrée, tel qu'exporté par /api/fiche/:id/pdf et
+// /api/fiche/:id/docx (mêmes correctifs mécaniques, même ordre, sans appel
+// Anthropic). Copie volontaire pour ne pas modifier ces deux routes dans cette
+// PR -- à factoriser dans une PR séparée.
+function preparerContenuExportFiche(fiche) {
+  let contenuExport = fiche.contenu;
+  if (!fiche.renduDeterministeLot9) {
+    contenuExport = convertirTableauxMarkdownEnHtml(contenuExport);
+    contenuExport = hoisterTableauxLargesDesCellules(contenuExport);
+    contenuExport = corrigerRetoursLigneLitterauxDansFiche(contenuExport);
+    contenuExport = corrigerEtablissementInvente(contenuExport);
+    contenuExport = corrigerInfinitifsConsignesDeveloppement(contenuExport);
+    contenuExport = corrigerVerbeProfesseurErroneAvantCitationVouvoiement(contenuExport);
+    contenuExport = corrigerCoordinationVerbeEleveNonConjugue(contenuExport);
+    contenuExport = corrigerConsigneAmbigueAvecQuestionEnGuillemets(contenuExport);
+    contenuExport = corrigerVouvoiementDansConsigneDemande(contenuExport);
+    contenuExport = envelopperConsignesElevesDansDemande(contenuExport);
+    contenuExport = corrigerDureeAnnonceeEvaluation(contenuExport);
+  }
+  return contenuExport;
+}
+
+// Livraison : UN FICHIER PAR SÉANCE, regroupés dans un zip. `format` :
+//   - absent ou "docx" (PAR DÉFAUT) : DOCX seuls, léger (aucun Chromium) ;
+//   - "docx+pdf" : ajoute un PDF par fiche -- plus lent et surtout plus gourmand
+//     en mémoire (un rendu Chromium par fiche). Mesure (cf. PR) : le Chromium
+//     partagé (getBrowser) ne rend PAS la mémoire des pages fermées -- sa taille
+//     croît à chaque PDF produit (RSS Node + Chromium : ≈ 350 Mo après 1 PDF, ≈ 490 Mo après 11,
+//     ≈ 720 Mo après 41). Deux garde-fous, propres à cette route :
+//     1) ces exports PDF passent UN PAR UN dans une file d'attente en mémoire,
+//        refusés en 429 au-delà de MAX_ATTENTE_PDF_ZIP exports en cours + en
+//        attente ;
+//     2) à la fin d'un export PDF, si plus aucune autre page n'est ouverte (aucun
+//        autre PDF en cours, pour ce zip ou pour /api/fiche/:id/pdf), Chromium
+//        est fermé : il est relancé à la demande par getBrowser().
+const MAX_ATTENTE_PDF_ZIP = 3;
+let filePdfZip = Promise.resolve();
+let enAttentePdfZip = 0;
+async function libererChromiumSiInactif() {
+  if (!browserPromise) return;
+  try {
+    const navigateur = await browserPromise;
+    const pages = await navigateur.pages();
+    if (pages.length > 1) return; // une autre génération PDF est en cours : on n'y touche pas
+    browserPromise = null;
+    await navigateur.close();
+  } catch (e) {
+    browserPromise = null; // navigateur déjà mort : getBrowser() en relancera un
+  }
+}
+function executerEnFilePdfZip(tache) {
+  enAttentePdfZip++;
+  const suite = filePdfZip.then(() => tache());
+  filePdfZip = suite.then(() => {}, () => {}).then(() => { enAttentePdfZip--; });
+  return suite;
+}
+
+app.post('/api/fiches/zip', async (req, res) => {
+  try {
+    const { ids, enseignantId, format, view } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length || ids.length > lotLecon.LOT_MAX_SEANCES
+        || new Set(ids.map(String)).size !== ids.length || !ids.every((id) => mongoose.isValidObjectId(id))) {
+      return res.status(400).json({ error: `Liste de fiches invalide (1 à ${lotLecon.LOT_MAX_SEANCES} fiches distinctes).` });
+    }
+    if (format !== undefined && format !== 'docx' && format !== 'docx+pdf') {
+      return res.status(400).json({ error: 'Format inconnu (docx ou docx+pdf).' });
+    }
+    const avecPdf = format === 'docx+pdf';
+    const landscape = view === 'paysage';
+    if (avecPdf && enAttentePdfZip >= MAX_ATTENTE_PDF_ZIP) {
+      return res.status(429).json({ error: 'Export PDF très sollicité : réessaie dans une minute ou télécharge les DOCX seuls.' });
+    }
+    const trouvees = await Fiche.find({ _id: { $in: ids } });
+    const parId = new Map(trouvees.map((f) => [String(f._id), f]));
+    const ens = (enseignantId || 'anonyme').toString().trim() || 'anonyme';
+    const fiches = ids.map((id) => parId.get(String(id)));
+    if (fiches.some((f) => !f)) return res.status(404).json({ error: 'Fiche introuvable' });
+    if (fiches.some((f) => (f.enseignantId || 'anonyme') !== ens)) return res.status(403).json({ error: 'Ces fiches appartiennent à un autre enseignant.' });
+
+    const slug = (t) => normaliserTexte(t).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const construireZip = async () => {
+      const zip = new JSZip();
+      const nomsPris = new Set();
+      for (const fiche of fiches) {
+        const contenuExport = preparerContenuExportFiche(fiche);
+        const profilMiseEnForme = fiche.genereDepuisModeleLot13 ? 'modeleCompact' : fiche.estOeuvreIntegraleSecondCycle;
+        const numero = String(parseInt(fiche.seance, 10) || 0).padStart(2, '0');
+        let base = `${slug(fiche.lecon) || 'lecon'}_seance_${numero}`;
+        for (let i = 2; nomsPris.has(base); i++) base = `${base.replace(/_\d+$/, '')}_${i}`;
+        nomsPris.add(base);
+        zip.file(`${base}.docx`, await genererDocxDepuisHtml(contenuExport, landscape, profilMiseEnForme));
+        if (avecPdf) zip.file(`${base}.pdf`, await genererPdfDepuisHtml(contenuExport, landscape));
+      }
+      return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    };
+    const buffer = avecPdf
+      ? await executerEnFilePdfZip(async () => { try { return await construireZip(); } finally { await libererChromiumSiInactif(); } })
+      : await construireZip();
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${slug(fiches[0].lecon) || 'fiches'}.zip"`);
+    res.send(buffer);
+  } catch (e) {
+    console.error('❌ Zip des fiches :', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===========================================================================
 // LOT 9 -- Rendu déterministe JSON -> HTML pour les séances 2nde Français /
 // Étude de l'œuvre intégrale / Culture littéraire. Remplace le texte libre +
 // les dizaines de correctifs regex accumulés lots 3-8 pour CES séances
@@ -11559,7 +11790,7 @@ ${tableDeroulement}
 </div>`;
 }
 
- app.post('/api/generer-fiche', limiterGenerationParIp, uploadTexteSupportFichier, async (req, res) => {
+ app.post('/api/generer-fiche', limiterGenerationParIpOuLot, uploadTexteSupportFichier, async (req, res) => {
   console.log('📩 Requête reçue:', req.body.discipline, req.body.classe, req.body.lecon);
   // Bug réel (04/10, crash Render confirmé par les logs -- ReferenceError:
   // heartbeat is not defined, server.js:8904 avant ce correctif) : `let

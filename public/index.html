@@ -264,6 +264,14 @@ textarea { resize: vertical; min-height: 90px; }
             <option value="">-- Choisir une séance --</option>
           </select>
         </div>
+        <div class="form-group" id="lotLeconGroup" style="display:none">
+          <button type="button" class="btn vert" id="btnGenererLecon" onclick="demanderGenerationLecon()">
+            📚 Générer toute la leçon
+          </button>
+          <div style="font-size:12px;color:var(--gris2);margin-top:6px">
+            Une fiche par séance de la leçon choisie, l'une après l'autre (Grammaire et Orthographe, sans support).
+          </div>
+        </div>
         <div class="form-group" id="seanceGroup" style="max-width:100px">
           <label>Séance n°</label>
           <input id="seance" type="number" value="1" min="1"/>
@@ -1175,6 +1183,7 @@ function appliquerModeCatalogue() {
   }
   document.getElementById('catalogueSeance').innerHTML = '<option value="">-- Choisir une séance --</option>';
   masquerOptionCatalogue();
+  mettreAJourBoutonLot();
 }
 
 function choisirLeconCatalogue() {
@@ -1195,6 +1204,7 @@ function choisirLeconCatalogue() {
       selectSeance.appendChild(opt);
     });
   }
+  mettreAJourBoutonLot();
 }
 
 function choisirSeanceCatalogue() {
@@ -2623,6 +2633,298 @@ async function envoyerProgressions() {
     toast('✅ Catalogue mis à jour !');
   } catch(e) {
     toast('❌ ' + e.message);
+  }
+}
+
+// ===================== GÉNÉRER TOUTE LA LEÇON (Grammaire / Orthographe) =====================
+// Boucle côté navigateur : une requête /api/generer-fiche par séance (route
+// inchangée), dans l'ordre -- le rappel de séance a besoin de la fiche
+// précédente déjà enregistrée. Le jeton de lot (créé par le serveur après
+// vérification d'éligibilité) exempte ces requêtes du quota d'IP.
+const LOT_ACTIVITES = ['Grammaire', 'Orthographe'];
+const LOT_CLASSES = ['6ème', '5ème', '4ème', '3ème'];
+let lotEnCours = null; // { jeton, arreter, ... } tant qu'un lot tourne
+
+function leconCatalogueSelectionnee() {
+  const id = document.getElementById('catalogueLecon').value;
+  return catalogueLeconsDisponibles.find(l => l._id === id) || null;
+}
+
+// Visible seulement si : catalogue actif, collège, Français, Grammaire ou
+// Orthographe, 6ème-3ème, leçon choisie, aucune séance à choix enseignant.
+// Le serveur revérifie tout (jamais de confiance dans ce masquage).
+function mettreAJourBoutonLot() {
+  const groupe = document.getElementById('lotLeconGroup');
+  if (!groupe) return;
+  const lecon = leconCatalogueSelectionnee();
+  const eligible = catalogueActif && niveauActuel === 'secondaire'
+    && LOT_ACTIVITES.includes(calculerActiviteEffective())
+    && LOT_CLASSES.includes(document.getElementById('classe').value)
+    && !!lecon && lecon.seances.length > 0
+    && !lecon.seances.some(s => s.choixLibre || s.optionChoisie);
+  groupe.style.display = eligible ? 'block' : 'none';
+}
+
+function echapperHtmlLot(t) {
+  return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function lireReponseJson(res) {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Erreur serveur');
+  return data;
+}
+
+async function demanderGenerationLecon() {
+  if (lotEnCours) { toast('❗ Un lot est déjà en cours'); return; }
+  const lecon = leconCatalogueSelectionnee();
+  if (!lecon) { toast('❗ Choisis une leçon'); return; }
+  const contexte = {
+    enseignantId: document.getElementById('enseignantId').value.trim() || 'anonyme',
+    classe: document.getElementById('classe').value,
+    activite: calculerActiviteEffective(),
+    leconOfficielleId: lecon._id
+  };
+  let existantes = [];
+  try {
+    const q = new URLSearchParams({ enseignantId: contexte.enseignantId, classe: contexte.classe, activite: contexte.activite, leconOfficielleId: contexte.leconOfficielleId });
+    existantes = await lireReponseJson(await fetch('/api/lot/existantes?' + q));
+  } catch (e) { toast('❌ ' + e.message); return; }
+  const dejaFaites = new Map(existantes.map(x => [x.numeroSeance, x.ficheId]));
+  const seances = lecon.seances.slice().sort((a, b) => a.numeroSeance - b.numeroSeance);
+  const restantes = seances.filter(s => !dejaFaites.has(s.numeroSeance));
+  if (!restantes.length) {
+    ouvrirPanneauLot({ lecon, contexte, seances, dejaFaites });
+    finaliserPanneauLot({ lecon, contexte, seances, dejaFaites, echec: null, sansToast: true });
+    toast('✅ Toutes les séances de cette leçon ont déjà une fiche');
+    return;
+  }
+  confirmerGenerationLecon({ lecon, contexte, seances, restantes, dejaFaites });
+}
+
+// « N fiches vont être générées » + confirmation explicite avant tout appel.
+function confirmerGenerationLecon(etat) {
+  const { lecon, restantes, seances, dejaFaites } = etat;
+  const n = restantes.length;
+  const dureeMin = Math.max(1, Math.round(n * 1.5));
+  const fond = document.createElement('div');
+  fond.id = 'lotConfirmation';
+  fond.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const lignes = seances.map(s => dejaFaites.has(s.numeroSeance)
+    ? `<li style="color:var(--gris2)">Séance ${s.numeroSeance} : ${echapperHtmlLot(s.intitule)} — déjà faite (conservée)</li>`
+    : `<li>Séance ${s.numeroSeance} : ${echapperHtmlLot(s.intitule)}</li>`).join('');
+  fond.innerHTML = `
+    <div style="background:#fff;border-radius:12px;max-width:520px;width:100%;padding:20px;box-shadow:var(--shadow);max-height:90vh;overflow:auto">
+      <h3 style="margin-bottom:8px">${n} fiche${n > 1 ? 's vont' : ' va'} être générée${n > 1 ? 's' : ''}</h3>
+      <p style="font-size:13px;margin-bottom:8px">Leçon ${lecon.numeroLecon} : ${echapperHtmlLot(lecon.titreLecon)}</p>
+      <ul style="font-size:13px;margin:0 0 10px 18px">${lignes}</ul>
+      <p style="font-size:12px;color:var(--gris2);margin-bottom:14px">Génération l'une après l'autre (environ ${dureeMin} min) : garde cette page ouverte. Si une séance échoue, le lot s'arrête et les fiches déjà faites sont conservées ; tu pourras reprendre à la séance suivante.</p>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button type="button" class="btn" style="background:#888" id="lotAnnuler">Annuler</button>
+        <button type="button" class="btn vert" id="lotLancer">Lancer (${n} fiche${n > 1 ? 's' : ''})</button>
+      </div>
+    </div>`;
+  document.body.appendChild(fond);
+  document.getElementById('lotAnnuler').onclick = () => fond.remove();
+  document.getElementById('lotLancer').onclick = () => { fond.remove(); lancerLotLecon(etat); };
+}
+
+async function lancerLotLecon(etat) {
+  const { lecon, contexte, seances, restantes, dejaFaites } = etat;
+  let lot;
+  try {
+    lot = await lireReponseJson(await fetch('/api/lot/demarrer', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...contexte, niveau: niveauActuel, seancesIds: restantes.map(s => s._id) })
+    }));
+  } catch (e) { toast('❌ ' + e.message); return; }
+  // Garde-fou : le serveur doit annoncer exactement le nombre confirmé.
+  if (lot.nbFiches !== restantes.length) {
+    await fetch('/api/lot/abandonner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jeton: lot.jeton }) }).catch(() => {});
+    toast('❌ Le serveur annonce ' + lot.nbFiches + ' fiches au lieu de ' + restantes.length + ' : lot annulé');
+    return;
+  }
+  lotEnCours = { jeton: lot.jeton, arret: false, controleur: null };
+  ouvrirPanneauLot({ lecon, contexte, seances, dejaFaites });
+  const aGenerer = restantes.slice();
+  let echec = null;
+  for (const s of aGenerer) {
+    if (lotEnCours.arret) { echec = { numero: s.numeroSeance, message: 'Lot arrêté' }; break; }
+    majLigneLot(s.numeroSeance, 'encours');
+    try {
+      const ficheId = await genererUneSeanceDuLot(s, lecon, contexte, lot.jeton);
+      dejaFaites.set(s.numeroSeance, ficheId);
+      majLigneLot(s.numeroSeance, 'faite');
+    } catch (e) {
+      echec = { numero: s.numeroSeance, message: e.message || 'Erreur' };
+      majLigneLot(s.numeroSeance, 'echec', echec.message);
+      break;
+    }
+  }
+  lotEnCours = null;
+  if (echec) await fetch('/api/lot/abandonner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jeton: lot.jeton }) }).catch(() => {});
+  finaliserPanneauLot({ lecon, contexte, seances, dejaFaites, echec });
+}
+
+async function genererUneSeanceDuLot(s, lecon, contexte, jeton) {
+  const champs = {
+    enseignantId: contexte.enseignantId, niveau: niveauActuel,
+    discipline: document.getElementById('discipline').value.trim() || 'Français',
+    classe: contexte.classe, lecon: `Leçon ${lecon.numeroLecon} : ${lecon.titreLecon}`,
+    activite: contexte.activite, seance: String(s.numeroSeance),
+    duree: document.getElementById('duree').value, approche: document.getElementById('approche').value,
+    planCours: '', texteSupport: '', seanceIntitule: '',
+    modeEvaluationResume: document.getElementById('modeEvaluationResume').value,
+    leconOfficielleId: contexte.leconOfficielleId, seanceOfficielleId: s._id, optionChoisie: '', optionLibre: ''
+  };
+  const response = await fetch('/api/generer-fiche', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Lot-Jeton': jeton },
+    body: JSON.stringify(champs)
+  });
+  if (!response.ok) throw new Error('Erreur serveur');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let ficheId = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      let json;
+      try { json = JSON.parse(line.slice(6)); } catch (e) { continue; }
+      if (json.error) throw new Error(json.error);
+      if (json.done) ficheId = json.ficheId;
+    }
+  }
+  if (!ficheId) throw new Error('La génération s\'est interrompue avant la fin de la fiche');
+  return String(ficheId);
+}
+
+// ---- Panneau de suivi ----
+function ouvrirPanneauLot({ lecon, seances, dejaFaites }) {
+  let p = document.getElementById('lotPanneau');
+  if (!p) {
+    p = document.createElement('div');
+    p.id = 'lotPanneau';
+    p.className = 'card';
+    p.style.cssText = 'margin-top:14px';
+    const bouton = document.getElementById('btnGenerer');
+    bouton.parentNode.insertBefore(p, bouton.nextSibling);
+  }
+  p.innerHTML = `<h3 style="margin-bottom:8px">📚 Leçon ${lecon.numeroLecon} : ${echapperHtmlLot(lecon.titreLecon)}</h3>
+    <ul id="lotListe" style="list-style:none;font-size:13px"></ul>
+    <div id="lotActions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"></div>`;
+  const liste = document.getElementById('lotListe');
+  seances.forEach(s => {
+    const li = document.createElement('li');
+    li.id = 'lotLigne' + s.numeroSeance;
+    li.style.cssText = 'padding:4px 0';
+    liste.appendChild(li);
+    dessinerLigneLot(li, s, dejaFaites.has(s.numeroSeance) ? 'dejafaite' : 'attente', '');
+  });
+  if (lotEnCours) {
+    const actions = document.getElementById('lotActions');
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn'; b.style.background = '#888'; b.textContent = '⏹ Arrêter après la séance en cours';
+    b.onclick = () => { if (lotEnCours) { lotEnCours.arret = true; b.disabled = true; } };
+    actions.appendChild(b);
+  }
+  lotSeancesParNumero = new Map(seances.map(s => [s.numeroSeance, s]));
+  p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+let lotSeancesParNumero = new Map();
+
+function dessinerLigneLot(li, s, statut, message) {
+  const icones = { attente: '⏳', encours: '🔄', faite: '✅', echec: '❌', dejafaite: '✔️' };
+  const grise = statut === 'dejafaite' ? 'color:var(--gris2);' : '';
+  const suffixe = statut === 'dejafaite' ? ' — déjà faite (conservée)' : statut === 'encours' ? ' — génération en cours…' : (statut === 'echec' ? ' — ' + echapperHtmlLot(message) : '');
+  li.style.cssText = 'padding:4px 0;' + grise;
+  li.innerHTML = `${icones[statut]} Séance ${s.numeroSeance} : ${echapperHtmlLot(s.intitule)}${suffixe}`;
+}
+
+function majLigneLot(numero, statut, message) {
+  const li = document.getElementById('lotLigne' + numero);
+  const s = lotSeancesParNumero.get(numero);
+  if (li && s) dessinerLigneLot(li, s, statut, message || '');
+}
+
+function finaliserPanneauLot({ lecon, contexte, seances, dejaFaites, echec, sansToast }) {
+  const actions = document.getElementById('lotActions');
+  if (!actions) return;
+  actions.innerHTML = '';
+  const faites = seances.filter(s => dejaFaites.has(s.numeroSeance));
+  if (echec) {
+    const reste = seances.filter(s => !dejaFaites.has(s.numeroSeance));
+    const bReprise = document.createElement('button');
+    bReprise.type = 'button'; bReprise.className = 'btn';
+    bReprise.textContent = `🔁 Reprendre à la séance ${reste[0].numeroSeance}`;
+    bReprise.onclick = () => demanderGenerationLecon();
+    actions.appendChild(bReprise);
+    toast('❌ Séance ' + echec.numero + ' : ' + echec.message);
+  } else if (!sansToast) {
+    toast('✅ Leçon générée');
+  }
+  if (faites.length) {
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'font-size:12px;display:flex;align-items:center;gap:4px';
+    lbl.innerHTML = '<input type="checkbox" id="lotAvecPdf"/> Inclure aussi les PDF (plus lent ; DOCX seuls par défaut)';
+    const bZip = document.createElement('button');
+    bZip.type = 'button'; bZip.className = 'btn vert';
+    bZip.textContent = `⬇️ Télécharger les ${faites.length} fiche${faites.length > 1 ? 's' : ''} (zip DOCX)`;
+    bZip.onclick = () => telechargerZipLot(faites.map(s => dejaFaites.get(s.numeroSeance)), contexte.enseignantId, bZip);
+    actions.appendChild(bZip);
+    actions.appendChild(lbl);
+  }
+  // Ouverture d'une fiche du lot dans l'aperçu habituel.
+  seances.forEach(s => {
+    const li = document.getElementById('lotLigne' + s.numeroSeance);
+    const id = dejaFaites.get(s.numeroSeance);
+    if (li && id && !li.querySelector('a')) {
+      const a = document.createElement('a');
+      a.href = '#'; a.textContent = ' · voir'; a.style.cssText = 'color:var(--vert);font-weight:700';
+      a.onclick = (ev) => { ev.preventDefault(); ouvrirFicheDuLot(id); };
+      li.appendChild(a);
+    }
+  });
+}
+
+async function ouvrirFicheDuLot(id) {
+  try {
+    const f = await lireReponseJson(await fetch('/api/fiche/' + encodeURIComponent(id)));
+    ficheEnCours = { id, contenu: f.contenu };
+    afficherFiche(f.contenu);
+  } catch (e) { toast('❌ ' + e.message); }
+}
+
+async function telechargerZipLot(ids, enseignantId, bouton) {
+  const avecPdf = !!(document.getElementById('lotAvecPdf') || {}).checked;
+  const libelle = bouton.textContent;
+  bouton.disabled = true;
+  bouton.textContent = avecPdf ? '⏳ Préparation du zip (PDF : peut prendre une minute)…' : '⏳ Préparation du zip…';
+  try {
+    const res = await fetch('/api/fiches/zip', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, enseignantId, format: avecPdf ? 'docx+pdf' : 'docx', view: viewActuelle })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur de génération');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nomFichierDepuisReponse(res, 'fiches_lecon.zip');
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    toast('❌ ' + e.message);
+  } finally {
+    bouton.disabled = false;
+    bouton.textContent = libelle;
   }
 }
 
