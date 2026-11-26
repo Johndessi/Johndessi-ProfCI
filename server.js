@@ -6629,13 +6629,110 @@ function extraireTracesEcritesDeroulement(contenuHTML) {
   return traces;
 }
 
-function resumerSeancesPrecedentes(fichesPrecedentes) {
+// ===========================================================================
+// Correctifs fiches Grammaire / Orthographe (test réel 6e, lot « La phrase »).
+// TOUT ce bloc est réservé à l'activité Grammaire ou Orthographe (champ
+// `activite`, égalité stricte -- jamais la détection large estGrammaire, qui
+// se déclenche dès que le mot figure dans la leçon ou le thème) : aucune autre
+// activité (Expression écrite, Lecture méthodique, Exploitation de texte,
+// Étude de l'œuvre intégrale, primaire...) ne voit son prompt changer.
+// ===========================================================================
+function activiteGrammaireOuOrthographe(activite) {
+  const a = normaliserTexte(activite);
+  return a === 'grammaire' || a === 'orthographe' ? a : null;
+}
+
+// Deux lignes du squelette partagé (construirePromptSecondaire) sont ajustées
+// APRÈS construction, pour ces seules activités : le squelette lui-même reste
+// strictement inchangé pour toutes les autres. Si l'une des phrases ciblées
+// n'est plus trouvée (squelette modifié ailleurs), un avertissement est écrit
+// dans les logs au lieu d'un échec silencieux.
+const AJUSTEMENTS_SQUELETTE_GRAMMAIRE_ORTHOGRAPHE = [
+  [
+    "- Situation d'apprentissage toujours ancrée dans le quotidien ivoirien (lycées, marchés, quartiers CI)",
+    "- Situation d'apprentissage toujours ancrée dans le quotidien ivoirien (marchés, quartiers CI, établissement scolaire correspondant à la classe : collège de la 6ème à la 3ème, lycée de la 2nde à la Terminale)"
+  ],
+  [
+    "se détermine par sa ponctuation et sa structure grammaticale, jamais par l'intention du locuteur.",
+    "se détermine par sa structure grammaticale (verbe à l'impératif = impérative ; mot ou tour interrogatif = interrogative), la ponctuation n'étant qu'un indice jamais décisif à lui seul, et jamais par l'intention du locuteur."
+  ]
+];
+function ajusterSqueletteGrammaireOrthographe(systemPrompt) {
+  let resultat = systemPrompt;
+  for (const [ancien, nouveau] of AJUSTEMENTS_SQUELETTE_GRAMMAIRE_ORTHOGRAPHE) {
+    if (!resultat.includes(ancien)) {
+      console.warn(`⚠️ Ajustement du squelette Grammaire/Orthographe non appliqué (phrase introuvable) : « ${ancien.slice(0, 60)}… »`);
+      continue;
+    }
+    resultat = resultat.replace(ancien, () => nouveau);
+  }
+  return resultat;
+}
+
+function categorieEtablissementPourClasse(classe) {
+  const c = normaliserTexte(classe);
+  if (/^[3-6](eme|e)\b/.test(c)) return 'collège';
+  if (/^(2nde|2de|seconde|1ere|premiere|tle|terminale)\b/.test(c)) return 'lycée';
+  return null;
+}
+
+function construireRegleCadreScolaire(classe) {
+  const categorie = categorieEtablissementPourClasse(classe);
+  if (!categorie) return '';
+  const interdits = categorie === 'collège' ? 'un lycée ni une école primaire' : 'un collège ni une école primaire';
+  return `\n\nCADRE DE LA SITUATION D'APPRENTISSAGE (obligatoire) : la classe « ${classe} » est une classe de ${categorie}. Si la scène se déroule dans l'établissement des élèves, c'est un ${categorie} -- jamais ${interdits}. N'écris JAMAIS de nom d'établissement, réel ou inventé (ex. « Lycée Moderne de … », « Collège de … », « École primaire de … ») : écris « votre ${categorie} », « le ${categorie} » ou « ta classe », sans nom propre. Les personnages sont des élèves de ${classe} (âge et cadre cohérents avec cette classe), jamais d'un autre cycle. Si la section « CONTENU RÉEL DES SÉANCES PRÉCÉDENTES » ci-dessous indique la situation d'apprentissage d'une séance précédente, garde le MÊME lieu de scène et les MÊMES personnages.`;
+}
+
+// `autresLecons` : [{ numeroLecon, titreLecon }] -- autres leçons de la même
+// classe et de la même activité (catalogue), notions hors périmètre.
+function construirePerimetreSeance({ leconDoc, seanceDoc, autresLecons = [] }) {
+  const activiteNorm = normaliserTexte(seanceDoc.activite);
+  const autres = (leconDoc.seances || [])
+    .filter((s) => s.numeroSeance !== seanceDoc.numeroSeance && normaliserTexte(s.activite) === activiteNorm)
+    .sort((a, b) => a.numeroSeance - b.numeroSeance);
+  const dejaVues = autres.filter((s) => s.numeroSeance < seanceDoc.numeroSeance);
+  const aVenir = autres.filter((s) => s.numeroSeance > seanceDoc.numeroSeance);
+  let texte = `\n\nPÉRIMÈTRE DE LA SÉANCE (obligatoire) : cette séance traite UNIQUEMENT ce que son titre annonce : « ${seanceDoc.intitule} ». N'introduis AUCUNE notion de grammaire qui n'est pas annoncée par ce titre, même pour « compléter » la leçon.`;
+  if (aVenir.length) {
+    texte += `\nNotions des séances SUIVANTES de la leçon (leur contenu appartient à ces séances) :\n${aVenir.map((s) => `- Séance ${s.numeroSeance} : ${s.intitule}`).join('\n')}\nIL EST INTERDIT, dans CETTE fiche, de définir, faire identifier, faire produire ou corriger ces notions : ni dans le corpus, ni dans les questions, ni dans les traces écrites, ni dans les exercices ou le corrigé. Tout au plus UNE ligne d'évocation (« nous verrons … à la séance suivante »), sans explication.`;
+  }
+  if (dejaVues.length) {
+    texte += `\nNotions des séances PRÉCÉDENTES (déjà vues, rappel seulement dans la PRÉSENTATION) :\n${dejaVues.map((s) => `- Séance ${s.numeroSeance} : ${s.intitule}`).join('\n')}`;
+  }
+  const leconsHorsPerimetre = (autresLecons || []).slice().sort((a, b) => a.numeroLecon - b.numeroLecon);
+  if (leconsHorsPerimetre.length) {
+    texte += `\nNotions des AUTRES leçons de la classe (hors périmètre de cette leçon : ne les traite pas, ne les définis pas, ne les fais ni identifier ni produire) :\n${leconsHorsPerimetre.map((l) => `- Leçon ${l.numeroLecon} : ${l.titreLecon}`).join('\n')}`;
+  }
+  return texte;
+}
+
+const REGLE_BIBLIOGRAPHIE_FIXE_GRAMMAIRE = `\n\nBIBLIOGRAPHIE (obligatoire, prime sur le modèle « [ref 1] [ref 2] » et sur toute autre consigne de bibliographie) : la cellule Bibliographie contient EXACTEMENT ces trois lignes, dans cet ordre, sans rien ajouter, retirer ni reformuler :\n- Programme éducatif\n- Progression annuelle DPFC 2026-2027\n- Manuel de Français en usage dans l'établissement\nAucun titre d'ouvrage, nom d'auteur, éditeur ou année ne doit y figurer (jamais « Petit Grevisse », « Le Bon Usage » ni aucun autre titre, même exact), et ne mélange jamais deux titres.`;
+
+const REGLES_CONTENU_GRAMMAIRE = `\n\nRÈGLES DE CONTENU PROPRES À LA GRAMMAIRE (obligatoires) :
+1) Phrase impérative : son type se reconnaît au VERBE À L'IMPÉRATIF (mode impératif, sans sujet exprimé), jamais à la ponctuation. « Regarde cette viande ! » est IMPÉRATIVE, pas exclamative : un point d'exclamation ne change pas le type d'une phrase à l'impératif. « Exclamative » est réservé à une phrase sans verbe à l'impératif qui exprime une émotion (ex. « Quelle belle mangue ! »).
+2) Sujet sous-entendu d'un impératif : il suit la forme du verbe -- « Achète » = tu, « Achetons » = nous, « Achetez » = vous. Ne donne jamais un autre sujet.
+3) Tour « c'est … qui/que » avec un nom pluriel : utilise la forme standard « Ce sont les mangues que je vends » (jamais « C'est les mangues que je vends »).
+4) Corrigé cohérent avec l'énoncé : avant de finaliser, pour CHAQUE exemple ou phrase cité dans un corrigé, retrouve la phrase exacte de l'énoncé de l'exercice et vérifie qu'elle est IDENTIQUE (mots et ponctuation) ; en cas d'écart, corrige pour qu'ils soient identiques. Chaque phrase reçoit une seule classification, conforme à la règle 1.
+5) Corpus : les phrases du corpus (P1, P2…) reprennent MOT POUR MOT, avec la MÊME ponctuation, les phrases correspondantes de la situation d'apprentissage ; ne change jamais un point, un point d'interrogation ou un point d'exclamation entre la situation et le corpus.`;
+
+function extraireSituationApprentissage(contenuHTML) {
+  if (!contenuHTML) return '';
+  const $ = cheerio.load(contenuHTML);
+  const $p = $('p').filter((_, p) => /^Situation d'apprentissage\s*:/i.test($(p).text().trim())).first();
+  const texte = $p.length ? $p.text().replace(/^Situation d'apprentissage\s*:\s*/i, '').replace(/\s+/g, ' ').trim() : '';
+  return texte.length > 450 ? texte.slice(0, 450) + '…' : texte;
+}
+
+function resumerSeancesPrecedentes(fichesPrecedentes, { avecSituation = false } = {}) {
   return fichesPrecedentes.map((f) => {
     const traces = extraireTracesEcritesDeroulement(f.contenu);
     const contenu = traces.length
       ? traces.join('\n')
       : '(traces écrites non détectées automatiquement — se référer au thème général de la séance)';
-    return `Séance ${f.seance} (${f.lecon}) :\n${contenu}`;
+    // Grammaire/Orthographe seulement (avecSituation) : garder le même lieu de scène d'une séance à l'autre.
+    const situation = avecSituation ? extraireSituationApprentissage(f.contenu) : '';
+    const ligneSituation = situation ? `\nSituation d'apprentissage de cette séance (garde le même lieu et les mêmes personnages) : ${situation}` : '';
+    return `Séance ${f.seance} (${f.lecon}) :${ligneSituation}\n${contenu}`;
   }).join('\n\n');
 }
 
@@ -12558,6 +12655,16 @@ ${tableDeroulement}
       const estPerfLangue = estPerfectionnementLangue({ discipline, lecon, theme, activite });
       const estSavFaire = estSavoirFaire({ discipline, lecon, theme, activite });
 
+      // Correctifs fiches Grammaire/Orthographe (cf. activiteGrammaireOuOrthographe) :
+      // aucun effet sur les autres activités.
+      const activiteGramOrthoStricte = activiteGrammaireOuOrthographe(activite);
+      if (activiteGramOrthoStricte) {
+        systemPrompt = ajusterSqueletteGrammaireOrthographe(systemPrompt);
+        systemPrompt += construireRegleCadreScolaire(classe);
+        systemPrompt += REGLE_BIBLIOGRAPHIE_FIXE_GRAMMAIRE;
+        if (activiteGramOrthoStricte === 'grammaire') systemPrompt += REGLES_CONTENU_GRAMMAIRE;
+      }
+
       // Résolution par ID (menus dépendants de l'UI, cf. plus bas) faite ICI,
       // AVANT le matching du référentiel de type de texte ci-dessous : sinon
       // une sélection par ID (leconOfficielleId/seanceOfficielleId) envoyée
@@ -12804,6 +12911,18 @@ ${tableDeroulement}
             systemPrompt += `\n\nOPTION LIBRE CHOISIE PAR L'ENSEIGNANT (${libelleChoixLibre}) : "${optionLibreTexte}"\n\nReprends EXACTEMENT ce texte, sans reformulation.`;
           }
 
+          if (activiteGramOrthoStricte) {
+            // Autres leçons de la même classe et de la même activité (catalogue) : notions hors périmètre.
+            let autresLecons = [];
+            try {
+              const toutes = await listerLeconsOfficielles({ discipline: 'Français', classe, activite: seanceDoc.activite });
+              autresLecons = toutes.filter((l) => String(l._id) !== String(leconDoc._id)).map((l) => ({ numeroLecon: l.numeroLecon, titreLecon: l.titreLecon }));
+            } catch (e) {
+              console.error('⚠️ Périmètre -- liste des autres leçons indisponible :', e.message);
+            }
+            systemPrompt += construirePerimetreSeance({ leconDoc, seanceDoc, autresLecons });
+          }
+
           const seanceNumIndicatif = parseInt(seance, 10);
           if (Number.isFinite(seanceNumIndicatif) && seanceNumIndicatif !== seanceDoc.numeroSeance) {
             const avertissementSeance = `La séance officielle DPFC pour cette leçon est la séance ${seanceDoc.numeroSeance}, mais la séance ${seanceNumIndicatif} a été indiquée — vérifie le numéro de séance.`;
@@ -12848,7 +12967,7 @@ ${tableDeroulement}
     if (Number.isFinite(seanceNum) && seanceNum > 1) {
       const fichesPrecedentes = await trouverFichesPrecedentes({ enseignantId, discipline, classe, lecon: leconEffectif, niveau, seance, numeroSequenceOeuvre: estOeuvreIntegrale ? numeroSequence : undefined });
       if (fichesPrecedentes.length) {
-        const resume = resumerSeancesPrecedentes(fichesPrecedentes);
+        const resume = resumerSeancesPrecedentes(fichesPrecedentes, { avecSituation: !!activiteGrammaireOuOrthographe(activite) });
         systemPrompt += `\n\nCONTENU RÉEL DES SÉANCES PRÉCÉDENTES DE CETTE LEÇON :\n${resume}\n\nBase le rappel de la PRÉSENTATION EXCLUSIVEMENT sur ce contenu réel ci-dessus (questions, réponses, traces écrites déjà vues), PAS sur une supposition. CONSIGNE ABSOLUE (chantier D, lot 3) : si ce contenu réel énumère des éléments précis (ex. une liste de genres, de notions ou de catégories), le rappel reprend EXACTEMENT cette liste, ni plus ni moins -- n'ajoute JAMAIS un élément plausible qui n'y figure pas (ex. un genre que tu connais par ailleurs mais que CETTE liste ne mentionne pas), et n'en omets aucun.`;
       } else {
         const avertissementHistorique = "Aucune fiche de séance précédente trouvée pour cette leçon — le rappel généré est une estimation, vérifie-le.";
