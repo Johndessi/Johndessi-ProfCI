@@ -11094,8 +11094,41 @@ function preparerContenuExportFiche(fiche) {
   return contenuExport;
 }
 
-// Livraison : UN FICHIER PAR SÉANCE, regroupés dans un zip (DOCX ; PDF en
-// option avec format "docx+pdf" -- plus lent : un rendu Chromium par fiche).
+// Livraison : UN FICHIER PAR SÉANCE, regroupés dans un zip. `format` :
+//   - absent ou "docx" (PAR DÉFAUT) : DOCX seuls, léger (aucun Chromium) ;
+//   - "docx+pdf" : ajoute un PDF par fiche -- plus lent et surtout plus gourmand
+//     en mémoire (un rendu Chromium par fiche). Mesure (cf. PR) : le Chromium
+//     partagé (getBrowser) ne rend PAS la mémoire des pages fermées -- sa taille
+//     croît à chaque PDF produit (RSS Node + Chromium : ≈ 350 Mo après 1 PDF, ≈ 490 Mo après 11,
+//     ≈ 720 Mo après 41). Deux garde-fous, propres à cette route :
+//     1) ces exports PDF passent UN PAR UN dans une file d'attente en mémoire,
+//        refusés en 429 au-delà de MAX_ATTENTE_PDF_ZIP exports en cours + en
+//        attente ;
+//     2) à la fin d'un export PDF, si plus aucune autre page n'est ouverte (aucun
+//        autre PDF en cours, pour ce zip ou pour /api/fiche/:id/pdf), Chromium
+//        est fermé : il est relancé à la demande par getBrowser().
+const MAX_ATTENTE_PDF_ZIP = 3;
+let filePdfZip = Promise.resolve();
+let enAttentePdfZip = 0;
+async function libererChromiumSiInactif() {
+  if (!browserPromise) return;
+  try {
+    const navigateur = await browserPromise;
+    const pages = await navigateur.pages();
+    if (pages.length > 1) return; // une autre génération PDF est en cours : on n'y touche pas
+    browserPromise = null;
+    await navigateur.close();
+  } catch (e) {
+    browserPromise = null; // navigateur déjà mort : getBrowser() en relancera un
+  }
+}
+function executerEnFilePdfZip(tache) {
+  enAttentePdfZip++;
+  const suite = filePdfZip.then(() => tache());
+  filePdfZip = suite.then(() => {}, () => {}).then(() => { enAttentePdfZip--; });
+  return suite;
+}
+
 app.post('/api/fiches/zip', async (req, res) => {
   try {
     const { ids, enseignantId, format, view } = req.body || {};
@@ -11103,8 +11136,14 @@ app.post('/api/fiches/zip', async (req, res) => {
         || new Set(ids.map(String)).size !== ids.length || !ids.every((id) => mongoose.isValidObjectId(id))) {
       return res.status(400).json({ error: `Liste de fiches invalide (1 à ${lotLecon.LOT_MAX_SEANCES} fiches distinctes).` });
     }
+    if (format !== undefined && format !== 'docx' && format !== 'docx+pdf') {
+      return res.status(400).json({ error: 'Format inconnu (docx ou docx+pdf).' });
+    }
     const avecPdf = format === 'docx+pdf';
     const landscape = view === 'paysage';
+    if (avecPdf && enAttentePdfZip >= MAX_ATTENTE_PDF_ZIP) {
+      return res.status(429).json({ error: 'Export PDF très sollicité : réessaie dans une minute ou télécharge les DOCX seuls.' });
+    }
     const trouvees = await Fiche.find({ _id: { $in: ids } });
     const parId = new Map(trouvees.map((f) => [String(f._id), f]));
     const ens = (enseignantId || 'anonyme').toString().trim() || 'anonyme';
@@ -11113,19 +11152,24 @@ app.post('/api/fiches/zip', async (req, res) => {
     if (fiches.some((f) => (f.enseignantId || 'anonyme') !== ens)) return res.status(403).json({ error: 'Ces fiches appartiennent à un autre enseignant.' });
 
     const slug = (t) => normaliserTexte(t).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const zip = new JSZip();
-    const nomsPris = new Set();
-    for (const fiche of fiches) {
-      const contenuExport = preparerContenuExportFiche(fiche);
-      const profilMiseEnForme = fiche.genereDepuisModeleLot13 ? 'modeleCompact' : fiche.estOeuvreIntegraleSecondCycle;
-      const numero = String(parseInt(fiche.seance, 10) || 0).padStart(2, '0');
-      let base = `${slug(fiche.lecon) || 'lecon'}_seance_${numero}`;
-      for (let i = 2; nomsPris.has(base); i++) base = `${base.replace(/_\d+$/, '')}_${i}`;
-      nomsPris.add(base);
-      zip.file(`${base}.docx`, await genererDocxDepuisHtml(contenuExport, landscape, profilMiseEnForme));
-      if (avecPdf) zip.file(`${base}.pdf`, await genererPdfDepuisHtml(contenuExport, landscape));
-    }
-    const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    const construireZip = async () => {
+      const zip = new JSZip();
+      const nomsPris = new Set();
+      for (const fiche of fiches) {
+        const contenuExport = preparerContenuExportFiche(fiche);
+        const profilMiseEnForme = fiche.genereDepuisModeleLot13 ? 'modeleCompact' : fiche.estOeuvreIntegraleSecondCycle;
+        const numero = String(parseInt(fiche.seance, 10) || 0).padStart(2, '0');
+        let base = `${slug(fiche.lecon) || 'lecon'}_seance_${numero}`;
+        for (let i = 2; nomsPris.has(base); i++) base = `${base.replace(/_\d+$/, '')}_${i}`;
+        nomsPris.add(base);
+        zip.file(`${base}.docx`, await genererDocxDepuisHtml(contenuExport, landscape, profilMiseEnForme));
+        if (avecPdf) zip.file(`${base}.pdf`, await genererPdfDepuisHtml(contenuExport, landscape));
+      }
+      return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    };
+    const buffer = avecPdf
+      ? await executerEnFilePdfZip(async () => { try { return await construireZip(); } finally { await libererChromiumSiInactif(); } })
+      : await construireZip();
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${slug(fiches[0].lecon) || 'fiches'}.zip"`);
     res.send(buffer);

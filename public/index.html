@@ -2871,7 +2871,7 @@ function finaliserPanneauLot({ lecon, contexte, seances, dejaFaites, echec, sans
   if (faites.length) {
     const lbl = document.createElement('label');
     lbl.style.cssText = 'font-size:12px;display:flex;align-items:center;gap:4px';
-    lbl.innerHTML = '<input type="checkbox" id="lotAvecPdf"/> Inclure aussi les PDF (plus lent)';
+    lbl.innerHTML = '<input type="checkbox" id="lotAvecPdf"/> Inclure aussi les PDF (plus lent ; DOCX seuls par défaut)';
     const bZip = document.createElement('button');
     bZip.type = 'button'; bZip.className = 'btn vert';
     bZip.textContent = `⬇️ Télécharger les ${faites.length} fiche${faites.length > 1 ? 's' : ''} (zip DOCX)`;
