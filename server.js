@@ -11,6 +11,7 @@ const chromium = require('@sparticuz/chromium').default;
 const puppeteer = require('puppeteer-core');
 const cheerio = require('cheerio');
 const JSZip = require('jszip');
+const docxGrammaire = require('./docx-grammaire');
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, ShadingType, PageOrientation, BorderStyle, VerticalAlign, AlignmentType, TableLayoutType
@@ -857,7 +858,26 @@ async function appliquerMiseEnFormeModeleCompacteDocx(buffer) {
 // appliquerMiseEnFormeModeleCompacteDocx). Une valeur booléenne `true`
 // passée par un appelant pas encore mis à jour est traitée comme
 // 'secondCycle' (comportement actuel), jamais comme une erreur.
+// Profil de mise en forme DOCX d'une fiche enregistrée : celui d'avant pour toute
+// fiche modèle / second cycle ; 'grammaireModeleA' (A4 paysage, cf.
+// docx-grammaire.js) pour une fiche de GRAMMAIRE seulement.
+function profilMiseEnFormeFiche(fiche) {
+  const profil = fiche.genereDepuisModeleLot13 ? 'modeleCompact' : fiche.estOeuvreIntegraleSecondCycle;
+  if (!profil && docxGrammaire.estFicheGrammaire(fiche)) return 'grammaireModeleA';
+  return profil;
+}
+
 async function genererDocxDepuisHtml(contenuHTML, landscape, profilMiseEnForme) {
+  // Grammaire, modèle A : toujours paysage (le bouton Portrait/Paysage est ignoré). Si le HTML ne
+  // se découpe pas comme prévu, repli sur l'ancien DOCX ci-dessous, jamais une mise en page cassée.
+  if (profilMiseEnForme === 'grammaireModeleA') {
+    try {
+      return await docxGrammaire.genererDocxGrammaireModeleA(contenuHTML);
+    } catch (e) {
+      console.warn(`⚠️ DOCX Grammaire modèle A : repli sur l'ancien DOCX (${e && e.message})`);
+      profilMiseEnForme = false;
+    }
+  }
   largeurUtileDocxCouranteDxa = landscape ? LARGEUR_UTILE_PAYSAGE_DXA : LARGEUR_UTILE_PORTRAIT_DXA;
   const doc = new Document({
     creator: 'ProfCI', description: 'Fiche de cours', title: 'Fiche de cours',
@@ -906,6 +926,9 @@ const FicheSchema = new mongoose.Schema({
   seance       : String,
   duree        : String,
   niveau       : String,
+  // Activité (ex. « Grammaire ») : sert à choisir la mise en page DOCX (cf. profilMiseEnFormeFiche).
+  // Absent des fiches enregistrées avant ce champ : l'export lit alors l'en-tête du HTML.
+  activite     : String,
   contenu      : String,
   approche     : String,
   // Origine de la génération (12/09) : jusqu'ici, TOUTE requête vers
@@ -6715,6 +6738,19 @@ const REGLES_CONTENU_GRAMMAIRE = `\n\nRÈGLES DE CONTENU PROPRES À LA GRAMMAIRE
 4) Corrigé cohérent avec l'énoncé : avant de finaliser, pour CHAQUE exemple ou phrase cité dans un corrigé, retrouve la phrase exacte de l'énoncé de l'exercice et vérifie qu'elle est IDENTIQUE (mots et ponctuation) ; en cas d'écart, corrige pour qu'ils soient identiques. Chaque phrase reçoit une seule classification, conforme à la règle 1.
 5) Corpus : les phrases du corpus (P1, P2…) reprennent MOT POUR MOT, avec la MÊME ponctuation, les phrases correspondantes de la situation d'apprentissage ; ne change jamais un point, un point d'interrogation ou un point d'exclamation entre la situation et le corpus.`;
 
+// Mise en page DOCX de la Grammaire (modèle A, cf. docx-grammaire.js) : balisage minimal que
+// l'export sait relire. Grammaire seule ; aucune autre règle du prompt n'est modifiée.
+const REGLES_FORMAT_DOCX_GRAMMAIRE = `\n\nFORMAT DE LA FICHE DE GRAMMAIRE (obligatoire, pour la mise en page du document) :
+1) Tableau Habiletés/Contenus : 3 à 4 lignes (jamais plus de 4).
+2) Situation d'apprentissage ET situation d'évaluation : NE les place PAS avant le tableau Habiletés. Place-les, avec les exercices de l'évaluation, dans UN SEUL bloc final, APRÈS le tableau à 5 colonnes et à l'intérieur de la div fiche-cours, au format :
+<div class="annexe">
+<p><strong>Situation d'apprentissage :</strong> …</p>
+<p><strong>Situation d'évaluation :</strong> …</p>
+<p><strong>Exercice 1 :</strong> …</p>
+</div>
+Dans la ligne ÉVALUATION du tableau, la colonne Activités de l'enseignant annonce seulement l'évaluation (ex. <em>Passons à l'évaluation (situation d'évaluation en annexe).</em>) ; le corrigé reste dans la colonne Traces écrites.
+3) Dans la ligne DÉVELOPPEMENT : chaque sous-titre (« Définition », « I- … », « II- … ») est placé dans <strong> ; dans les colonnes Stratégies et Traces écrites, ajoute aussi <u> (<strong><u>I- …</u></strong>) ; chaque exemple est placé dans <em>.`;
+
 function extraireSituationApprentissage(contenuHTML) {
   if (!contenuHTML) return '';
   const $ = cheerio.load(contenuHTML);
@@ -11254,7 +11290,7 @@ app.post('/api/fiches/zip', async (req, res) => {
       const nomsPris = new Set();
       for (const fiche of fiches) {
         const contenuExport = preparerContenuExportFiche(fiche);
-        const profilMiseEnForme = fiche.genereDepuisModeleLot13 ? 'modeleCompact' : fiche.estOeuvreIntegraleSecondCycle;
+        const profilMiseEnForme = profilMiseEnFormeFiche(fiche);
         const numero = String(parseInt(fiche.seance, 10) || 0).padStart(2, '0');
         let base = `${slug(fiche.lecon) || 'lecon'}_seance_${numero}`;
         for (let i = 2; nomsPris.has(base); i++) base = `${base.replace(/_\d+$/, '')}_${i}`;
@@ -12662,7 +12698,7 @@ ${tableDeroulement}
         systemPrompt = ajusterSqueletteGrammaireOrthographe(systemPrompt);
         systemPrompt += construireRegleCadreScolaire(classe);
         systemPrompt += REGLE_BIBLIOGRAPHIE_FIXE_GRAMMAIRE;
-        if (activiteGramOrthoStricte === 'grammaire') systemPrompt += REGLES_CONTENU_GRAMMAIRE;
+        if (activiteGramOrthoStricte === 'grammaire') systemPrompt += REGLES_CONTENU_GRAMMAIRE + REGLES_FORMAT_DOCX_GRAMMAIRE;
       }
 
       // Résolution par ID (menus dépendants de l'UI, cf. plus bas) faite ICI,
@@ -14197,6 +14233,7 @@ Génère la fiche COMPLÈTE et DÉTAILLÉE en HTML.`;
       const fiche = await Fiche.create({
         enseignantId: enseignantId || 'anonyme',
         discipline, classe, lecon: leconEffectif, seance, duree, niveau,
+        activite: (activite || '').toString().trim() || undefined,
         approche: approcheNormalisee,
         contenu: contenuHTML,
         contenuBrutModele: contenuBrutPourDebug,
@@ -14621,7 +14658,7 @@ app.post('/api/fiche/:id/docx', async (req, res) => {
     // profil de mise en forme compact, jamais le profil second cycle
     // habituel -- même si estOeuvreIntegraleSecondCycle est aussi posé à
     // true pour elle (cf. POST /api/modeles/generer).
-    const profilMiseEnForme = fiche.genereDepuisModeleLot13 ? 'modeleCompact' : fiche.estOeuvreIntegraleSecondCycle;
+    const profilMiseEnForme = profilMiseEnFormeFiche(fiche);
     const docxBuffer = await genererDocxDepuisHtml(contenuExport, landscape, profilMiseEnForme);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
@@ -14643,7 +14680,7 @@ app.listen(PORT, () => console.log(`🎓 Prof CI démarré sur le port ${PORT}`)
 // scripts de test en dehors du repo, pour appeler la logique réelle plutôt
 // que d'en dupliquer une copie qui dériverait du code réel avec le temps).
 module.exports = {
-  chargerModeleLot13, extrairePlaceholdersModeleLot13, descripteurChampModeleLot13,
+  profilMiseEnFormeFiche, chargerModeleLot13, extrairePlaceholdersModeleLot13, descripteurChampModeleLot13,
   substituerPlaceholdersLot13, corrigerOrthographeFicheJSON, corrigerDoublePonctuationLot14,
   chargerSeanceCatalogueLot13, validerFicheJSON, rendreFicheJSONEnHTML,
   simplifierTracesPourModeleLot14, construireTableauVerificationLot14,
