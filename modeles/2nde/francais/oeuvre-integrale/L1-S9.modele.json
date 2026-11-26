@@ -1,0 +1,267 @@
+{
+ "niveau": "2nde",
+ "discipline": "Français",
+ "activite": "Étude de l'œuvre intégrale",
+ "lecon": 1,
+ "seance": 9,
+ "modele": true,
+ "fiche": {
+  "situation": "Dans le cadre de l'étude de l'œuvre {{OEUVRE}} de {{AUTEUR}}, votre classe aborde {{PASSAGE_COURT}}. Après une première lecture, un camarade affirme qu'il n'y a rien de plus à dire que ce que tout le monde a compris. Pourtant, le passage semble contenir plus que ce qu'on voit au premier regard. Vous voulez lui montrer comment ce passage construit son sens. Comment procéder pour lire ce passage de façon rigoureuse ?",
+  "supports": [
+   "{{OEUVRE}}, {{AUTEUR}}, {{EDITION}}",
+   "Passage étudié : {{PASSAGE}}"
+  ],
+  "bibliographie": [
+   "{{AUTEUR}}, {{OEUVRE}}, {{EDITION}}",
+   "Programme éducatif Français 2nde et guide d'exécution, MENA, Côte d'Ivoire"
+  ],
+  "presentation": {
+   "strategie": "Questions-réponses",
+   "enseignant": [
+    {
+     "type": "action",
+     "texte": "Salue la classe, fais l'appel et rappelle la séance précédente."
+    },
+    {
+     "type": "demande",
+     "texte": "Rappelle le titre de l'œuvre, son auteur et son genre."
+    }
+   ],
+   "eleves": [
+    "Les élèves répondent aux questions de rappel.",
+    "Les élèves rappellent l'œuvre, l'auteur et le genre."
+   ]
+  },
+  "developpement": [
+   {
+    "titre": "Présentation du passage et hypothèse générale",
+    "strategie": "Dialogue dirigé",
+    "enseignant": [
+     {
+      "type": "demande",
+      "texte": "Donne la source du passage : titre, auteur, éditeur, année."
+     },
+     {
+      "type": "demande",
+      "texte": "Lis le titre ou le début du passage : de quoi pourrait-il s'agir ?"
+     },
+     {
+      "type": "action",
+      "texte": "Note les hypothèses au tableau sans les valider, puis demande une lecture silencieuse du passage."
+     },
+     {
+      "type": "demande",
+      "texte": "De quoi est-il question maintenant ? Compare avec ta première idée."
+     },
+     {
+      "type": "action",
+      "texte": "Fais une lecture magistrale du passage."
+     },
+     {
+      "type": "demande",
+      "texte": "Donne la nature du passage, sa tonalité et son thème, puis formule l'hypothèse générale."
+     }
+    ],
+    "eleves": [
+     "Les élèves donnent la source du passage.",
+     "Les élèves formulent des hypothèses de lecture.",
+     "Les élèves lisent en silence, comparent avec leur première idée, puis écoutent la lecture magistrale.",
+     "Les élèves formulent l'hypothèse générale : {{HYPOTHESE_GENERALE}}."
+    ],
+    "traces": [
+     {
+      "type": "titre",
+      "texte": "I. Présentation du passage"
+     },
+     {
+      "type": "paragraphe",
+      "texte": "Le passage que nous allons étudier est extrait de l'œuvre {{OEUVRE}} de {{AUTEUR}}, publiée chez {{EDITION}}."
+     },
+     {
+      "type": "extrait",
+      "texte": "{{EXTRAIT}}"
+     },
+     {
+      "type": "paragraphe",
+      "texte": "Hypothèse générale : {{HYPOTHESE_GENERALE}}"
+     }
+    ]
+   },
+   {
+    "titre": "Vérification de l'axe de lecture 1 : {{AXE1}}",
+    "strategie": "Questions dirigées sur le texte",
+    "enseignant": [
+     {
+      "type": "action",
+      "texte": "Annonce l'axe de lecture 1 : {{AXE1}}."
+     },
+     {
+      "type": "demande",
+      "texte": "Relève dans le texte les indices concernant {{E11_CIBLE}}."
+     },
+     {
+      "type": "demande",
+      "texte": "Nomme ces procédés et justifie leur emploi."
+     },
+     {
+      "type": "demande",
+      "texte": "Donne l'entrée correspondante."
+     },
+     {
+      "type": "demande",
+      "texte": "Interprète ces indices : pourquoi l'auteur les emploie-t-il ?"
+     },
+     {
+      "type": "demande",
+      "texte": "Relève dans le texte les indices concernant {{E12_CIBLE}}."
+     },
+     {
+      "type": "demande",
+      "texte": "Nomme ces procédés et justifie leur emploi."
+     },
+     {
+      "type": "demande",
+      "texte": "Donne l'entrée correspondante."
+     },
+     {
+      "type": "demande",
+      "texte": "Interprète ces indices : pourquoi l'auteur les emploie-t-il ?"
+     }
+    ],
+    "eleves": [
+     "Les élèves relèvent : {{E11_INDICES}}.",
+     "Les élèves nomment et justifient : {{E11_ANALYSE}}.",
+     "Les élèves donnent l'entrée : {{E11_NOM}}.",
+     "Les élèves interprètent : {{E11_INTERPRETATION}}.",
+     "Les élèves relèvent : {{E12_INDICES}}.",
+     "Les élèves nomment et justifient : {{E12_ANALYSE}}.",
+     "Les élèves donnent l'entrée : {{E12_NOM}}.",
+     "Les élèves interprètent : {{E12_INTERPRETATION}}."
+    ],
+    "traces": [
+     {
+      "type": "titre",
+      "texte": "II. Vérification — Axe 1 : {{AXE1}}"
+     },
+     {
+      "type": "paragraphe",
+      "texte": "Axe 1, entrée 1 : {{E11_NOM}}"
+     },
+     {
+      "type": "liste",
+      "items": [
+       "Indices textuels : {{E11_INDICES}}",
+       "Analyse : {{E11_ANALYSE}}",
+       "Interprétation : {{E11_INTERPRETATION}}"
+      ]
+     },
+     {
+      "type": "paragraphe",
+      "texte": "Axe 1, entrée 2 : {{E12_NOM}}"
+     },
+     {
+      "type": "liste",
+      "items": [
+       "Indices textuels : {{E12_INDICES}}",
+       "Analyse : {{E12_ANALYSE}}",
+       "Interprétation : {{E12_INTERPRETATION}}"
+      ]
+     }
+    ]
+   },
+   {
+    "titre": "Vérification de l'axe de lecture 2 et bilan",
+    "strategie": "Questions dirigées sur le texte",
+    "enseignant": [
+     {
+      "type": "action",
+      "texte": "Annonce l'axe de lecture 2 : {{AXE2}}."
+     },
+     {
+      "type": "demande",
+      "texte": "Relève dans le texte les indices concernant {{E21_CIBLE}}."
+     },
+     {
+      "type": "demande",
+      "texte": "Nomme ces procédés et justifie leur emploi."
+     },
+     {
+      "type": "demande",
+      "texte": "Donne l'entrée correspondante."
+     },
+     {
+      "type": "demande",
+      "texte": "Interprète ces indices : pourquoi l'auteur les emploie-t-il ?"
+     },
+     {
+      "type": "action",
+      "texte": "Annonce que la deuxième entrée de l'axe 2 est donnée en situation d'évaluation."
+     },
+     {
+      "type": "demande",
+      "texte": "Fais le bilan : rappelle les entrées étudiées et confronte-les à l'hypothèse générale."
+     }
+    ],
+    "eleves": [
+     "Les élèves relèvent : {{E21_INDICES}}.",
+     "Les élèves nomment et justifient : {{E21_ANALYSE}}.",
+     "Les élèves donnent l'entrée : {{E21_NOM}}.",
+     "Les élèves interprètent : {{E21_INTERPRETATION}}.",
+     "Les élèves rappellent les entrées étudiées.",
+     "Les élèves confirment que l'hypothèse générale est vérifiée."
+    ],
+    "traces": [
+     {
+      "type": "titre",
+      "texte": "III. Vérification — Axe 2 : {{AXE2}}"
+     },
+     {
+      "type": "paragraphe",
+      "texte": "Axe 2, entrée 1 : {{E21_NOM}}"
+     },
+     {
+      "type": "liste",
+      "items": [
+       "Indices textuels : {{E21_INDICES}}",
+       "Analyse : {{E21_ANALYSE}}",
+       "Interprétation : {{E21_INTERPRETATION}}"
+      ]
+     },
+     {
+      "type": "titre",
+      "texte": "IV. Bilan"
+     },
+     {
+      "type": "paragraphe",
+      "texte": "Les entrées étudiées confirment l'hypothèse générale : {{HYPOTHESE_GENERALE}}. L'hypothèse est vérifiée."
+     }
+    ]
+   }
+  ],
+  "evaluation": {
+   "consignes": [
+    {
+     "niveau": "N1/N2",
+     "niveauLibelle": "Identifier",
+     "enonce": "Identifie dans le passage les indices concernant {{E22_CIBLE}}.",
+     "extrait": "{{EXTRAIT}}",
+     "corrige": "{{E22_INDICES}}"
+    },
+    {
+     "niveau": "N3",
+     "niveauLibelle": "Analyser",
+     "enonce": "Analyse les procédés relevés et justifie leur emploi dans le passage.",
+     "extrait": "{{EXTRAIT}}",
+     "corrige": "{{E22_ANALYSE}}"
+    },
+    {
+     "niveau": "N4",
+     "niveauLibelle": "Interpréter",
+     "enonce": "Interprète ces indices en déterminant l'entrée à laquelle ils correspondent, en une phrase.",
+     "extrait": "{{EXTRAIT}}",
+     "corrige": "Entrée : {{E22_NOM}}. {{E22_INTERPRETATION}}"
+    }
+   ]
+  }
+ }
+}
