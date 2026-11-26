@@ -2676,7 +2676,7 @@ async function lireReponseJson(res) {
 }
 
 async function demanderGenerationLecon() {
-  if (lotEnCours) { toast('❗ Un lot est déjà en cours'); return; }
+  if (lotEnCours) { toast('❗ Une génération de leçon est déjà en cours'); return; }
   const lecon = leconCatalogueSelectionnee();
   if (!lecon) { toast('❗ Choisis une leçon'); return; }
   const contexte = {
@@ -2718,7 +2718,7 @@ function confirmerGenerationLecon(etat) {
       <h3 style="margin-bottom:8px">${n} fiche${n > 1 ? 's vont' : ' va'} être générée${n > 1 ? 's' : ''}</h3>
       <p style="font-size:13px;margin-bottom:8px">Leçon ${lecon.numeroLecon} : ${echapperHtmlLot(lecon.titreLecon)}</p>
       <ul style="font-size:13px;margin:0 0 10px 18px">${lignes}</ul>
-      <p style="font-size:12px;color:var(--gris2);margin-bottom:14px">Génération l'une après l'autre (environ ${dureeMin} min) : garde cette page ouverte. Si une séance échoue, le lot s'arrête et les fiches déjà faites sont conservées ; tu pourras reprendre à la séance suivante.</p>
+      <p style="font-size:12px;color:var(--gris2);margin-bottom:14px">Génération l'une après l'autre (environ ${dureeMin} min) : garde cette page ouverte. Si une séance échoue, la génération s'arrête et les fiches déjà faites sont conservées ; tu pourras reprendre à la séance suivante.</p>
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button type="button" class="btn" style="background:#888" id="lotAnnuler">Annuler</button>
         <button type="button" class="btn vert" id="lotLancer">Lancer (${n} fiche${n > 1 ? 's' : ''})</button>
@@ -2741,7 +2741,7 @@ async function lancerLotLecon(etat) {
   // Garde-fou : le serveur doit annoncer exactement le nombre confirmé.
   if (lot.nbFiches !== restantes.length) {
     await fetch('/api/lot/abandonner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jeton: lot.jeton }) }).catch(() => {});
-    toast('❌ Le serveur annonce ' + lot.nbFiches + ' fiches au lieu de ' + restantes.length + ' : lot annulé');
+    toast('❌ Le serveur annonce ' + lot.nbFiches + ' fiches au lieu de ' + restantes.length + ' : génération annulée');
     return;
   }
   lotEnCours = { jeton: lot.jeton, arret: false, controleur: null };

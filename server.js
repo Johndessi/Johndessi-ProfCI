@@ -11072,14 +11072,20 @@ function limiterGenerationParIpOuLot(req, res, next) {
 
   const corps = req.body || {};
   if (req.is('multipart/form-data') || String(corps.texteSupport || '').trim() || String(corps.planCours || '').trim()) {
-    return envoyerBlocageSSE(res, 'Un lot ne génère que des séances sans support ni plan fourni.');
+    return envoyerBlocageSSE(res, 'La génération de leçon ne traite que des séances sans texte support ni plan fourni.');
   }
   const verdict = gestionnaireLots.reserverSeance({
-    jeton, ip: ipDeLaRequete(req),
+    jeton,
     enseignantId: corps.enseignantId, leconId: corps.leconOfficielleId, seanceId: corps.seanceOfficielleId,
     classe: corps.classe, activite: corps.activite
   });
   if (!verdict.ok) return envoyerBlocageSSE(res, verdict.message);
+  // Diagnostic (sans écrire d'adresse dans les logs) : l'IP vue par le serveur a changé depuis la
+  // création du lot, et combien d'adresses contient X-Forwarded-For (chaîne de proxies).
+  if (verdict.lot.ip !== ipDeLaRequete(req)) {
+    const nbAdresses = (req.get('x-forwarded-for') || '').split(',').filter((x) => x.trim()).length;
+    console.log(`ℹ️ Génération de leçon : l'adresse IP a changé depuis la création du lot (X-Forwarded-For : ${nbAdresses} adresse(s)) -- acceptée, le jeton n'est pas lié à l'IP.`);
+  }
 
   const seanceId = verdict.seance.seanceId;
   let reussie = false;
@@ -11137,7 +11143,7 @@ app.post('/api/lot/demarrer', async (req, res) => {
 });
 
 app.post('/api/lot/abandonner', (req, res) => {
-  const ok = gestionnaireLots.abandonner({ jeton: (req.body || {}).jeton, ip: ipDeLaRequete(req) });
+  const ok = gestionnaireLots.abandonner({ jeton: (req.body || {}).jeton });
   res.json({ success: ok });
 });
 
